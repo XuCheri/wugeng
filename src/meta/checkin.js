@@ -2,6 +2,7 @@
 // 日期一律用本地日历日 YYYY-MM-DD（由调用方注入 now，便于测试）。
 // 防回拨：本地时间早于上次领取日时不能领。
 import { RELIC_IDS } from './save.js';
+import { recordCodexCharms } from './codex.js';
 
 export const CHECKIN_TABLE = [
   { day: 1, coins: 30, charms: 0, cosmetic: false },
@@ -94,6 +95,7 @@ export function claimCheckin(save, now, doubled = false, rng = Math.random) {
 
   save.coins += coins;
   save.charms.push(...charms);
+  recordCodexCharms(save, charms);
   save.checkin.lastClaimDate = st.today;
   save.checkin.totalClaims = (save.checkin.totalClaims || 0) + 1;
   if (st.day >= 7) {

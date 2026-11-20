@@ -8,7 +8,9 @@ import { HERO_IDS } from '../meta/save.js';
 import { getShopItems, getLevel, nextCost, buyLevel, describeLevel } from '../meta/shop.js';
 import { heroUnlockProgress } from '../meta/unlocks.js';
 import { getCheckinState, claimCheckin } from '../meta/checkin.js';
+import { getCodexCounts } from '../meta/codex.js';
 import { canShowCheckinDouble } from '../ads/ad-policy.js';
+import { openCodex } from './codex.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童' };
 const COIN_SVG = `<svg viewBox="0 0 16 16" class="coin-ico" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.9" y="5.9" width="4.2" height="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
@@ -18,8 +20,9 @@ function coinTag(n) {
 }
 
 /**
- * ctx: { save, adsOn(), persist(), runAd(placement) → Promise<result>, now() → Date,
- *        onStart({ heroId, nightLevel, charm }), onSettings(settings) }
+ * ctx: { save, adsOn(), persist(syncCloud?), runAd(placement) → Promise<result>, now() → Date,
+ *        onStart({ heroId, nightLevel, charm }), onSettings(settings),
+ *        cloudState?(), onCloudUpload?(), onCloudPull?() }
  */
 export function renderHub(root, ctx) {
   const { save } = ctx;
@@ -135,8 +138,10 @@ export function renderHub(root, ctx) {
   function renderNav() {
     clear(navBox);
     const st = getCheckinState(save, ctx.now());
+    const cc = getCodexCounts(save);
     navBox.append(
       navSeal('加点', '长本事', () => openShop()),
+      navSeal('图鉴', `${cc.have}/${cc.total}`, () => openCodex(root, save)),
       navSeal('更簿', st.canClaim ? '可画押' : '签到', () => openCheckin(), st.canClaim),
       navSeal('设置', '杂项', () => openSettings()));
   }
@@ -174,7 +179,7 @@ export function renderHub(root, ctx) {
             : sealButton(h('span', { class: 'buy' }, h('b', {}, '升'), h('small', {}, String(cost))), () => {
               const r = buyLevel(save, it.id);
               if (!r.ok) { toast(r.reason === 'coins' ? `铜钱不够，还差 ${cost - save.coins}` : '已经满了'); return; }
-              ctx.persist();
+              ctx.persist(true);
               toast(`${it.name || copy.name}升到${cnNum(r.level)}级`);
               render();
               refresh();
@@ -224,7 +229,7 @@ export function renderHub(root, ctx) {
         const claim = (doubled) => {
           const r = claimCheckin(save, ctx.now(), doubled);
           if (!r.ok) { toast('今日领不了'); return; }
-          ctx.persist();
+          ctx.persist(true);
           toast(rewardText(r), 2600);
           render();
           refresh();
@@ -259,14 +264,46 @@ export function renderHub(root, ctx) {
     return `领到 ${parts.join('、')}${r.doubled ? '（双倍）' : ''}`;
   }
 
-  // ───────── 设置 ─────────
+  // ───────── 设置（含 TapTap 云存档）─────────
   function openSettings() {
     let v;
+    const cloudBox = h('div', { class: 'cloud-box' });
+
+    const renderCloud = () => {
+      clear(cloudBox);
+      const st = ctx.cloudState?.() || { available: false };
+      let desc = '本机已自动保存 · 在 TapTap 客户端打开可跨设备云同步';
+      if (st.available) {
+        if (st.syncing) desc = '正在与 TapTap 云端同步……';
+        else if (st.dirty && st.cooldownSec > 0) desc = `本机已存 · 约 ${st.cooldownSec} 秒后自动同步至云端`;
+        else if (st.lastError) desc = '云端暂忙，本机存档完好，可稍后再试';
+        else if (st.lastSyncAt > 0) desc = '已连接 TapTap 云存档 · 进度已同步';
+        else desc = '已连接 TapTap 云存档 · 换设备也能接着守';
+      }
+      cloudBox.appendChild(h('p', { class: 'cloud-box__title' }, '云存档'));
+      cloudBox.appendChild(h('p', { class: 'cloud-box__desc' }, desc));
+      if (st.available) {
+        cloudBox.appendChild(h('div', { class: 'cloud-box__btns' },
+          sealButton('上传云端', async () => {
+            await ctx.onCloudUpload?.();
+            renderCloud();
+          }, { kind: 'small', disabled: st.syncing }),
+          sealButton('拉取云端', async () => {
+            await ctx.onCloudPull?.();
+            renderCloud();
+            refresh();
+          }, { kind: 'ghost', cls: 'btn--small', disabled: st.syncing })));
+      }
+    };
+    renderCloud();
+
     v = veil(root, scroll({
       title: '设置',
       cls: 'scroll--dialog',
       body: [
         settingsBody({ ...save.settings }, (s) => { ctx.onSettings(s); }),
+        h('div', { class: 'ink-rule ink-rule--thin', 'aria-hidden': 'true' }),
+        cloudBox,
         h('div', { class: 'settings-links' },
           h('button', { type: 'button', class: 'link-btn', onClick: () => showPrivacyDialog(root) }, '隐私政策'),
           h('button', { type: 'button', class: 'link-btn', onClick: () => showAgeDialog(root) }, '适龄提示 12+')),
@@ -276,5 +313,5 @@ export function renderHub(root, ctx) {
   }
 
   refresh();
-  return { el, refresh, openCheckin, openShop };
+  return { el, refresh, openCheckin, openShop, openCodex: () => openCodex(root, save) };
 }

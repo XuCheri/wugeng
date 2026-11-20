@@ -25,6 +25,58 @@ export function rosterFor(run) {
   return ROSTER_LISTS[Math.min(5, run.watch)];
 }
 
+function tri(rng, half) {
+  return (rng.range(-half, half) + rng.range(-half, half)) * 0.5;
+}
+
+/** 维护随时间缓慢偏转的两条「巷口阴风」来向，让日常刷怪有街巷涌入的疏密感 */
+function ensureAlleyFlow(run, dt) {
+  let flow = run._alleyFlow;
+  if (!flow) {
+    const a1 = run.rng.range(0, Math.PI * 2);
+    flow = {
+      t: run.rng.range(7, 11),
+      a1,
+      a2: a1 + run.rng.range(1.65, 2.75),
+    };
+    run._alleyFlow = flow;
+  }
+  flow.t -= dt;
+  if (flow.t <= 0) {
+    flow.t = run.rng.range(7.5, 12.5);
+    flow.a1 += run.rng.range(-1.35, 1.35);
+    flow.a2 = flow.a1 + (run.rng.chance(0.5) ? 1 : -1) * run.rng.range(1.55, 2.75);
+  }
+  return flow;
+}
+
+function ambientSpawnPoint(run) {
+  const rng = run.rng;
+  const p = run.player;
+  const flow = run._alleyFlow || ensureAlleyFlow(run, 0);
+  const roll = rng.next();
+  let a;
+  let d;
+  if (roll < 0.54) {
+    // 巷口涌入：沿两条不对称街巷方向呈疏密簇状飘来
+    const base = rng.chance(0.58) ? flow.a1 : flow.a2;
+    a = base + tri(rng, 0.62);
+    d = rng.range(SPAWN.ringMin - 20, SPAWN.ringMax + 65);
+  } else if (roll < 0.80 && p.moving) {
+    // 前路斜截：偏向玩家行进前方与侧翼，但留有错落景深
+    a = Math.atan2(p.facingY, p.facingX) + tri(rng, 1.18);
+    d = rng.range(SPAWN.ringMin - 10, SPAWN.ringMax + 55);
+  } else {
+    // 暗角孤祟：零散从侧后暗处摸近
+    a = rng.range(0, Math.PI * 2);
+    d = rng.range(SPAWN.ringMin - 15, SPAWN.ringMax + 75);
+  }
+  return {
+    x: p.x + Math.cos(a) * d + rng.range(-24, 24),
+    y: p.y + Math.sin(a) * d + rng.range(-24, 24),
+  };
+}
+
 function spawnOne(run) {
   const def = run.rng.weighted(rosterFor(run));
   const type = def.type;
@@ -34,11 +86,13 @@ function spawnOne(run) {
     const well = findWell(run, ENEMY_AI.drowned.wellMin, ENEMY_AI.drowned.wellMax);
     if (well) pos = { x: well.x + run.rng.range(-well.r, well.r), y: well.y + run.rng.range(-well.r, well.r) };
   }
-  if (!pos) pos = ringPoint(run);
+  if (!pos) pos = ambientSpawnPoint(run);
   spawnEnemy(run, type, pos.x, pos.y, { elite });
 }
 
 export function updateSpawner(run, dt) {
+  ensureAlleyFlow(run, dt);
+
   // Boss 时间轴（主线）
   if (run.mode === 'main') {
     for (const b of BOSS_TIMELINE) {
@@ -72,21 +126,81 @@ export function updateSpawner(run, dt) {
   }
 }
 
-/** 合围：一圈同种敌人从四周收拢（Boss 在场时暂停） */
+/** 鬼潮来袭：采用巷口群涌、斜街包抄、夜雾散祟三种不规则阵势，彻底告别机械正圆围圈 */
 function updateWaves(run) {
   if (!WAVES.enabled || run.boss) return;
   if (run._nextWaveT == null) run._nextWaveT = WAVES.firstAt;
   if (run.time < run._nextWaveT) return;
-  run._nextWaveT = run.time + WAVES.every;
+  const rng = run.rng;
+  run._nextWaveT = run.time + WAVES.every * rng.range(0.9, 1.1);
   const m = spawnMinutes(run);
   const n = Math.min(WAVES.maxCount, Math.round(WAVES.baseCount + WAVES.perMinute * m), SPAWN.cap - run.enemies.length);
   if (n <= 0) return;
-  const type = WAVES.types[run.mode === 'endless' ? 5 : Math.min(5, run.watch)];
+
+  const mainType = WAVES.types[run.mode === 'endless' ? 5 : Math.min(5, run.watch)];
+  const roster = rosterFor(run);
+  const pickWaveType = () => (rng.chance(0.78) ? mainType : rng.weighted(roster).type);
+
   const p = run.player;
-  const a0 = run.rng.range(0, Math.PI * 2);
-  for (let i = 0; i < n; i++) {
-    const a = a0 + (i / n) * Math.PI * 2;
-    spawnEnemy(run, type, p.x + Math.cos(a) * WAVES.radius, p.y + Math.sin(a) * WAVES.radius);
+  const heading = p.moving ? Math.atan2(p.facingY, p.facingX) : rng.range(0, Math.PI * 2);
+  const R = WAVES.radius;
+  const styleRoll = rng.next();
+  let pattern = 'alley';
+
+  if (styleRoll < 0.45) {
+    // 阵势一：巷口群涌（2–3 个不对称街口纵深涌入，留出天然突围缺口）
+    pattern = 'alley';
+    const three = n >= 24 && rng.chance(0.45);
+    const a0 = heading + rng.range(-0.85, 0.85);
+    const dirs = three
+      ? [a0, a0 + rng.range(1.35, 1.95), a0 - rng.range(1.4, 2.05)]
+      : [a0, a0 + (rng.chance(0.5) ? 1 : -1) * rng.range(1.65, 2.65)];
+    const shares = three ? [0.46, 0.32, 0.22] : [0.58, 0.42];
+    let spawned = 0;
+    for (let c = 0; c < dirs.length; c++) {
+      const cnt = c === dirs.length - 1 ? n - spawned : Math.max(2, Math.round(n * shares[c]));
+      spawned += cnt;
+      const baseA = dirs[c];
+      const baseD = R * rng.range(0.88, 1.06);
+      for (let i = 0; i < cnt; i++) {
+        const a = baseA + tri(rng, 0.38);
+        const d = baseD + i * rng.range(3.2, 7.5) + rng.range(-18, 36);
+        const x = p.x + Math.cos(a) * d + rng.range(-24, 24);
+        const y = p.y + Math.sin(a) * d + rng.range(-24, 24);
+        spawnEnemy(run, pickWaveType(), x, y);
+      }
+    }
+  } else if (styleRoll < 0.76) {
+    // 阵势二：斜街夹击（两侧错落弯弧包抄，带子簇聚拢与景深差，绝非圆环）
+    pattern = 'flank';
+    const axis = heading + rng.range(-0.7, 0.7);
+    const flanks = [axis + rng.range(-0.45, 0.35), axis + rng.range(2.35, 3.25)];
+    for (let i = 0; i < n; i++) {
+      const side = i < Math.ceil(n * 0.56) ? flanks[0] : flanks[1];
+      const knot = (i % 2 === 0 ? -1 : 1) * rng.range(0.08, 0.36);
+      const a = side + knot + tri(rng, 0.26);
+      const d = R * rng.range(0.86, 1.36);
+      const x = p.x + Math.cos(a) * d + rng.range(-26, 26);
+      const y = p.y + Math.sin(a) * d + rng.range(-26, 26);
+      spawnEnemy(run, pickWaveType(), x, y);
+    }
+  } else {
+    // 阵势三：夜雾散祟（3–5 小股游荡鬼群从不同远近摸出）
+    pattern = 'packs';
+    const packs = n >= 28 ? rng.int(4, 5) : rng.int(3, 4);
+    const anchors = [];
+    let curA = rng.range(0, Math.PI * 2);
+    for (let k = 0; k < packs; k++) {
+      curA += rng.range(0.85, 1.85);
+      const dist = R * rng.range(0.88, 1.40);
+      anchors.push({ x: p.x + Math.cos(curA) * dist, y: p.y + Math.sin(curA) * dist });
+    }
+    for (let i = 0; i < n; i++) {
+      const anc = anchors[i % packs];
+      const oa = rng.range(0, Math.PI * 2);
+      const od = rng.range(10, 64);
+      spawnEnemy(run, pickWaveType(), anc.x + Math.cos(oa) * od, anc.y + Math.sin(oa) * od);
+    }
   }
-  run.events.push({ type: 'wave', count: n, enemyType: type });
+  run.events.push({ type: 'wave', count: n, enemyType: mainType, pattern });
 }

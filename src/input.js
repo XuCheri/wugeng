@@ -2,14 +2,15 @@
 // 大招按钮区域由渲染层提供（getUltButtonRect），点击该区域触发「敲更锣」。
 // 桌面调试：WASD / 方向键移动，空格放大招。
 
-const DEAD_ZONE = 6;     // 像素：小于此位移视为未移动
-const MAX_RADIUS = 56;   // 像素：拖到这个距离即满速
+const DEAD_ZONE = 6;          // 像素：小于此位移视为未移动
+const FULL_SPEED_RADIUS = 14; // 像素：轻推即满速，手指滑远或回拉转向都不会掉移速
+const VISUAL_RADIUS = 42;     // 像素：屏幕摇杆圆环的视觉半径
 
 export function createInput(target, { getUltRect = () => null } = {}) {
   const state = {
     moveX: 0, moveY: 0, ultimate: false,
-    // 供渲染层画摇杆用（可选）
-    stick: { active: false, ox: 0, oy: 0, x: 0, y: 0 },
+    // 供渲染层画摇杆用：ox/oy 在整次按住期间固定在落指处，不追着手指跑
+    stick: { active: false, ox: 0, oy: 0, x: 0, y: 0, kx: 0, ky: 0 },
   };
   let stickPointer = null;
   let ultQueued = false;
@@ -20,19 +21,20 @@ export function createInput(target, { getUltRect = () => null } = {}) {
   function updateStick(x, y) {
     const s = state.stick;
     s.x = x; s.y = y;
-    let dx = x - s.ox, dy = y - s.oy;
+    const dx = x - s.ox, dy = y - s.oy;
     const len = Math.hypot(dx, dy);
-    if (len < DEAD_ZONE) { state.moveX = 0; state.moveY = 0; return; }
-    // 摇杆中心跟随手指，避免拖远后反向要拖很久
-    if (len > MAX_RADIUS) {
-      s.ox = x - (dx / len) * MAX_RADIUS;
-      s.oy = y - (dy / len) * MAX_RADIUS;
-      dx = x - s.ox; dy = y - s.oy;
+    if (len < DEAD_ZONE) {
+      state.moveX = 0; state.moveY = 0;
+      s.kx = 0; s.ky = 0;
+      return;
     }
-    const m = Math.min(1, Math.hypot(dx, dy) / MAX_RADIUS);
-    const l = Math.hypot(dx, dy) || 1;
-    state.moveX = (dx / l) * m;
-    state.moveY = (dy / l) * m;
+    const nx = dx / len, ny = dy / len;
+    const m = Math.min(1, (len - DEAD_ZONE) / (FULL_SPEED_RADIUS - DEAD_ZONE));
+    state.moveX = nx * m;
+    state.moveY = ny * m;
+    const vis = Math.min(len, VISUAL_RADIUS);
+    s.kx = nx * vis;
+    s.ky = ny * vis;
   }
 
   function onDown(e) {
@@ -44,7 +46,7 @@ export function createInput(target, { getUltRect = () => null } = {}) {
     if (stickPointer !== null) return;
     stickPointer = e.pointerId;
     target.setPointerCapture?.(e.pointerId);
-    Object.assign(state.stick, { active: true, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY });
+    Object.assign(state.stick, { active: true, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, kx: 0, ky: 0 });
     state.moveX = 0; state.moveY = 0;
     e.preventDefault();
   }

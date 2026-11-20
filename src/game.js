@@ -55,19 +55,34 @@ export function createGame({ canvas, onStatusChange = () => {}, onSummary = () =
     const s = input.state.stick;
     if (!s.active || paused || !run || run.status !== 'playing') return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const kx = s.ox + (s.kx ?? input.state.moveX * 42);
+    const ky = s.oy + (s.ky ?? input.state.moveY * 42);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 0.28;
-    ctx.strokeStyle = '#1C1A17';
+    // 外圈：宣纸浅衬 + 墨圈，一更到五更夜色都看得清且不抢戏
+    ctx.strokeStyle = 'rgba(239, 230, 210, 0.38)';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(s.ox, s.oy, 42, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(28, 26, 23, 0.48)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(s.ox, s.oy, 44, 0, Math.PI * 2);
+    ctx.arc(s.ox, s.oy, 42, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = '#1C1A17';
+    // 落指中心小点
+    ctx.fillStyle = 'rgba(239, 230, 210, 0.55)';
     ctx.beginPath();
-    ctx.arc(s.ox + input.state.moveX * 44, s.oy + input.state.moveY * 44, 12, 0, Math.PI * 2);
+    ctx.arc(s.ox, s.oy, 3, 0, Math.PI * 2);
     ctx.fill();
+    // 推杆珠：宣纸底 + 朱砂边
+    ctx.fillStyle = 'rgba(239, 230, 210, 0.72)';
+    ctx.strokeStyle = 'rgba(194, 59, 38, 0.78)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(kx, ky, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 

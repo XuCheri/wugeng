@@ -3,6 +3,7 @@
 // - 小道童：一个包子都不吃，守到五更（撑到 8:00 = 480 秒）
 // - 夜色 N+1：通关夜色 N
 import { NIGHT_MAX, markAchievement } from './save.js';
+import { recordCodexSummary } from './codex.js';
 
 export const MIAN_KILLS = 800;
 export const DAOTONG_TIME = 480;
@@ -54,7 +55,7 @@ export function heroUnlockProgress(save, heroId) {
 }
 
 /**
- * 一局结束入账：加铜钱、记统计、判解锁、记成就。调用方负责 saveSave。
+ * 一局结束入账：加铜钱、记统计、判解锁、记成就、同步图鉴。调用方负责 saveSave。
  * 返回 { coins, unlocks, achievements: [id] }
  */
 export function recordRun(save, summary, now = Date.now()) {
@@ -72,6 +73,8 @@ export function recordRun(save, summary, now = Date.now()) {
   if (summary?.cleared) st.clears += 1;
 
   const unlocks = evaluateUnlocks(save, summary);
+  recordCodexSummary(save, summary);
+
   const achievements = [];
   const ach = (id, cond) => { if (cond && markAchievement(save, id, now)) achievements.push(id); };
   ach('firstClear', summary?.cleared);

@@ -5,8 +5,11 @@ export const SAVE_KEY = 'wugeng.save';
 export const SAVE_VERSION = 1;
 
 export const HERO_IDS = ['zhou', 'mian', 'daotong'];
+export const HERO_START_WEAPON = { zhou: 'gong', mian: 'paperman', daotong: 'talisman' };
 export const SHOP_IDS = ['tizhi', 'lidao', 'jiaoli', 'yanli', 'wuxing', 'caiyun', 'jiyuan', 'huchi'];
+export const WEAPON_IDS = ['gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell'];
 export const RELIC_IDS = ['clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring'];
+export const ENEMY_IDS = ['paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned', 'horse', 'umbrella', 'youshen'];
 export const NIGHT_MAX = 10;
 export const SHOP_MAX_LEVEL = 5;
 export const DMG_TEXT_MODES = ['all', 'crit', 'off'];
@@ -15,11 +18,21 @@ export function defaultSettings() {
   return { sfx: true, music: true, shake: true, dmgText: 'all', lowQuality: false };
 }
 
+export function defaultCodex() {
+  return {
+    weapons: ['gong'],
+    evolutions: [],
+    relics: [],
+    enemies: {},
+  };
+}
+
 export function defaultSave() {
   const shop = {};
   for (const id of SHOP_IDS) shop[id] = 0;
   return {
     version: SAVE_VERSION,
+    updatedAt: 0,
     coins: 0,
     shop,
     unlockedHeroes: ['zhou'],
@@ -28,6 +41,7 @@ export function defaultSave() {
     nightCleared: -1,     // 已通关的最高夜色，-1 = 从未通关
     selectedNight: 0,
     achievements: {},     // { id: 首次达成的时间戳 }
+    codex: defaultCodex(),
     settings: defaultSettings(),
     checkin: { cycleDay: 0, lastClaimDate: null, cycles: 0, totalClaims: 0 },
     cosmetics: { owned: [], equipped: { lantern: null, outfit: null } },
@@ -72,6 +86,7 @@ export function migrateSave(raw) {
   }
 
   const out = def;
+  out.updatedAt = int(src.updatedAt ?? src.savedAt, 0, 0, 9e15);
   out.coins = int(src.coins, 0, 0, 1e12);
 
   if (isObj(src.shop)) {
@@ -150,8 +165,148 @@ export function migrateSave(raw) {
     out.stats.totalCoins = int(s.totalCoins, 0, 0);
   }
 
+  // 图鉴数据清洗 + 根据已解锁英雄与已有护身符自动回填
+  const wSet = new Set(['gong']);
+  for (const h of out.unlockedHeroes) if (HERO_START_WEAPON[h]) wSet.add(HERO_START_WEAPON[h]);
+  const eSet = new Set();
+  const rSet = new Set();
+  for (const c of out.charms) if (RELIC_IDS.includes(c.relicId)) rSet.add(c.relicId);
+  const enemies = {};
+  if (isObj(src.codex)) {
+    if (Array.isArray(src.codex.weapons)) {
+      for (const w of src.codex.weapons) if (WEAPON_IDS.includes(w)) wSet.add(w);
+    }
+    if (Array.isArray(src.codex.evolutions)) {
+      for (const w of src.codex.evolutions) {
+        if (WEAPON_IDS.includes(w)) { eSet.add(w); wSet.add(w); }
+      }
+    }
+    if (Array.isArray(src.codex.relics)) {
+      for (const r of src.codex.relics) if (RELIC_IDS.includes(r)) rSet.add(r);
+    }
+    if (isObj(src.codex.enemies)) {
+      for (const k of ENEMY_IDS) {
+        const cnt = int(src.codex.enemies[k], 0, 0, 1e9);
+        if (cnt > 0) enemies[k] = cnt;
+      }
+    }
+  }
+  out.codex = {
+    weapons: WEAPON_IDS.filter((w) => wSet.has(w)),
+    evolutions: WEAPON_IDS.filter((w) => eSet.has(w)),
+    relics: RELIC_IDS.filter((r) => rSet.has(r)),
+    enemies,
+  };
+
   out.version = SAVE_VERSION;
   return out;
+}
+
+const SHOP_STEP_COSTS = [60, 181, 347, 553, 794];
+
+function shopSpent(shop) {
+  let sum = 0;
+  for (const id of SHOP_IDS) {
+    const lv = int(shop?.[id], 0, 0, SHOP_MAX_LEVEL);
+    for (let i = 0; i < lv; i++) sum += SHOP_STEP_COSTS[i];
+  }
+  return sum;
+}
+
+export function isFreshSave(s) {
+  if (!isObj(s)) return true;
+  return (s.stats?.runs || 0) === 0
+    && (s.coins || 0) === 0
+    && shopSpent(s.shop) === 0
+    && (s.checkin?.totalClaims || 0) === 0
+    && (s.unlockedHeroes?.length || 1) <= 1;
+}
+
+function saveProgressScore(s) {
+  return (s.coins || 0)
+    + shopSpent(s.shop)
+    + (s.stats?.clears || 0) * 500
+    + (s.stats?.runs || 0) * 25
+    + (s.checkin?.totalClaims || 0) * 60
+    + Math.floor(s.stats?.totalPlaySec || 0);
+}
+
+/**
+ * 合并本机存档与云端存档：
+ * - 铜钱/加点/签到/护身符等可消费资产整包取更新（或进度更高）的一方，防止双端刷钱；
+ * - 英雄解锁、最高夜色、成就、外观、图鉴收集与历史最高纪录取并集/最大值，绝不丢收集进度。
+ */
+export function mergeSaves(localRaw, remoteRaw) {
+  const a = migrateSave(localRaw);
+  const b = migrateSave(remoteRaw);
+  if (isFreshSave(b) && !isFreshSave(a)) return a;
+  if (isFreshSave(a) && !isFreshSave(b)) return b;
+
+  let primary = a;
+  let secondary = b;
+  const scoreA = saveProgressScore(a);
+  const scoreB = saveProgressScore(b);
+  if (b.updatedAt > a.updatedAt + 1000 && scoreB >= scoreA * 0.5) {
+    primary = b; secondary = a;
+  } else if (scoreB > scoreA && a.updatedAt <= b.updatedAt + 1000) {
+    primary = b; secondary = a;
+  }
+
+  const merged = migrateSave(JSON.parse(JSON.stringify(primary)));
+  merged.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
+
+  // 永久解锁并集
+  const heroSet = new Set([...a.unlockedHeroes, ...b.unlockedHeroes]);
+  merged.unlockedHeroes = HERO_IDS.filter((h) => heroSet.has(h));
+  if (!merged.unlockedHeroes.includes(merged.selectedHero)) merged.selectedHero = 'zhou';
+
+  merged.nightCleared = Math.max(a.nightCleared, b.nightCleared);
+  merged.nightUnlocked = Math.max(a.nightUnlocked, b.nightUnlocked, Math.min(NIGHT_MAX, merged.nightCleared + 1));
+  merged.selectedNight = Math.min(merged.selectedNight, merged.nightUnlocked);
+
+  // 成就（保留最早达成时间）
+  for (const [k, v] of Object.entries(secondary.achievements)) {
+    if (!merged.achievements[k] || (v > 0 && v < merged.achievements[k])) merged.achievements[k] = v;
+  }
+
+  // 外观并集
+  merged.cosmetics.owned = [...new Set([...a.cosmetics.owned, ...b.cosmetics.owned])];
+  for (const slot of ['lantern', 'outfit']) {
+    const pick = primary.cosmetics.equipped[slot] || secondary.cosmetics.equipped[slot];
+    merged.cosmetics.equipped[slot] = merged.cosmetics.owned.includes(pick) ? pick : null;
+  }
+
+  // 图鉴并集
+  const wSet = new Set([...a.codex.weapons, ...b.codex.weapons]);
+  for (const h of merged.unlockedHeroes) if (HERO_START_WEAPON[h]) wSet.add(HERO_START_WEAPON[h]);
+  const eSet = new Set([...a.codex.evolutions, ...b.codex.evolutions]);
+  const rSet = new Set([...a.codex.relics, ...b.codex.relics]);
+  const enemies = {};
+  for (const k of ENEMY_IDS) {
+    const cnt = Math.max(a.codex.enemies[k] || 0, b.codex.enemies[k] || 0);
+    if (cnt > 0) enemies[k] = cnt;
+  }
+  merged.codex = {
+    weapons: WEAPON_IDS.filter((w) => wSet.has(w)),
+    evolutions: WEAPON_IDS.filter((w) => eSet.has(w)),
+    relics: RELIC_IDS.filter((r) => rSet.has(r)),
+    enemies,
+  };
+
+  // 历史纪录取更优
+  merged.stats = {
+    runs: Math.max(a.stats.runs, b.stats.runs),
+    clears: Math.max(a.stats.clears, b.stats.clears),
+    firstRunDone: a.stats.firstRunDone || b.stats.firstRunDone,
+    totalPlaySec: Math.max(a.stats.totalPlaySec, b.stats.totalPlaySec),
+    bestTimeSec: Math.max(a.stats.bestTimeSec, b.stats.bestTimeSec),
+    bestKills: Math.max(a.stats.bestKills, b.stats.bestKills),
+    bestHit: Math.max(a.stats.bestHit, b.stats.bestHit),
+    totalKills: Math.max(a.stats.totalKills, b.stats.totalKills),
+    totalCoins: Math.max(a.stats.totalCoins, b.stats.totalCoins),
+  };
+
+  return merged;
 }
 
 function getStorage(storage) {
@@ -177,7 +332,11 @@ export function loadSave(storage) {
 }
 
 /** 写档：返回是否成功（存储满或被禁用时为 false，游戏照常进行）。 */
-export function saveSave(save, storage) {
+export function saveSave(save, storage, now = Date.now()) {
+  if (isObj(save)) {
+    const ts = int(now, 0, 0, 9e15);
+    if (ts > 0) save.updatedAt = Math.max(save.updatedAt || 0, ts);
+  }
   const st = getStorage(storage);
   if (!st) return false;
   try {

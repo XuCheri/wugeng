@@ -1852,4 +1852,40 @@ export function scrapSprite(i, color = 'paper') {
   }, { speckle: false });
 }
 
-export { drawIcon, iconDataURL } from './icons.js';
+import { drawIcon as _drawIcon, iconDataURL as _baseIconDataURL } from './icons.js';
+
+export const drawIcon = _drawIcon;
+
+const extraUrlCache = new Map();
+
+/** 支持 kind = 'enemy'（邪祟/夜主实机版画立绘）与 'evo'（朱印框开光神兵），其余走 icons.js */
+export function iconDataURL(kind, id, size = 64) {
+  if (kind !== 'enemy' && kind !== 'evo') return _baseIconDataURL(kind, id, size);
+  const key = `${kind}|${id}|${size}`;
+  if (extraUrlCache.has(key)) return extraUrlCache.get(key);
+  const s = 2;
+  const c = makeCanvas(size * s, size * s);
+  const g = c.getContext('2d');
+  g.scale(s, s);
+  if (kind === 'enemy') {
+    const spr = enemySprite(id, 0, false);
+    const pad = size * 0.88;
+    const k = Math.min(pad / Math.max(1, spr.w), pad / Math.max(1, spr.h));
+    const dw = spr.w * k;
+    const dh = spr.h * k;
+    g.drawImage(spr.canvas, (size - dw) / 2, (size - dh) / 2, dw, dh);
+  } else if (kind === 'evo') {
+    withMisreg(g, () => {
+      g.strokeStyle = VERM;
+      g.lineWidth = 2.2;
+      g.strokeRect(3, 3, size - 6, size - 6);
+      g.lineWidth = 0.9;
+      g.strokeRect(6, 6, size - 12, size - 12);
+    });
+    _drawIcon(g, 'weapon', id, size / 2, size / 2, size * 0.74);
+    printSpeckle(g, size, size, makeRng(hashStr(key)), 0.01, 0.6);
+  }
+  const url = c.toDataURL('image/png');
+  extraUrlCache.set(key, url);
+  return url;
+}

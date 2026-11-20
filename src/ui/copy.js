@@ -181,3 +181,56 @@ export const ACHIEVEMENT_NAMES = {
   hit100m: '一击过亿',
   night10: '夜色十，天照亮',
 };
+
+export const ACHIEVEMENT_DESC = {
+  firstClear: '守过五更，头一回见到鸡鸣天亮',
+  kills800: '单局打散 800 只邪祟',
+  noBun480: '前 8 分钟不吃包子，熬进五更',
+  endless10: '进入残夜无尽后累计撑满 20 分钟',
+  hit10k: '单次伤害突破一万',
+  hit100m: '单次伤害突破一亿',
+  night10: '通关最高难度「夜色十」',
+};
+
+export const ENEMY_COPY = {
+  paperkid: { name: '纸扎童子', watch: '一更起出没', desc: '糊纸点的腮红，蹦跳着往灯火跟前凑。' },
+  shade: { name: '影祟', watch: '一更起出没', desc: '贴地疾行的黑影，身子脆，胜在脚快。' },
+  lanternghost: { name: '灯笼鬼', watch: '一更后半出没', desc: '飘在半空的破纸灯，皮厚耐敲。' },
+  weasel: { name: '黄皮子', watch: '三更起出没', desc: '近身先顿一息蓄力，随后直线猛扑，横移可避。' },
+  sedan: { name: '纸轿子', watch: '三更起出没', desc: '沉甸甸的朱红空轿，打破后会裂出四只纸扎童子。' },
+  drowned: { name: '水鬼', watch: '四更古井出没', desc: '常从古井爬出，周身湿气会让近处的打更人步子变沉。' },
+  horse: { name: '纸马将军', watch: '三更夜主（04:00）', boss: true, desc: '披靠旗的纸扎战马，蓄势后连冲三趟，打散必落供盒。' },
+  umbrella: { name: '无面伞女', watch: '四更夜主（08:00）', boss: true, desc: '收伞减伤、开伞旋射弹幕，趁其开伞破绽猛攻，打散落供盒。' },
+  youshen: { name: '夜游神', watch: '五更终主（10:00）', boss: true, desc: '巡夜大神，唤群祟、洒旋弹，残血狂暴；撑过去便是天亮。' },
+};
+
+/** 反查某把武器配对开光的法器 ID */
+export function weaponPairRelic(weaponId) {
+  return B.WEAPONS?.[weaponId]?.pair || Object.keys(PAIRS).find((r) => PAIRS[r] === weaponId) || null;
+}
+
+/** 法器在当前等级（1..5）下的总加成文案，供局内暂停与图鉴共用 */
+export function relicTotalDesc(id, level = 1) {
+  const lv = Math.max(1, Math.floor(level));
+  if (id === 'clapper') return `冷却 −${8 * lv}%`;
+  if (id === 'censer') return `范围 +${10 * lv}%`;
+  if (id === 'cinnabar') return `伤害 +${8 * lv}%`;
+  if (id === 'inkstone') return `持续与弹速 +${10 * lv}%`;
+  if (id === 'bagua') return `护甲 +${lv}，生命 +${10 * lv}`;
+  if (id === 'tinder') return `经验 +${8 * lv}%，拾取 +${10 * lv}%`;
+  if (id === 'redstring') return `暴击率 +${5 * lv}%`;
+  if (id === 'scissors') {
+    const amtLv = B.RELICS?.scissors?.amountLevels || [2, 5];
+    let amt = 0;
+    let other = 0;
+    for (let i = 1; i <= lv; i++) {
+      if (amtLv.includes(i)) amt += 1;
+      else other += 1;
+    }
+    const parts = [];
+    if (amt > 0) parts.push(`数量 +${amt}`);
+    if (other > 0) parts.push(`伤害 +${4 * other}%`);
+    return parts.join('，') || '伤害 +4%';
+  }
+  return RELIC_LINE[id] || '';
+}

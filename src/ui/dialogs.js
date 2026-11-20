@@ -53,7 +53,7 @@ export function showPrivacyDialog(root) {
     holder.replaceChildren(body);
   }).catch(() => {
     holder.replaceChildren(
-      h('p', {}, '本游戏所有进度只存在本机，不上传任何个人信息。'),
+      h('p', {}, '本游戏进度仅保存在本机及你的 TapTap 云存档中，不另行收集个人敏感信息。'),
       h('p', {}, h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, '打开完整隐私政策')));
   });
   return v;

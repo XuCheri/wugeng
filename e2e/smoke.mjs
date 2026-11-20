@@ -42,7 +42,7 @@ async function runFullFlow(browser, baseUrl) {
   };
   const W = (fn, arg) => page.evaluate(fn, arg);
 
-  await page.goto(`${baseUrl}/index.html?mockAds=1`);
+  await page.goto(`${baseUrl}/index.html?mockAds=1&mockCloud=1`);
   await page.waitForSelector('.screen--title');
   await W(() => document.fonts.ready);
   await shot('01-title');
@@ -56,7 +56,7 @@ async function runFullFlow(browser, baseUrl) {
   await shot('03-privacy');
   await page.click('.veil .btn--seal');
 
-  // 更房、加点、更簿双倍签到
+  // 更房、加点、百物谱图鉴、更簿双倍签到、云存档
   await page.click('text=开始守夜');
   await page.waitForSelector('.screen--hub');
   await W(() => {
@@ -66,17 +66,40 @@ async function runFullFlow(browser, baseUrl) {
   });
   await shot('04-hub');
 
+  // 1) 加点
   await page.click('.hub-nav .btn:nth-child(1)');
   await page.click('.shop-row .btn--small >> nth=0');
   await shot('05-shop');
   await page.click('.veil .btn--ghost');
 
+  // 2) 图鉴（百物谱）
   await page.click('.hub-nav .btn:nth-child(2)');
+  await page.waitForSelector('.codex-scroll');
+  assert.equal(await page.$$eval('.codex-tab', (x) => x.length), 5, '百物谱应含 5 个分类页签');
+  await shot('05b-codex');
+  await page.click('.codex-tab >> nth=1'); // 开光配方页
+  await page.click('.codex-tab >> nth=3'); // 百鬼页
+  await page.click('.veil .btn--ghost');
+
+  // 3) 更簿签到双倍
+  await page.click('.hub-nav .btn:nth-child(3)');
   await shot('06-checkin');
   await page.click('.veil .btn--ad');
   await page.waitForSelector('.mock-ad');
   await page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7000 });
   await page.click('.veil .btn--ghost');
+
+  // 4) 设置与云存档自动备份 / 手动拉取验证（加点后已自动上云，62 秒冷却内再次上传会节流排队）
+  await page.click('.hub-nav .btn:nth-child(4)');
+  await page.waitForSelector('.cloud-box');
+  assert.ok(await W(() => window.__wugeng.cloud.getState().lastUploadAt > 0), '加点后应已自动上传云存档');
+  await page.click('text=上传云端');
+  await page.waitForTimeout(120);
+  await W(() => { window.__wugeng.save.coins = 1; window.__wugeng.save.updatedAt = 1; });
+  await page.click('text=拉取云端');
+  await page.waitForTimeout(150);
+  assert.ok((await W(() => window.__wugeng.save.coins)) >= 1140, '拉取云端应从云端恢复进度');
+  await page.click('.veil .btn--seal');
 
   // 带护身符出门
   await page.click('.charm-pick');
@@ -118,6 +141,15 @@ async function runFullFlow(browser, baseUrl) {
   await shot('10-chest-evolve');
   assert.equal(await W(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong').evolved), true, '供盒应触发开光');
   await page.click('.veil .btn--seal');
+
+  // 局内暂停：查看已拿到的器物与属性加成
+  await page.click('.pause-btn');
+  await page.waitForFunction(() => window.__wugeng.overlay === 'pause');
+  const pauseText = await page.textContent('.pause-loadout');
+  assert.ok(pauseText.includes('五更鸣锣') && pauseText.includes('梆子') && pauseText.includes('伤害加成'), '暂停界面应展示已拿器物与属性加成');
+  await shot('10b-pause-loadout');
+  await page.click('text=接着守');
+  await page.waitForFunction(() => window.__wugeng.overlay === null);
 
   // 死亡 → 广告复活（满血 + 无敌）
   const forceDeath = () => W(() => {
@@ -191,7 +223,7 @@ async function runAdEdgePaths(browser, baseUrl) {
     const page = await ctx.newPage();
     await page.goto(`${baseUrl}/index.html?mockAds=${mode}`);
     await page.click('text=开始守夜');
-    await page.click('.hub-nav .btn:nth-child(2)');
+    await page.click('.hub-nav .btn:nth-child(3)');
     const coins0 = await page.evaluate(() => window.__wugeng.save.coins);
     await page.click('.veil .btn--ad');
     if (mode === 'skip') await page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7000 });
@@ -209,7 +241,7 @@ async function runOfflineMode(browser, baseUrl) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${baseUrl}/index.html`);
   await page.click('text=开始守夜');
-  await page.click('.hub-nav .btn:nth-child(2)');
+  await page.click('.hub-nav .btn:nth-child(3)');
   assert.equal(await page.$$eval('.btn--ad', (x) => x.length), 0, '离线模式更簿无广告');
   await page.click('.veil .btn--seal');
   await page.click('.veil .btn--ghost');

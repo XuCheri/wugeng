@@ -1,17 +1,21 @@
 // 局内覆盖层：暂停按钮、三选一（签）、供盒、暂停菜单、复活、鸡鸣通关选择、首局提示。
 // 所有对 run 的改动都通过 sim 函数完成，然后由这里决定 resume 还是弹下一个界面。
 import { h, clear, scroll, sealButton, adButton, veil, toast, cnNum } from './dom.js';
-import { describeChoice, weaponName, relicName, EVOLVE_INTRO, watchName } from './copy.js';
+import {
+  describeChoice, weaponName, relicName, weaponPairRelic, relicTotalDesc,
+  EVOLVE_INTRO, watchName, nightLabel,
+} from './copy.js';
 import { icon } from './icons.js';
 import { settingsBody } from './settings.js';
 import { confirmDialog } from './dialogs.js';
 import { canShowRerollAd, canShowReviveAd } from '../ads/ad-policy.js';
+import { MAX_WEAPONS, MAX_RELICS, MAX_WEAPON_LEVEL, PLAYER_BASE } from '../sim/balance.js';
 
 const KIND_GLYPH = { coin: '钱', bun: '包', overflow: '溢' };
 
 /**
  * deps: { game, sim: { chooseUpgrade, rerollChoices, grantAdRerolls, openChest, revive, enterEndless },
- *         adsOn(), runAd(placement), getSettings(), onSettings(s), onFinish(), audio }
+ *         adsOn(), runAd(placement), getSettings(), onSettings(s), onFinish(), onCodexSync?(run), audio }
  */
 export function createRunUI(root, deps) {
   const { game, sim } = deps;
@@ -123,6 +127,7 @@ export function createRunUI(root, deps) {
       if (picked) return;
       picked = true;
       sim.chooseUpgrade(run(), i);
+      deps.onCodexSync?.(run());
       deps.audio?.play('woodblock');
       picked = false;
       if (run().status === 'levelup') { render(); return; }   // 连升：直接换一批签
@@ -137,6 +142,7 @@ export function createRunUI(root, deps) {
   // ───────── 供盒 ─────────
   function showChest() {
     const res = sim.openChest(run()) || { evolved: null, upgrades: [] };
+    deps.onCodexSync?.(run());
     const items = [];
     if (res.evolved) {
       items.push(h('div', { class: 'chest-evo' },
@@ -167,17 +173,140 @@ export function createRunUI(root, deps) {
     }));
   }
 
-  // ───────── 暂停 ─────────
+  // ───────── 暂停（行囊加成 + 设置）─────────
+  function buildPauseLoadout(r) {
+    const p = r.player || {};
+    const mods = r.mods || {};
+    const weapons = r.weapons || [];
+    const relics = r.relics || [];
+    const ownedRelicSet = new Set(relics.map((x) => x.id));
+
+    const wGrid = h('div', { class: 'pause-slots' });
+    for (let i = 0; i < MAX_WEAPONS; i++) {
+      const w = weapons[i];
+      if (!w) {
+        wGrid.appendChild(h('div', { class: 'pause-slot is-empty' }, h('span', {}, '空兵刃位')));
+        continue;
+      }
+      const pair = weaponPairRelic(w.id);
+      const hasPair = pair && ownedRelicSet.has(pair);
+      const wTitle = weaponName(w.id, !!w.evolved);
+      let hint = '';
+      if (w.evolved) hint = EVOLVE_INTRO[w.id] || '已开光';
+      else if (hasPair && w.level >= MAX_WEAPON_LEVEL) hint = '已齐备 · 拾供盒开光';
+      else if (hasPair) hint = `已配${relicName(pair)} · 伍级开光`;
+      else if (pair) hint = `配「${relicName(pair)}」开光`;
+
+      wGrid.appendChild(h('div', { class: `pause-slot${w.evolved ? ' is-evo' : ''}` },
+        h('div', { class: 'pause-slot__ico' }, icon(w.evolved ? 'evo' : 'weapon', w.id, 36, wTitle[0])),
+        h('div', { class: 'pause-slot__info' },
+          h('p', { class: 'pause-slot__head' },
+            h('b', {}, wTitle),
+            w.evolved
+              ? h('i', { class: 'stamp stamp--xs' }, '开')
+              : h('span', { class: 'pause-slot__lv' }, `${cnNum(w.level)}级`)),
+          hint ? h('p', { class: 'pause-slot__sub' }, hint) : null)));
+    }
+
+    const rGrid = h('div', { class: 'pause-slots' });
+    for (let i = 0; i < MAX_RELICS; i++) {
+      const rel = relics[i];
+      if (!rel) {
+        rGrid.appendChild(h('div', { class: 'pause-slot is-empty' }, h('span', {}, '空法器位')));
+        continue;
+      }
+      const rTitle = relicName(rel.id);
+      rGrid.appendChild(h('div', { class: 'pause-slot' },
+        h('div', { class: 'pause-slot__ico' }, icon('relic', rel.id, 36, rTitle[0])),
+        h('div', { class: 'pause-slot__info' },
+          h('p', { class: 'pause-slot__head' },
+            h('b', {}, rTitle),
+            h('span', { class: 'pause-slot__lv' }, `${cnNum(rel.level)}级`)),
+          h('p', { class: 'pause-slot__sub' }, relicTotalDesc(rel.id, rel.level)))));
+    }
+
+    const overflowRow = (mods.overflowStacks || 0) > 0
+      ? h('p', { class: 'pause-overflow' }, `溢签 ×${mods.overflowStacks} · 总伤额外 ×${(mods.overflowMult || 1).toFixed(2)}`)
+      : null;
+
+    const dmgPct = Math.round((mods.dmgPct || 0) * 100);
+    const critPct = Math.round((mods.critChance ?? PLAYER_BASE.critChance) * 100);
+    const cdrPct = Math.round((1 - (mods.cdMul ?? 1)) * 100);
+    const areaPct = Math.round(((mods.areaMul ?? 1) - 1) * 100);
+    const spdPct = Math.round(((p.speed || PLAYER_BASE.speed) / PLAYER_BASE.speed - 1) * 100);
+    const curSpd = Math.round((p.speed || PLAYER_BASE.speed) * (r._auraSlow || 1));
+    const pickPct = Math.round(((mods.pickupRange || PLAYER_BASE.pickupRange) / PLAYER_BASE.pickupRange - 1) * 100);
+    const xpMul = (mods.xpMul ?? 1).toFixed(2);
+    const statPairs = [
+      ['气血', `${Math.max(0, Math.ceil(p.hp ?? 0))} / ${p.maxHp ?? 100}`],
+      ['护甲', `${p.armor ?? 0}`],
+      ['伤害加成', `+${dmgPct}%`],
+      ['暴击率', `${critPct}%`],
+      ['冷却缩减', `−${cdrPct}%`],
+      ['范围加成', `+${areaPct}%`],
+      ['移速', `${curSpd}${spdPct ? ` (+${spdPct}%)` : ''}`],
+      ['拾取范围', `+${pickPct}%`],
+      ['经验倍率', `×${xpMul}`],
+      ['局内铜钱', `${r.stats?.coins ?? 0}`],
+    ];
+    if ((mods.amount || 0) > 0) statPairs.push(['额外数量', `+${mods.amount}`]);
+    if ((mods.summonDmgPct || 0) > 0) statPairs.push(['召唤增伤', `+${Math.round(mods.summonDmgPct * 100)}%`]);
+
+    const statGrid = h('dl', { class: 'pause-stats' },
+      statPairs.map(([k, v]) => h('div', { class: 'pause-stat' }, h('dt', {}, k), h('dd', {}, v))));
+
+    const affixNote = r.nightLevel > 0 && r.night?.affixes?.length
+      ? h('p', { class: 'pause-affix' }, `${nightLabel(r.nightLevel)}：${r.night.affixes.join(' · ')}`)
+      : null;
+
+    return h('div', { class: 'pause-loadout' },
+      h('p', { class: 'pause-sec' }, `兵刃（${weapons.length}/${MAX_WEAPONS}）`),
+      wGrid,
+      h('p', { class: 'pause-sec' }, `法器（${relics.length}/${MAX_RELICS}）`),
+      rGrid,
+      overflowRow,
+      h('p', { class: 'pause-sec' }, '当前属性与加成'),
+      statGrid,
+      affixNote);
+  }
+
   function showPause() {
     const r = run();
     if (!r || (current && current.type !== 'pause')) return;
     if (current?.type === 'pause') return;
-    const s = deps.getSettings();
+    deps.onCodexSync?.(r);
+
+    let tab = 'loadout';
+    const tabBar = h('div', { class: 'seg pause-tabs', role: 'tablist' });
+    const panel = h('div', { class: 'pause-panel' });
+
+    const renderBody = () => {
+      clear(tabBar);
+      for (const [id, label] of [['loadout', '行囊加成'], ['settings', '设置']]) {
+        tabBar.appendChild(h('button', {
+          type: 'button',
+          role: 'tab',
+          'aria-selected': tab === id ? 'true' : 'false',
+          class: `seg__opt${tab === id ? ' is-on' : ''}`,
+          onClick: () => { tab = id; renderBody(); },
+        }, label));
+      }
+      clear(panel);
+      if (tab === 'loadout') {
+        panel.appendChild(buildPauseLoadout(r));
+      } else {
+        const s = deps.getSettings();
+        panel.appendChild(settingsBody({ ...s }, (next) => deps.onSettings(next)));
+      }
+    };
+    renderBody();
+
+    const modeLabel = r.mode === 'endless' ? '残夜无尽' : watchName(r.watch);
     open('pause', scroll({
       title: '歇一口气',
-      sub: `${watchName(r.watch)} · 已打散 ${r.stats?.kills ?? 0} 只`,
-      cls: 'scroll--dialog',
-      body: settingsBody({ ...s }, (next) => deps.onSettings(next)),
+      sub: `${modeLabel} · ${cnNum(r.player?.level ?? 1)}级 · 已打散 ${r.stats?.kills ?? 0} 只`,
+      cls: 'scroll--dialog scroll--tall pause-scroll',
+      body: h('div', { class: 'pause-body' }, tabBar, panel),
       footer: [
         sealButton('接着守', () => { closeCurrent(); game.resume(); }),
         sealButton('放弃本局', async () => {
