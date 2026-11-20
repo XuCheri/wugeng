@@ -9,6 +9,7 @@
     "simulate": "node tools/simulate.mjs --runs 300",
     "serve": "python3 -m http.server 8080",
     "e2e": "node e2e/smoke.mjs",
+    "store-assets": "node tools/render-store-assets.mjs",
     "package": "python3 tools/package_h5.py"
   },
   "devDependencies": {

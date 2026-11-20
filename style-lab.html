@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>五更天 · 画面风格检查</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1C1A17; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #sheet { display: none; }
+  #fps { position: fixed; right: 4px; bottom: 2px; font: 10px monospace; color: #8E2A1B; opacity: .6; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="fps"></div>
+<script type="module">
+import { createRenderer } from './src/render/renderer.js';
+import { createMockRun, stepMock } from './src/render/mock-run.js';
+import { drawSheet } from './src/render/sheet.js';
+
+const q = new URLSearchParams(location.search);
+const watch = parseInt(q.get('watch') || '3', 10);
+const scene = q.get('scene') || 'crowd';
+const settings = {
+  shake: q.get('shake') !== '0',
+  dmgText: q.get('dmg') || 'all',
+  safeTop: parseInt(q.get('safeTop') || '0', 10),
+  safeBottom: parseInt(q.get('safeBottom') || '0', 10),
+};
+const low = q.get('low') === '1';
+const showFps = q.get('fps') === '1';
+
+// 尝试加载 UI 工程师放进 assets/fonts/ 的霞鹜文楷（名为 WenKai）；拿不到就用系统宋体
+async function loadFont() {
+  const candidates = [];
+  try {
+    const r = await fetch('assets/fonts/');
+    if (r.ok) {
+      const html = await r.text();
+      for (const m of html.matchAll(/href="([^"]+\.(?:woff2|woff|ttf|otf))"/gi)) candidates.push('assets/fonts/' + m[1]);
+    }
+  } catch {}
+  for (const url of candidates.sort((a, b) => (/wenkai/i.test(b) ? 1 : 0) - (/wenkai/i.test(a) ? 1 : 0))) {
+    try {
+      const f = new FontFace('WenKai', `url(${url})`);
+      await f.load();
+      document.fonts.add(f);
+      return url;
+    } catch {}
+  }
+  return null;
+}
+
+const canvas = document.getElementById('game-canvas');
+await Promise.race([loadFont(), new Promise((r) => setTimeout(r, 1500))]);
+await document.fonts.ready;
+
+if (scene === 'sheet') {
+  drawSheet(canvas, { low });
+  window.__ready = true;
+} else {
+  const renderer = createRenderer(canvas, { lowQuality: low });
+  const run = createMockRun({ watch, scene, hero: q.get('hero') || 'zhou', boss: q.get('boss') || undefined });
+  window.__run = run;
+  window.__renderer = renderer;
+  const fit = () => renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  fit();
+  addEventListener('resize', fit);
+
+  const DT = 1 / 60;
+  let acc = 0;
+  let last = performance.now();
+  let frames = 0;
+  let fpsT = 0;
+  const fpsEl = document.getElementById('fps');
+  function frame(now) {
+    const real = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (renderer.hitstop <= 0) acc += real;
+    while (acc >= DT) {
+      stepMock(run, DT);
+      renderer.consumeEvents(run.events);
+      acc -= DT;
+    }
+    renderer.render(run, acc / DT, real, settings);
+    frames++;
+    fpsT += real;
+    if (fpsT > 0.5) {
+      if (showFps) fpsEl.textContent = Math.round(frames / fpsT) + 'fps';
+      frames = 0;
+      fpsT = 0;
+    }
+    if (!window.__ready && run._clock > 1.2) window.__ready = true;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>

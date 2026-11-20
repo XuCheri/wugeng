@@ -27,6 +27,7 @@ npm run e2e                       # Playwright 冒烟（需要 chromium）
 ## 打包上传 TapTap
 
 ```bash
+npm run store-assets              # 生成与实机同画风的商店图标与宣传图（store/）
 python3 tools/package_h5.py       # 输出 dist/wugeng-h5.zip
 ```
 

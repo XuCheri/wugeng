@@ -12,7 +12,7 @@ RUNTIME_DIRS = {
     "assets": {".woff2", ".png", ".webp", ".jpg", ".txt"},
 }
 # 不进包的开发期文件
-EXCLUDE_PARTS = {"mock-run.js"}
+EXCLUDE_PARTS = {"mock-run.js", "sheet.js", "common-hanzi.txt"}
 STAMP = (2026, 1, 1, 0, 0, 0)
 
 

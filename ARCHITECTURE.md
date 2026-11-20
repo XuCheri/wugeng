@@ -123,8 +123,9 @@ Sim 可新增 kind，但必须在本表补一行并通知渲染层。
 
 ```js
 { heroId, nightLevel, cleared, mode, timeSec, reachedWatch, level, kills, coins,
-  bunsEaten, maxHit, killsByType, weapons, relics }
+  bunsEaten, firstBunTime, maxHit, killsByType, weapons, relics }
 ```
+`firstBunTime`：首次吃包子时的 run.time（秒），从未吃过为 `null`；用于「小道童」解锁判定。
 `coins` 为本局铜钱（已乘财运加成、夜色加成；**不含**广告翻倍，翻倍由 UI 层处理）。
 
 ## 4. 渲染接口（`src/render/renderer.js` 导出）
