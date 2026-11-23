@@ -1,6 +1,6 @@
 // 浮动摇杆输入：单指在屏幕任意位置按下即为摇杆中心，拖动方向即移动方向。
 // 大招按钮区域由渲染层提供（getUltButtonRect），点击该区域触发「敲更锣」。
-// 桌面调试：WASD / 方向键移动，空格放大招。
+// 桌面调试：WASD / 方向键移动，空格放大招，E / F 交互街角奇遇。
 
 const DEAD_ZONE = 6;          // 像素：小于此位移视为未移动
 const FULL_SPEED_RADIUS = 14; // 像素：轻推即满速，手指滑远或回拉转向都不会掉移速
@@ -14,6 +14,7 @@ export function createInput(target, { getUltRect = () => null } = {}) {
   };
   let stickPointer = null;
   let ultQueued = false;
+  let interactQueued = false;
   const keys = new Set();
 
   const inRect = (r, x, y) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -62,15 +63,18 @@ export function createInput(target, { getUltRect = () => null } = {}) {
     state.moveX = 0; state.moveY = 0;
   }
   function onKey(e) {
-    const k = e.key.toLowerCase();
+    const k = (e.key || '').toLowerCase();
     if (e.type === 'keydown') {
       if (k === ' ') ultQueued = true;
+      if (!e.repeat && (k === 'e' || k === 'f')) interactQueued = true;
       keys.add(k);
     } else keys.delete(k);
   }
   function onBlur() {
     keys.clear();
     stickPointer = null;
+    ultQueued = false;
+    interactQueued = false;
     state.stick.active = false;
     state.moveX = 0; state.moveY = 0;
   }
@@ -85,7 +89,7 @@ export function createInput(target, { getUltRect = () => null } = {}) {
 
   return {
     state,
-    /** 每个逻辑步读取一次；大招点击是一次性的。 */
+    /** 每个逻辑步读取一次；大招点击与奇遇交互是一次性的。 */
     sample() {
       let mx = state.moveX, my = state.moveY;
       if (stickPointer === null && keys.size) {
@@ -95,8 +99,10 @@ export function createInput(target, { getUltRect = () => null } = {}) {
         if (l > 1) { mx /= l; my /= l; }
       }
       const ultimate = ultQueued;
+      const interact = interactQueued;
       ultQueued = false;
-      return { moveX: mx, moveY: my, ultimate };
+      interactQueued = false;
+      return { moveX: mx, moveY: my, ultimate, interact };
     },
     reset: onBlur,
     destroy() {

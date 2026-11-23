@@ -122,5 +122,5 @@ test('护身符随机取自法器列表', () => {
   const s = defaultSave();
   s.checkin.cycleDay = 1;
   const r = claimCheckin(s, day(1), false, () => 0.999);
-  assert.equal(r.charms[0].relicId, 'redstring');
+  assert.equal(r.charms[0].relicId, 'soulwick');
 });

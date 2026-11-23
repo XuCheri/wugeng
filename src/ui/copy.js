@@ -1,18 +1,50 @@
-// 文案：打更人口吻，短、有味道。数值从 balance.js 读，文案只描述「怎么个打法」。
+// 文案：打更人口吻，短、有味道。数值与词条从 sim 单一真源读取，确保 100% 数值一致。
 import * as B from '../sim/balance.js';
+import { describeUpgrade, describeEvolution } from '../sim/levelup.js';
+import { relicEffect } from '../sim/relics.js';
+import { BLESSINGS } from '../sim/blessings.js';
+import { SYNERGIES } from '../sim/synergies.js';
 import { cnNum } from './dom.js';
 
 export const GAME_NAME = '五更天';
 
 export const HERO_COPY = {
-  zhou: { name: '打更人·老周', short: '老周', flavor: '敲了三十年更，锣一响，鬼也绕道。', trait: '大招攒气 +25%', weapon: 'gong', unlock: '默认' },
-  mian: { name: '纸扎匠·阿绵', short: '阿绵', flavor: '纸人纸马，扎得活灵活现。', trait: '召唤物伤害 +20%，最大生命 −10%', weapon: 'paperman', unlock: '单局打败 800 只敌人' },
-  daotong: { name: '小道童', short: '小道童', flavor: '师父云游未归，替他守这一夜。', trait: '暴击率 +10%', weapon: 'talisman', unlock: '一个包子不吃，守到五更（8:00）' },
+  zhou: {
+    name: '打更人·老周',
+    short: '老周',
+    flavor: '敲了三十年更，锣一响，鬼也绕道。',
+    trait: '大招攒气 +25%',
+    weapon: 'gong',
+    ultName: '五更镇魂锣',
+    ultDesc: '三叠扩域震波净除敌弹，眩晕群祟并附加易伤',
+    unlock: '默认',
+  },
+  mian: {
+    name: '纸扎匠·阿绵',
+    short: '阿绵',
+    flavor: '纸人纸马，扎得活灵活现。',
+    trait: '召唤物伤害 +20%，最大生命 −10%',
+    weapon: 'paperman',
+    ultName: '百鬼纸马阵',
+    ultDesc: '八向纸马铁骑踏弹冲阵，并令纸兵攻移狂热',
+    unlock: '单局打败 800 只敌人',
+  },
+  daotong: {
+    name: '小道童',
+    short: '小道童',
+    flavor: '师父云游未归，替他守这一夜。',
+    trait: '暴击率 +10%',
+    weapon: 'talisman',
+    ultName: '九天玄雷敕',
+    ultDesc: '镇坛震波净弹，连劈九道索敌天雷轰击群祟',
+    unlock: '一个包子不吃，守到五更（8:00）',
+  },
 };
 
 export function heroInfo(id) {
   const c = HERO_COPY[id] || HERO_COPY.zhou;
   const b = B.HEROES?.[id];
+  const u = B.ULT?.[id];
   return {
     id,
     name: b?.name || c.name,
@@ -20,52 +52,137 @@ export function heroInfo(id) {
     trait: b?.trait || c.trait,
     unlock: b?.unlock?.desc || c.unlock,
     weapon: b?.startWeapon || c.weapon,
+    ultName: u?.name || c.ultName,
+    ultDesc: c.ultDesc,
     flavor: c.flavor,
   };
 }
 
+export const SCHOOL_TAG_IDS = B.SCHOOL_TAG_IDS || ['zhenhun', 'daofa', 'zhizha', 'yangyan'];
+export const SCHOOL_NAMES = B.SCHOOL_NAMES || {
+  zhenhun: '镇魂',
+  daofa: '道法',
+  zhizha: '纸扎',
+  yangyan: '阳炎',
+};
+export const SCHOOL_TAGS = B.SCHOOL_TAGS || {};
+export { BLESSINGS, SYNERGIES, describeEvolution };
+
+export function schoolName(tag) {
+  return SCHOOL_NAMES[tag] || tag || '';
+}
+
+export function weaponTags(weaponId) {
+  return B.WEAPONS?.[weaponId]?.tags ? [...B.WEAPONS[weaponId].tags] : [];
+}
+
+export function relicTags(relicId) {
+  return B.RELICS?.[relicId]?.tags ? [...B.RELICS[relicId].tags] : [];
+}
+
+export function blessingInfo(id) {
+  return BLESSINGS?.[id] || { id, name: id, tier: 'auspicious', tags: [], maxStacks: 1, desc: '' };
+}
+
 const WEAPON_FALLBACK = {
-  gong: ['更锣', '五更鸣锣'], lantern: ['灯笼', '长明灯'], talisman: ['符纸', '天师符阵'], brush: ['墨笔', '泼墨山河'],
-  coinsword: ['铜钱剑', '七星剑阵'], paperman: ['纸人', '纸扎仪仗'], firecracker: ['爆竹', '满堂红'], bell: ['铜铃', '千铃引魂'],
+  gong: ['更锣', '五更鸣锣'],
+  lantern: ['灯笼', '长明灯'],
+  talisman: ['符纸', '天师符阵'],
+  brush: ['墨笔', '泼墨山河'],
+  coinsword: ['铜钱剑', '七星剑阵'],
+  paperman: ['纸人', '纸扎仪仗'],
+  firecracker: ['爆竹', '满堂红'],
+  bell: ['铜铃', '千铃引魂'],
+  compass: ['罗盘', '天星定穴盘'],
+  soulbanner: ['招魂幡', '无常勾魂幡'],
+  bronze_mirror: ['照妖铜镜', '乾坤赤阳镜'],
+  paperhorse: ['纸马镖', '百鬼夜行图'],
 };
+
 const RELIC_FALLBACK = {
-  clapper: '梆子', censer: '香炉', cinnabar: '朱砂', inkstone: '砚台', bagua: '八卦镜', scissors: '剪刀', tinder: '火折子', redstring: '红绳',
+  clapper: '梆子',
+  censer: '香炉',
+  cinnabar: '朱砂',
+  inkstone: '砚台',
+  bagua: '八卦镜',
+  scissors: '剪刀',
+  tinder: '火折子',
+  redstring: '红绳',
+  strawshoes: '草鞋',
+  glutinous: '糯米',
+  fivecoins: '五帝钱',
+  soulwick: '引魂灯芯',
 };
+
 const PAIRS = {
-  clapper: 'gong', censer: 'lantern', cinnabar: 'talisman', inkstone: 'brush',
-  bagua: 'coinsword', scissors: 'paperman', tinder: 'firecracker', redstring: 'bell',
+  clapper: 'gong',
+  censer: 'lantern',
+  cinnabar: 'talisman',
+  inkstone: 'brush',
+  bagua: 'coinsword',
+  scissors: 'paperman',
+  tinder: 'firecracker',
+  redstring: 'bell',
+  strawshoes: 'paperhorse',
+  glutinous: 'soulbanner',
+  fivecoins: 'bronze_mirror',
+  soulwick: 'compass',
 };
 
 export const WEAPON_INTRO = {
-  gong: '以身为心，一锣震开四邻',
-  lantern: '灯笼绕身，近者自焚',
-  talisman: '符纸自寻邪祟',
-  brush: '朝前一笔，扫出扇形墨锋',
-  coinsword: '铜钱剑掷出，穿行而回',
-  paperman: '扎几个纸人替你冲阵',
-  firecracker: '往鬼堆里扔一挂爆竹',
-  bell: '铜铃一响，邪祟间连环弹跳',
+  gong: '以身为心，一锣震退四邻群祟',
+  lantern: '灯笼绕身旋转，近者灼烧自焚',
+  talisman: '符纸索敌飞射，精准镇压邪祟',
+  brush: '朝前挥毫一扫，劈出扇形墨锋',
+  coinsword: '铜钱剑破空掷出，穿行往返',
+  paperman: '扎出纸人护卫，主动冲阵撕咬',
+  firecracker: '往鬼堆里抛投爆竹，轰炸一片',
+  bell: '铜铃清响，音波在邪祟间连环弹跳',
+  compass: '鬼群深处布下定穴磁阵，牵引聚怪并引爆地脉',
+  soulbanner: '挥动招魂大幡重扫前方，破甲易伤并凝护体魂障',
+  bronze_mirror: '射出持续横扫的赤阳神光，焚毁敌弹并灼烧叠伤',
+  paperhorse: '唤出纸马铁骑从后方奔袭贯穿全屏，撞退沿途群祟',
 };
 
 export const EVOLVE_INTRO = {
-  gong: '连震三声，定住群鬼',
-  lantern: '火环常驻，烧死者炸开',
-  talisman: '符纸穿透，命中连锁',
-  brush: '前后两刀，墨迹灼地',
-  coinsword: '七剑环身，齐射而出',
-  paperman: '八个纸人列队巡游',
-  firecracker: '一炸连一炸',
-  bell: '每跳一下，分作两路',
+  gong: B.WEAPONS?.gong?.evoDesc || '三叠震魂波聚怪易伤，末响震碎敌弹并重创定身',
+  lantern: B.WEAPONS?.lantern?.evoDesc || '双层火莲疾速灼烧并刻印阳炎，亡魂爆裂、夜主六叠爆燃、照亮扩域',
+  talisman: B.WEAPONS?.talisman?.evoDesc || '齐射增符穿透连锁，首中布下八卦天雷阵四落神雷',
+  brush: B.WEAPONS?.brush?.evoDesc || '周天泼墨横扫全屏，破空墨浪贯穿群祟并铺开镇邪墨河',
+  coinsword: B.WEAPONS?.coinsword?.evoDesc || '北斗七剑索敌往返穿刺，每七剑引发星芒裂阵爆斩',
+  paperman: B.WEAPONS?.paperman?.evoDesc || '内卫纸甲拦弹护主，外阵红衣纸骑疾驰穿阵冲杀',
+  firecracker: B.WEAPONS?.firecracker?.evoDesc || '多枚红炮齐投，落地绽开六瓣莲花连爆并留灼热余烬场',
+  bell: B.WEAPONS?.bell?.evoDesc || '铃音三十二重裂变清群，孤立夜主承受四叠递增摄魂回响',
+  compass: B.WEAPONS?.compass?.evoDesc || '定穴磁阵强力牵引群祟并附破绽，收阵连爆两重天星余震',
+  soulbanner: B.WEAPONS?.soulbanner?.evoDesc || '巨幡往返横扫破除纸甲伞盾，残血斩杀并凝聚护体魂障抵挡伤害',
+  bronze_mirror: B.WEAPONS?.bronze_mirror?.evoDesc || '赤阳神光横扫焚毁敌方弹幕，持续照射叠伤并引爆纯阳耀斑',
+  paperhorse: B.WEAPONS?.paperhorse?.evoDesc || '成列纸马铁骑贯穿全屏冲阵，铁蹄踏碎敌群连环爆裂',
 };
 
-const RELIC_LINE = {
-  clapper: '冷却 −8%',
-  censer: '范围 +10%',
-  cinnabar: '伤害 +8%',
-  inkstone: '持续与弹速 +10%',
-  bagua: '护甲 +1，生命 +10',
-  tinder: '经验 +8%，拾取 +10%',
-  redstring: '暴击率 +5%',
+export const RECIPE_LABELS = {
+  paired: '本命共鸣 · 伤害 +18%',
+  resonance: '流派共鸣 · 三器同门',
+  maxRelic: '五阶法器 · 灵气贯通',
+  altar: '香案血祭 · 神明敕封',
+};
+
+export const RECIPE_SHORT = {
+  paired: '本命配对',
+  resonance: '流派共鸣',
+  maxRelic: '五阶法器',
+  altar: '香案敕封',
+};
+
+export const SHRINE_PROMPT_TEXT = {
+  altar: '参拜香案',
+  trial: '开启试炼',
+  peddler: '鬼市交易',
+};
+
+export const SHRINE_FLAVOR = {
+  altar: '街角残存土地香火，可燃血祭器、求取命签或祈安神护体。',
+  trial: '古碑镇压凶煞，开启后迎战十八息群英围攻，礼成必落供盒。',
+  peddler: '鬼市货郎提灯摆摊，收局内铜钱换器物精炼、符印与还阳汤药。',
 };
 
 export function weaponName(id, evolved = false) {
@@ -73,68 +190,132 @@ export function weaponName(id, evolved = false) {
   if (evolved) return w?.evoName || WEAPON_FALLBACK[id]?.[1] || id;
   return w?.name || WEAPON_FALLBACK[id]?.[0] || id;
 }
-export function relicName(id) { return B.RELICS?.[id]?.name || RELIC_FALLBACK[id] || id; }
-export function pairOf(relicId) { return B.RELICS?.[relicId]?.pair || PAIRS[relicId]; }
 
-const STAT_LABEL = { dmg: '伤害', radius: '范围', cd: '冷却', count: '数量', bounces: '弹跳', spread: '角度' };
-const STAT_ORDER = ['count', 'bounces', 'dmg', 'radius', 'spread', 'cd'];
+export function relicName(id) {
+  return B.RELICS?.[id]?.name || RELIC_FALLBACK[id] || id;
+}
 
-/** 武器从 level-1 升到 level 的变化，挑最多两项写成「伤害 20→26」。 */
-function weaponDiff(id, level) {
-  const w = B.WEAPONS?.[id];
-  if (!w || level < 2) return '';
+export function pairOf(relicId) {
+  return B.RELICS?.[relicId]?.pair || PAIRS[relicId] || null;
+}
+
+function fmtNum(v) {
+  return Number.isInteger(v) ? String(v) : Number(v.toFixed(2)).toString();
+}
+
+const RELIC_TOTAL_FIELDS = [
+  ['cdr', (v) => `冷却 −${Math.round(v * 100)}%`],
+  ['areaPct', (v) => `范围 +${Math.round(v * 100)}%`],
+  ['dmgPct', (v) => `伤害 +${Math.round(v * 100)}%`],
+  ['durPct', (v) => `持续与弹速 +${Math.round(v * 100)}%`],
+  ['armor', (v) => `护甲 +${v}`],
+  ['maxHp', (v) => `生命 +${v}`],
+  ['amount', (v) => `数量 +${v}`],
+  ['xpPct', (v) => `经验 +${Math.round(v * 100)}%`],
+  ['pickupPct', (v) => `拾取 +${Math.round(v * 100)}%`],
+  ['critChance', (v) => `暴击率 +${Math.round(v * 100)}%`],
+  ['speedPct', (v) => `移速 +${Math.round(v * 100)}%`],
+  ['slowResist', (v) => `减速抗性 +${Math.round(v * 100)}%`],
+  ['hurtInvuln', (v) => `受击无敌 +${fmtNum(v)}秒`],
+  ['killHeal', (v) => `每${B.RELICS?.glutinous?.killInterval ?? 35}杀回血 +${v}`],
+  ['critDmg', (v) => `暴击伤害 +${Math.round(v * 100)}%`],
+  ['coinPct', (v) => `铜钱 +${Math.round(v * 100)}%`],
+  ['lightPct', (v) => `照亮 +${Math.round(v * 100)}%`],
+  ['ultChargePct', (v) => `攒气 +${Math.round(v * 100)}%`],
+  ['ultCdRefund', (v) => `大招返还冷却 ${Math.round(v * 100)}%`],
+];
+
+/** 法器在当前等级（1..5）下的总加成文案，直接由 relicEffect 计算保证零偏差 */
+export function relicTotalDesc(id, level = 1) {
+  const lv = Math.max(1, Math.min(5, Math.floor(level || 1)));
+  if (!B.RELICS?.[id]) return '';
+  const eff = relicEffect(id, lv);
   const parts = [];
-  for (const k of STAT_ORDER) {
-    const arr = w[k];
-    if (!Array.isArray(arr)) continue;
-    const a = arr[level - 2], b = arr[level - 1];
-    if (a === undefined || b === undefined || a === b) continue;
-    const fmt = (x) => (k === 'cd' ? `${x}秒` : k === 'spread' ? `${x}°` : String(x));
-    parts.push(`${STAT_LABEL[k]} ${fmt(a)}→${fmt(b)}`);
-    if (parts.length >= 2) break;
+  for (const [k, fmt] of RELIC_TOTAL_FIELDS) {
+    const v = +Number(eff[k] || 0).toFixed(4);
+    if (v) parts.push(fmt(v));
   }
   return parts.join('，');
 }
 
-function relicLine(id, level) {
-  if (id === 'scissors') {
-    const amount = B.RELICS?.scissors?.amountLevels || [2, 5];
-    return amount.includes(level) ? '召唤数 +1' : '伤害 +4%';
-  }
-  return RELIC_LINE[id] || '';
-}
-
-/** 签面信息：{ name, vertical, level, desc, isNew, evolvable, kind, id } */
+/**
+ * 签面信息：兼容 12 兵刃、12 法器、18 守夜命签与溢签/铜钱/包子，
+ * 保留流派标签 tags、留签态 locked、开光提示 evolveHint。
+ */
 export function describeChoice(c) {
-  const kind = c?.kind;
-  const level = c?.level ?? 1;
-  if (kind === 'weapon') {
+  if (!c || typeof c !== 'object') {
     return {
-      kind, id: c.id, name: weaponName(c.id), level,
-      desc: c.isNew ? WEAPON_INTRO[c.id] || '' : weaponDiff(c.id, level) || '再强一分',
-      isNew: !!c.isNew, evolvable: !!c.evolvable,
+      kind: 'unknown', id: '', name: '？', level: null, levelText: '',
+      desc: '', isNew: false, evolvable: false, locked: false, tags: [], evolveHint: '',
     };
   }
-  if (kind === 'relic') {
-    const pair = pairOf(c.id);
-    const line = relicLine(c.id, level);
+  if (c.kind === 'blessing') {
+    const def = blessingInfo(c.id);
+    const tier = c.tier || def.tier || 'auspicious';
+    const tags = Array.isArray(c.tags) && c.tags.length ? [...c.tags] : [...(def.tags || [])];
+    const stacks = c.stacks ?? c.level ?? 1;
+    const maxStacks = c.maxStacks ?? def.maxStacks ?? 1;
     return {
-      kind, id: c.id, name: relicName(c.id), level,
-      desc: c.isNew && pair ? `${line}；配${weaponName(pair)}可开光` : line,
-      isNew: !!c.isNew, evolvable: !!c.evolvable,
+      kind: 'blessing',
+      id: c.id,
+      name: c.name || def.name || String(c.id),
+      level: stacks,
+      stacks,
+      maxStacks,
+      levelText: tier === 'cursed' ? '凶签' : '吉签',
+      desc: c.desc || def.desc || '',
+      isNew: c.isNew !== undefined ? !!c.isNew : stacks <= 1,
+      evolvable: false,
+      locked: false,
+      tags,
+      evolveHint: maxStacks > 1 && stacks > 1 ? `叠至 ${cnNum(stacks)} 重` : '不占兵刃法器栏位',
+      tier,
     };
   }
-  if (kind === 'overflow') {
+  if (c.kind === 'coin') {
+    const v = c.value ?? B.LEVELUP?.coinValue ?? 15;
+    return {
+      kind: 'coin', id: 'coin', name: '铜钱', level: null, levelText: '',
+      desc: `铜钱 +${v}`, isNew: false, evolvable: false, locked: !!c.locked, tags: [], evolveHint: '',
+    };
+  }
+  if (c.kind === 'bun') {
+    const v = c.value ?? B.LEVELUP?.bunHeal ?? 40;
+    return {
+      kind: 'bun', id: 'bun', name: '包子', level: null, levelText: '',
+      desc: `回复 ${v} 生命`, isNew: false, evolvable: false, locked: !!c.locked, tags: [], evolveHint: '',
+    };
+  }
+  if (c.kind === 'overflow') {
     const m = B.DAMAGE?.overflowMult ?? 1.12;
-    return { kind, id: c.id, name: '溢签', level: null, desc: `器物已满，伤害 ×${m}`, isNew: false, evolvable: false };
+    const lv = c.level ?? null;
+    return {
+      kind: 'overflow', id: 'overflow', name: '溢签', level: null,
+      levelText: lv ? `第${cnNum(lv)}签` : '',
+      desc: `器物已满，伤害 ×${m}`,
+      isNew: false, evolvable: false, locked: !!c.locked, tags: [], evolveHint: '',
+    };
   }
-  if (kind === 'coin') {
-    return { kind, id: 'coin', name: '铜钱', level: null, desc: `铜钱 +${c.value ?? B.LEVELUP?.coinValue ?? 15}`, isNew: false, evolvable: false };
+  if (c.kind === 'weapon' && B.WEAPONS?.[c.id]) {
+    const u = describeUpgrade({ ...c, level: c.level ?? 1 });
+    return {
+      ...u,
+      evolveTargetId: c.evolveTargetId || c.id,
+    };
   }
-  if (kind === 'bun') {
-    return { kind, id: 'bun', name: '包子', level: null, desc: `回复 ${c.value ?? B.LEVELUP?.bunHeal ?? 40} 生命`, isNew: false, evolvable: false };
+  if (c.kind === 'relic' && B.RELICS?.[c.id]) {
+    const u = describeUpgrade({ ...c, level: c.level ?? 1 });
+    return {
+      ...u,
+      evolveTargetId: c.evolveTargetId || B.RELICS[c.id].pair || null,
+    };
   }
-  return { kind, id: c?.id, name: String(c?.id ?? '？'), level, desc: '', isNew: false, evolvable: false };
+  return {
+    kind: c.kind, id: c.id, name: String(c.name ?? c.id ?? '？'),
+    level: c.level ?? 1, levelText: '', desc: c.desc || '',
+    isNew: !!c.isNew, evolvable: !!c.evolvable, locked: !!c.locked,
+    tags: Array.isArray(c.tags) ? [...c.tags] : [], evolveHint: '',
+  };
 }
 
 export const SHOP_COPY = {
@@ -196,41 +377,18 @@ export const ENEMY_COPY = {
   paperkid: { name: '纸扎童子', watch: '一更起出没', desc: '糊纸点的腮红，蹦跳着往灯火跟前凑。' },
   shade: { name: '影祟', watch: '一更起出没', desc: '贴地疾行的黑影，身子脆，胜在脚快。' },
   lanternghost: { name: '灯笼鬼', watch: '一更后半出没', desc: '飘在半空的破纸灯，皮厚耐敲。' },
-  weasel: { name: '黄皮子', watch: '三更起出没', desc: '近身先顿一息蓄力，随后直线猛扑，横移可避。' },
-  sedan: { name: '纸轿子', watch: '三更起出没', desc: '沉甸甸的朱红空轿，打破后会裂出四只纸扎童子。' },
-  drowned: { name: '水鬼', watch: '四更古井出没', desc: '常从古井爬出，周身湿气会让近处的打更人步子变沉。' },
-  horse: { name: '纸马将军', watch: '三更夜主（04:00）', boss: true, desc: '披靠旗的纸扎战马，蓄势后连冲三趟，打散必落供盒。' },
-  umbrella: { name: '无面伞女', watch: '四更夜主（08:00）', boss: true, desc: '收伞减伤、开伞旋射弹幕，趁其开伞破绽猛攻，打散落供盒。' },
-  youshen: { name: '夜游神', watch: '五更终主（10:00）', boss: true, desc: '巡夜大神，唤群祟、洒旋弹，残血狂暴；撑过去便是天亮。' },
+  weasel: { name: '黄皮子', watch: '二更后半起出没', desc: '近身先露朱砂蓄势线，顿一息直线猛扑，横移可避。' },
+  sedan: { name: '纸轿子', watch: '二更后半起出没', desc: '沉甸甸的朱红空轿，打破后会裂出四只纸扎童子。' },
+  drowned: { name: '水鬼', watch: '三更后半古井出没', desc: '常从古井爬出，周身湿气会让近处的打更人步子变沉。' },
+  suona: { name: '吹鼓鬼', watch: '二更起出没', desc: '吹响喜丧唢呐鼓舞群祟，令周身邪祟移速与凶性齐涨，宜先除之。' },
+  paperbride: { name: '红衣纸新娘', watch: '三更起出没', desc: '执团扇远距游走，频抛冥钱暗器封路，逼近便飘身后撤。' },
+  cinder: { name: '阴火骷髅', watch: '二更起出没', desc: '胸燃幽火疾奔，散架后遗留阴火核，须臾爆裂灼伤敌我。' },
+  horse: { name: '纸马将军', watch: '三更夜主（04:00）', boss: true, desc: '披靠旗的纸扎战马，蓄势预警后连冲三趟，打散必落供盒。' },
+  umbrella: { name: '无面伞女', watch: '四更夜主（08:00）', boss: true, desc: '收伞减伤、开伞旋射弹幕，趁其开伞破绽猛攻，打散必落供盒。' },
+  youshen: { name: '夜游神', watch: '五更终主（10:00）', boss: true, desc: '巡夜大神，唤群祟、洒旋弹，残血挥戟蓄势猛突；撑过去便是天亮。' },
 };
 
 /** 反查某把武器配对开光的法器 ID */
 export function weaponPairRelic(weaponId) {
   return B.WEAPONS?.[weaponId]?.pair || Object.keys(PAIRS).find((r) => PAIRS[r] === weaponId) || null;
-}
-
-/** 法器在当前等级（1..5）下的总加成文案，供局内暂停与图鉴共用 */
-export function relicTotalDesc(id, level = 1) {
-  const lv = Math.max(1, Math.floor(level));
-  if (id === 'clapper') return `冷却 −${8 * lv}%`;
-  if (id === 'censer') return `范围 +${10 * lv}%`;
-  if (id === 'cinnabar') return `伤害 +${8 * lv}%`;
-  if (id === 'inkstone') return `持续与弹速 +${10 * lv}%`;
-  if (id === 'bagua') return `护甲 +${lv}，生命 +${10 * lv}`;
-  if (id === 'tinder') return `经验 +${8 * lv}%，拾取 +${10 * lv}%`;
-  if (id === 'redstring') return `暴击率 +${5 * lv}%`;
-  if (id === 'scissors') {
-    const amtLv = B.RELICS?.scissors?.amountLevels || [2, 5];
-    let amt = 0;
-    let other = 0;
-    for (let i = 1; i <= lv; i++) {
-      if (amtLv.includes(i)) amt += 1;
-      else other += 1;
-    }
-    const parts = [];
-    if (amt > 0) parts.push(`数量 +${amt}`);
-    if (other > 0) parts.push(`伤害 +${4 * other}%`);
-    return parts.join('，') || '伤害 +4%';
-  }
-  return RELIC_LINE[id] || '';
 }

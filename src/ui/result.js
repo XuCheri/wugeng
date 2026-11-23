@@ -1,6 +1,6 @@
-// 结算页：铜钱、打散数、守了多久、最狠一击（万/亿）、新解锁、「广告 · 铜钱翻倍」一次。
+// 结算页：铜钱、打散数、守了多久、最狠一击（万/亿）、本局开光神兵、新解锁、「广告 · 铜钱翻倍」一次。
 import { h, clear, scroll, sealButton, adButton, formatBig, formatTime, formatCoins } from './dom.js';
-import { heroInfo, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
+import { heroInfo, weaponName, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
 import { canShowResultDouble } from '../ads/ad-policy.js';
 
 /**
@@ -23,6 +23,11 @@ export function renderResult(root, opts) {
     row('打散', `${formatBig(s.kills)} 只`),
     row('最狠一击', formatBig(s.maxHit)),
     row('等级', String(s.level ?? '—')));
+
+  const evolvedWeapons = (s.weapons || []).filter((w) => w && w.evolved).map((w) => weaponName(w.id, true));
+  const evoLine = evolvedWeapons.length
+    ? h('p', { class: 'result-build' }, `开光神兵：${evolvedWeapons.join(' · ')}`)
+    : null;
 
   const unlockBox = h('div', { class: 'result-unlocks' });
   const unlocks = [
@@ -56,7 +61,7 @@ export function renderResult(root, opts) {
     scroll({
       title, sub,
       cls: 'scroll--result',
-      body: [coinBox, rows, unlocks.length ? unlockBox : null],
+      body: [coinBox, rows, evoLine, unlocks.length ? unlockBox : null],
       footer: [actions],
     }));
   root.appendChild(el);

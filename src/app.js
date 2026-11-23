@@ -35,13 +35,26 @@ export async function startApp() {
   let lastStart = null;       // 「再守一夜」沿用的英雄与夜色
   let finished = true;        // 本局是否已结算（防重复入账）
   let hub = null;
+  let runUI = null;
 
   const game = createGame({
     canvas,
-    onStatusChange: (run) => runUI.handleStatus(run),
+    onStatusChange: (run) => runUI?.handleStatus(run),
     onSummary: (summary) => finishRun(summary),
     onEvents: (events) => audio.onEvents(events),
-    onAutoPause: () => runUI.showPause(),
+    onAutoPause: () => runUI?.showPause(),
+    onHudSync: (run) => runUI?.syncHud(run),
+    onStart: (run) => {
+      finished = false;
+      if (screen) setScreen(null);
+      runUI?.closeCurrent();
+      runUI?.mountHud();
+      runUI?.syncHud(run);
+      if (syncCodexFromRun(save, run)) persist(false);
+    },
+    onClear: () => {
+      runUI?.teardown();
+    },
   });
 
   function applySettings(s) {
@@ -104,15 +117,22 @@ export async function startApp() {
     return res;
   }
 
-  const runUI = createRunUI(root, {
+  runUI = createRunUI(root, {
     game,
     sim: {
       chooseUpgrade: (r, i) => Run.chooseUpgrade(r, i),
       rerollChoices: (r) => Run.rerollChoices(r),
+      banishChoice: (r, i) => Run.banishChoice(r, i),
+      toggleLockChoice: (r, i) => Run.toggleLockChoice(r, i),
       grantAdRerolls: (r) => Run.grantAdRerolls(r),
-      openChest: (r) => Run.openChest(r),
+      openChest: (r, preferredWeaponId = null) => Run.openChest(r, preferredWeaponId),
+      interactShrine: (r, shrineId = null) => Run.interactShrine(r, shrineId),
+      resolveShrine: (r, idx) => Run.resolveShrine(r, idx),
+      dismissShrine: (r) => Run.dismissShrine(r),
       revive: (r) => Run.revive(r),
       enterEndless: (r) => Run.enterEndless(r),
+      getEvolutionRecipe: (r, w) => Run.getEvolutionRecipe(r, w),
+      canEvolve: (r, w) => Run.canEvolve(r, w),
     },
     adsOn: () => adsEnabled(),
     runAd,
@@ -133,6 +153,7 @@ export async function startApp() {
   }
 
   function showTitle() {
+    runUI.teardown();
     const el = renderTitle(root, {
       onStart: () => {
         audio.unlock();
@@ -145,6 +166,7 @@ export async function startApp() {
 
   function showHub() {
     game.clear();
+    runUI.teardown();
     audio.setMusicMode('menu');
     hub = renderHub(root, {
       save,
@@ -161,7 +183,7 @@ export async function startApp() {
     setScreen(hub.el);
   }
 
-  function startRun({ heroId, nightLevel, charm }) {
+  function startRun({ heroId = 'zhou', nightLevel = 0, charm = null, seed } = {}) {
     audio.unlock();
     if (charm) {
       const i = save.charms.findIndex((c) => c.relicId === charm.relicId);
@@ -171,9 +193,10 @@ export async function startApp() {
     lastStart = { heroId, nightLevel };
     setScreen(null);
     finished = false;
-    const r = game.start({ heroId, nightLevel, meta: getMetaBonuses(save), charm });
+    const r = game.start({ heroId, nightLevel, meta: getMetaBonuses(save), charm, seed });
     if (syncCodexFromRun(save, r)) persist(false);
     runUI.mountHud();
+    runUI.syncHud(r);
     audio.setMusicMode('run');
     audio.setWatch(1);
     if (!save.stats.firstRunDone) runUI.showFirstRunHint();
@@ -199,7 +222,7 @@ export async function startApp() {
       runAd,
       onDouble: (amount) => { const add = grantDoubleCoins(save, amount); persist(true); return add; },
       onHub: () => showHub(),
-      onAgain: () => { game.clear(); startRun({ ...lastStart, charm: null }); },
+      onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
     setScreen(el);
   }
@@ -218,7 +241,7 @@ export async function startApp() {
     get overlay() { return runUI.overlay; },
   };
 
-  preloadIcons();   // 不阻塞启动；签面图标到时没加载好就用墨字小印
+  preloadIcons();   // 兼容旧调用；静态导入已同步可用
   showTitle();
   if (cloud.isAvailable()) handleCloudPull(true);
 }

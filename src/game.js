@@ -1,6 +1,6 @@
 // 游戏外壳：把 Sim（纯逻辑）、Render（画面）、Input（触控）串成主循环。
 // 逻辑固定 60Hz 推进，渲染跟随显示器刷新率；顿帧期间暂停逻辑推进。
-// UI 层通过 onStatusChange 得知升级、供盒、死亡、通关等状态，自行弹出界面后调用 resume()。
+// UI 层通过 onStatusChange 得知升级、供盒、奇遇、死亡、通关等状态，自行弹出界面后调用 resume()。
 
 import { createRun, stepRun, endRun } from './sim/run.js';
 import { DT } from './sim/balance.js';
@@ -22,7 +22,16 @@ function readSafeAreas() {
   return { top, bottom };
 }
 
-export function createGame({ canvas, onStatusChange = () => {}, onSummary = () => {}, onEvents = () => {}, onAutoPause = () => {} } = {}) {
+export function createGame({
+  canvas,
+  onStatusChange = () => {},
+  onSummary = () => {},
+  onEvents = () => {},
+  onAutoPause = () => {},
+  onHudSync = () => {},
+  onStart = () => {},
+  onClear = () => {},
+} = {}) {
   const settings = { shake: true, dmgText: 'all', lowQuality: false, safeTop: 0, safeBottom: 0 };
   let renderer = createRenderer(canvas, { lowQuality: settings.lowQuality });
   const input = createInput(canvas, { getUltRect: () => renderer.getUltButtonRect?.() ?? null });
@@ -107,8 +116,9 @@ export function createGame({ canvas, onStatusChange = () => {}, onSummary = () =
         if (run.status !== 'playing') { acc = 0; break; }
       }
       if (steps === MAX_STEPS_PER_FRAME) acc = 0;
-      notifyStatus();
     }
+    if (!paused) notifyStatus();
+    onHudSync(run);
     renderer.render(run, acc / DT, paused ? 0 : realDt, settings);
     drawStick();
   }
@@ -137,6 +147,7 @@ export function createGame({ canvas, onStatusChange = () => {}, onSummary = () =
       acc = 0; lastTs = 0;
       paused = false;
       input.reset();
+      onStart(run);
       return run;
     },
     pause() { paused = true; input.reset(); },
@@ -156,7 +167,13 @@ export function createGame({ canvas, onStatusChange = () => {}, onSummary = () =
       return summary;
     },
     /** 回到菜单时清空画面里的对局。 */
-    clear() { run = null; paused = true; ctx.clearRect(0, 0, canvas.width, canvas.height); },
+    clear() {
+      run = null;
+      paused = true;
+      lastStatus = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      onClear();
+    },
     applySettings(next = {}) {
       const lowChanged = next.lowQuality !== undefined && next.lowQuality !== settings.lowQuality;
       Object.assign(settings, next);
@@ -170,7 +187,7 @@ export function createGame({ canvas, onStatusChange = () => {}, onSummary = () =
       input.destroy();
       window.removeEventListener('resize', resize);
       window.removeEventListener('orientationchange', resize);
-      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('visibilitychange', onVisibility);
     },
   };
   return game;

@@ -6,12 +6,17 @@
 //    平时先落本机 localStorage，关键节点（结算、签到、加点、手动同步）合并上云。
 // 4. 调试：URL 带 ?mockCloud=1 时启用内存/会话级模拟云端，便于浏览器与 E2E 验证。
 
-import { SAVE_VERSION, migrateSave, mergeSaves, isFreshSave } from './save.js';
+import { SAVE_VERSION, migrateSave, mergeSaves, isFreshSave, toFiniteNumber, isPlainObj } from './save.js';
 
 export const ARCHIVE_NAME = 'wugeng_save';
 export const UPLOAD_COOLDOWN_MS = 62_000;
 export const COALESCE_DELAY_MS = 1_200;
 const MOCK_STORAGE_KEY = 'wugeng.mockCloudArchive';
+const isObj = isPlainObj;
+const clampTs = (v) => {
+  const n = toFiniteNumber(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(9e15, Math.floor(n))) : 0;
+};
 
 export function parseMockCloud(search) {
   if (typeof search !== 'string' || !search) return false;
@@ -127,7 +132,10 @@ function createMockTapHost(backingStore) {
  */
 export function createCloudSave(opts = {}) {
   const getWin = () => opts.win ?? globalThis.window;
-  const nowFn = opts.now ?? (() => Date.now());
+  const rawNowFn = opts.now ?? (() => Date.now());
+  const safeNow = () => {
+    try { return clampTs(rawNowFn()); } catch { return 0; }
+  };
   const cooldownMs = opts.cooldownMs ?? UPLOAD_COOLDOWN_MS;
   const coalesceMs = opts.coalesceMs ?? COALESCE_DELAY_MS;
   const onStateChange = opts.onStateChange ?? (() => {});
@@ -165,7 +173,7 @@ export function createCloudSave(opts = {}) {
 
   function cooldownLeftMs() {
     if (!lastUploadAt) return 0;
-    return Math.max(0, lastUploadAt + cooldownMs - nowFn());
+    return Math.max(0, lastUploadAt + cooldownMs - safeNow());
   }
 
   function getState() {
@@ -221,11 +229,13 @@ export function createCloudSave(opts = {}) {
     const fs = tap.getFileSystemManager();
     const basePath = tap.env?.USER_DATA_PATH || 'tapfile://usr';
     const filePath = `${basePath}/${ARCHIVE_NAME}.json`;
+    const clean = migrateSave(saveSnapshot);
+    const nowTs = safeNow();
     const payload = {
-      ...migrateSave(saveSnapshot),
+      ...clean,
       version: SAVE_VERSION,
-      updatedAt: Math.max(saveSnapshot?.updatedAt || 0, nowFn()),
-      savedAt: nowFn(),
+      updatedAt: Math.max(clean.updatedAt || 0, nowTs),
+      savedAt: nowTs,
     };
     await writeLocalTapFile(fs, filePath, JSON.stringify(payload));
     const saves = await getArchiveList(cloud);
@@ -271,7 +281,7 @@ export function createCloudSave(opts = {}) {
     emit();
     try {
       await rawUpload(tap, target);
-      lastUploadAt = nowFn();
+      lastUploadAt = safeNow();
       lastSyncAt = lastUploadAt;
       syncing = false;
       emit();
@@ -287,7 +297,7 @@ export function createCloudSave(opts = {}) {
       lastError = String(code || err?.errMsg || err?.message || 'upload_failed');
       // 若命中 400001 频率限制，记一次冷却稍后自动补传
       if (String(code) === '400001' || /400001|freq|limit/i.test(lastError)) {
-        lastUploadAt = nowFn();
+        lastUploadAt = safeNow();
         dirtySave = dirtySave || target;
         timer = setTimeout(() => { flushDirty(); }, cooldownMs + 200);
       }
@@ -298,9 +308,10 @@ export function createCloudSave(opts = {}) {
 
   /** 业务关键节点（结算、签到、加点）调用：自动合并多次修改并遵守每分钟 1 次上限。 */
   function scheduleSync(save) {
+    if (!isObj(save)) return false;
     const tap = resolveTap();
-    if (!tap || !save) return false;
-    dirtySave = JSON.parse(JSON.stringify(save));
+    if (!tap) return false;
+    dirtySave = migrateSave(save);
     clearTimeout(timer);
     const delay = Math.max(coalesceMs, cooldownLeftMs() + 50);
     timer = setTimeout(() => { flushDirty(); }, delay);
@@ -310,18 +321,19 @@ export function createCloudSave(opts = {}) {
 
   /** 设置页手动点击「上传云端」：若不在冷却期则立即上传。 */
   async function uploadNow(save) {
+    if (!isObj(save)) return { ok: false, reason: 'invalid' };
     const tap = resolveTap();
     if (!tap) return { ok: false, reason: 'unavailable' };
     if (syncing) return { ok: false, reason: 'busy' };
     const wait = cooldownLeftMs();
     if (wait > 0) {
-      dirtySave = JSON.parse(JSON.stringify(save));
+      dirtySave = migrateSave(save);
       clearTimeout(timer);
       timer = setTimeout(() => { flushDirty(); }, wait + 50);
       emit();
       return { ok: false, reason: 'cooldown', waitSec: Math.ceil(wait / 1000) };
     }
-    dirtySave = JSON.parse(JSON.stringify(save));
+    dirtySave = migrateSave(save);
     return flushDirty();
   }
 
@@ -341,10 +353,10 @@ export function createCloudSave(opts = {}) {
       const slot = saves.find((s) => s && s.name === ARCHIVE_NAME);
       if (!slot) {
         syncing = false;
-        lastSyncAt = nowFn();
+        lastSyncAt = safeNow();
         emit();
         // 云端尚无存档且本机已有进度时，自动排一次首传
-        if (localSave && !isFreshSave(localSave)) scheduleSync(localSave);
+        if (isObj(localSave) && !isFreshSave(localSave)) scheduleSync(localSave);
         return { ok: true, hasRemote: false, updated: false, merged: migrateSave(localSave) };
       }
       const tempPath = `${basePath}/${ARCHIVE_NAME}_remote.json`;
@@ -363,7 +375,7 @@ export function createCloudSave(opts = {}) {
       const merged = mergeSaves(localSave, remoteRaw);
       const afterJson = JSON.stringify(merged);
       syncing = false;
-      lastSyncAt = nowFn();
+      lastSyncAt = safeNow();
       emit();
       return {
         ok: true,

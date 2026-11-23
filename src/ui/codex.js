@@ -1,4 +1,4 @@
-// 百物图鉴：查看已解锁 / 未解锁的兵刃、开光神兵、法器、百鬼夜主、打更人与守夜印记。
+// 百物图鉴：查看已解锁 / 未解锁的 12 兵刃、12 开光神兵、12 法器、12 百鬼夜主（共 48 项百物）及打更人与守夜印记。
 import * as B from '../sim/balance.js';
 import { HERO_IDS, WEAPON_IDS, RELIC_IDS, ENEMY_IDS } from '../meta/save.js';
 import { ensureCodex, getCodexCounts } from '../meta/codex.js';
@@ -6,6 +6,7 @@ import { heroUnlockProgress } from '../meta/unlocks.js';
 import { h, clear, scroll, sealButton, veil, formatCoins } from './dom.js';
 import {
   heroInfo, weaponName, relicName, pairOf, weaponPairRelic,
+  weaponTags, relicTags, schoolName,
   WEAPON_INTRO, EVOLVE_INTRO, ENEMY_COPY, ACHIEVEMENT_NAMES, ACHIEVEMENT_DESC, relicTotalDesc,
 } from './copy.js';
 import { icon } from './icons.js';
@@ -24,6 +25,12 @@ function badge(text, isOn = false, isStamp = false) {
   return h('span', { class: `codex-tag${isOn ? ' is-on' : ''}` }, text);
 }
 
+function schoolPills(tags) {
+  if (!tags || !tags.length) return null;
+  return h('span', { class: 'codex-schools' },
+    tags.map((t) => h('span', { class: `school-pill school-pill--${t}` }, schoolName(t))));
+}
+
 export function openCodex(root, save) {
   const codex = ensureCodex(save);
   const counts = getCodexCounts(save);
@@ -39,6 +46,7 @@ export function openCodex(root, save) {
       const btn = h('button', {
         type: 'button',
         role: 'tab',
+        dataset: { codexTab: t.id },
         'aria-selected': activeTab === t.id ? 'true' : 'false',
         class: `codex-tab${activeTab === t.id ? ' is-on' : ''}`,
         onClick: () => {
@@ -59,17 +67,25 @@ export function openCodex(root, save) {
       const unlocked = codex.weapons.includes(id);
       const pair = weaponPairRelic(id);
       const wName = weaponName(id, false);
-      listBox.appendChild(h('div', { class: `codex-row${unlocked ? '' : ' is-locked'}` },
-        h('div', { class: 'codex-row__ico' }, icon('weapon', id, 46, wName[0])),
-        h('div', { class: 'codex-row__main' },
-          h('p', { class: 'codex-row__head' },
-            h('span', { class: 'codex-row__name' }, wName),
-            badge(unlocked ? '已录' : '未录', unlocked)),
-          h('p', { class: 'codex-row__desc' },
-            unlocked
-              ? `${WEAPON_INTRO[id] || ''}`
-              : '尚未收录：守夜升级抽签习得，或解锁对应打更人'),
-          pair ? h('p', { class: 'codex-row__meta' }, `开光配对：伍级 +「${relicName(pair)}」→ ${weaponName(id, true)}`) : null)));
+      const tags = weaponTags(id);
+      listBox.appendChild(h('div', {
+        class: `codex-row${unlocked ? '' : ' is-locked'}`,
+        dataset: { codexKind: 'weapons', itemId: id },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('weapon', id, 46, wName[0])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, wName),
+          schoolPills(tags),
+          badge(unlocked ? '已录' : '未录', unlocked)),
+        h('p', { class: 'codex-row__desc' },
+          unlocked
+            ? `${WEAPON_INTRO[id] || ''}`
+            : '尚未收录：守夜升级抽签习得，或解锁对应打更人'),
+        pair
+          ? h('p', { class: 'codex-row__meta' },
+            `开光：伍级 +（本命「${relicName(pair)}」/ 三件同门 / 五阶法器 / 香案）→ ${weaponName(id, true)}`)
+          : null)));
     }
   }
 
@@ -78,20 +94,25 @@ export function openCodex(root, save) {
       const unlocked = codex.evolutions.includes(id);
       const pair = weaponPairRelic(id);
       const evoName = weaponName(id, true);
-      const evoMult = B.WEAPONS?.[id]?.evoMult ?? 1.6;
-      listBox.appendChild(h('div', { class: `codex-row${unlocked ? '' : ' is-locked'}` },
-        h('div', { class: 'codex-row__ico' }, icon('evo', id, 46, evoName[0])),
-        h('div', { class: 'codex-row__main' },
-          h('p', { class: 'codex-row__head' },
-            h('span', { class: 'codex-row__name' }, evoName),
-            unlocked ? badge('开', true, true) : badge('未开光', false)),
-          h('p', { class: 'codex-row__desc' },
-            unlocked
-              ? `${EVOLVE_INTRO[id] || ''}（总伤倍率 ×${evoMult}）`
-              : `配方：伍级「${weaponName(id, false)}」+「${relicName(pair)}」+ 夜主供盒`),
+      const evoMult = B.WEAPONS?.[id]?.evoMult ?? 1.85;
+      const tags = weaponTags(id);
+      listBox.appendChild(h('div', {
+        class: `codex-row${unlocked ? '' : ' is-locked'}`,
+        dataset: { codexKind: 'evolutions', itemId: id },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('evo', id, 46, evoName[0])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, evoName),
+          schoolPills(tags),
+          unlocked ? badge('开', true, true) : badge('未开光', false)),
+        h('p', { class: 'codex-row__desc' },
           unlocked
-            ? h('p', { class: 'codex-row__meta' }, `由「${weaponName(id, false)}」配「${relicName(pair)}」开光而成`)
-            : null)));
+            ? `${EVOLVE_INTRO[id] || ''}（总伤倍率 ×${evoMult}，配本命「${relicName(pair)}」再 +18%）`
+            : `配方：伍级「${weaponName(id, false)}」+（「${relicName(pair)}」或三件同门或五阶法器）+ 供盒`),
+        unlocked
+          ? h('p', { class: 'codex-row__meta' }, `由「${weaponName(id, false)}」敕封开光（本命法器：${relicName(pair)}）`)
+          : null)));
     }
   }
 
@@ -100,17 +121,24 @@ export function openCodex(root, save) {
       const unlocked = codex.relics.includes(id);
       const rName = relicName(id);
       const pair = pairOf(id);
-      listBox.appendChild(h('div', { class: `codex-row${unlocked ? '' : ' is-locked'}` },
-        h('div', { class: 'codex-row__ico' }, icon('relic', id, 46, rName[0])),
-        h('div', { class: 'codex-row__main' },
-          h('p', { class: 'codex-row__head' },
-            h('span', { class: 'codex-row__name' }, rName),
-            badge(unlocked ? '已录' : '未录', unlocked)),
-          h('p', { class: 'codex-row__desc' },
-            unlocked
-              ? `一级：${relicTotalDesc(id, 1)} · 满级：${relicTotalDesc(id, 5)}`
-              : '尚未收录：局内抽签或更簿签到护身符可得'),
-          pair ? h('p', { class: 'codex-row__meta' }, `助「${weaponName(pair, false)}」开光为「${weaponName(pair, true)}」`) : null)));
+      const tags = relicTags(id);
+      listBox.appendChild(h('div', {
+        class: `codex-row${unlocked ? '' : ' is-locked'}`,
+        dataset: { codexKind: 'relics', itemId: id },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('relic', id, 46, rName[0])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, rName),
+          schoolPills(tags),
+          badge(unlocked ? '已录' : '未录', unlocked)),
+        h('p', { class: 'codex-row__desc' },
+          unlocked
+            ? `一级：${relicTotalDesc(id, 1)} · 满级：${relicTotalDesc(id, 5)}`
+            : '尚未收录：局内抽签或更簿签到护身符可得'),
+        pair
+          ? h('p', { class: 'codex-row__meta' }, `本命配对：「${weaponName(pair, false)}」→「${weaponName(pair, true)}」（共鸣 +18%）`)
+          : null)));
     }
   }
 
@@ -119,16 +147,19 @@ export function openCodex(root, save) {
       const kills = codex.enemies[id] || 0;
       const seen = kills > 0;
       const info = ENEMY_COPY[id] || { name: id, watch: '', desc: '' };
-      listBox.appendChild(h('div', { class: `codex-row${seen ? '' : ' is-locked'}` },
-        h('div', { class: 'codex-row__ico' }, icon('enemy', id, 50, info.name[0])),
-        h('div', { class: 'codex-row__main' },
-          h('p', { class: 'codex-row__head' },
-            h('span', { class: 'codex-row__name' }, seen ? info.name : '？？？'),
-            info.boss ? badge('主', seen, seen) : null,
-            badge(seen ? `已散 ${formatCoins(kills)}` : '未遇', seen)),
-          h('p', { class: 'codex-row__desc' },
-            seen ? info.desc : '夜深露重，尚未在街巷中将其打散。'),
-          h('p', { class: 'codex-row__meta' }, info.watch))));
+      listBox.appendChild(h('div', {
+        class: `codex-row${seen ? '' : ' is-locked'}`,
+        dataset: { codexKind: 'enemies', itemId: id },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('enemy', id, 50, info.name[0])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, seen ? info.name : '？？？'),
+          info.boss ? badge('主', seen, seen) : null,
+          badge(seen ? `已散 ${formatCoins(kills)}` : '未遇', seen)),
+        h('p', { class: 'codex-row__desc' },
+          seen ? info.desc : '夜深露重，尚未在街巷中将其打散。'),
+        h('p', { class: 'codex-row__meta' }, info.watch))));
     }
   }
 
@@ -137,17 +168,20 @@ export function openCodex(root, save) {
       const unlocked = save.unlockedHeroes.includes(id);
       const info = heroInfo(id);
       const prog = !unlocked ? heroUnlockProgress(save, id) : null;
-      listBox.appendChild(h('div', { class: `codex-row${unlocked ? '' : ' is-locked'}` },
-        h('div', { class: 'codex-row__ico' }, icon('hero', id, 48, HERO_GLYPH[id])),
-        h('div', { class: 'codex-row__main' },
-          h('p', { class: 'codex-row__head' },
-            h('span', { class: 'codex-row__name' }, info.name),
-            badge(unlocked ? '已解锁' : '未解锁', unlocked)),
-          h('p', { class: 'codex-row__desc' },
-            unlocked
-              ? `${info.flavor}`
-              : `解锁条件：${info.unlock}${prog ? `（最好 ${prog.have}/${prog.need}）` : ''}`),
-          h('p', { class: 'codex-row__meta' }, `起手「${weaponName(info.weapon)}」· ${info.trait}`))));
+      listBox.appendChild(h('div', {
+        class: `codex-row${unlocked ? '' : ' is-locked'}`,
+        dataset: { codexKind: 'heroes', itemId: id },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('hero', id, 48, HERO_GLYPH[id])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, info.name),
+          badge(unlocked ? '已解锁' : '未解锁', unlocked)),
+        h('p', { class: 'codex-row__desc' },
+          unlocked
+            ? `${info.flavor}（绝技「${info.ultName}」：${info.ultDesc}）`
+            : `解锁条件：${info.unlock}${prog ? `（最好 ${prog.have}/${prog.need}）` : ''}`),
+        h('p', { class: 'codex-row__meta' }, `起手「${weaponName(info.weapon)}」· 绝技「${info.ultName}」· ${info.trait}`))));
     }
 
     const achIds = Object.keys(ACHIEVEMENT_NAMES);
@@ -181,7 +215,7 @@ export function openCodex(root, save) {
   const v = veil(root, scroll({
     title: '百物谱',
     sub: `已收录 ${counts.have} / ${counts.total} 项`,
-    cls: 'scroll--dialog scroll--tall codex-scroll',
+    cls: 'scroll--dialog scroll--tall codex codex-scroll',
     body: h('div', { class: 'codex-wrap' }, tabBar, listBox),
     footer: [sealButton('合卷回去', () => v.close(), { kind: 'ghost' })],
   }), { onBackdrop: () => v.close() });
