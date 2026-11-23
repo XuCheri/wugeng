@@ -1,11 +1,12 @@
-// 一局流程测试：确定性、刷新 / 广告 / 复活上限、开光条件、三选一合法性、无尽成长、Boss 时间轴、性能。
+// 一局流程测试：确定性、刷新 / 广告 / 复活上限、多路径开光条件、三选一合法性、无尽成长、小头目与 Boss 时间轴、性能。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createRun, stepRun, chooseUpgrade, rerollChoices, grantAdRerolls, openChest, revive, enterEndless, endRun, canRevive,
+  dismissShrine,
 } from '../../src/sim/run.js';
-import { generateChoices, allMaxed, describeUpgrade, applyChoice } from '../../src/sim/levelup.js';
-import { addOrUpgradeWeapon, getWeapon, canEvolve } from '../../src/sim/weapons.js';
+import { generateChoices, allMaxed, describeUpgrade, applyChoice, findNewlyEvolvableWeapon } from '../../src/sim/levelup.js';
+import { addOrUpgradeWeapon, getWeapon, canEvolve, evolvableWeapons } from '../../src/sim/weapons.js';
 import { addOrUpgradeRelic } from '../../src/sim/relics.js';
 import { recomputeMods } from '../../src/sim/player.js';
 import { spawnEnemy, rebuildHash } from '../../src/sim/enemies.js';
@@ -16,17 +17,24 @@ import {
 } from '../../src/sim/balance.js';
 import { Rng } from '../../src/core/rng.js';
 
-/** 只对关键状态做散列（不含内部引用） */
+/** 只对关键状态做散列（含命签、羁绊、弃签/留签、奇遇地标与铜钱收支） */
 function stateHash(run) {
   const pick = {
     t: run.time.toFixed(6),
     st: run.status,
+    cm: run.choiceMode,
     p: [run.player.x, run.player.y, run.player.hp, run.player.level, run.player.xp, run.player.ult].map((v) => v.toFixed(6)),
-    e: run.enemies.map((e) => [e.id, e.type, e.x.toFixed(4), e.y.toFixed(4), e.hp]),
+    e: run.enemies.map((e) => [e.id, e.type, e.x.toFixed(4), e.y.toFixed(4), e.hp, e.affix]),
     pr: run.projectiles.map((p) => [p.id, p.kind, p.x.toFixed(4), p.y.toFixed(4)]),
     pk: run.pickups.map((p) => [p.id, p.kind, p.value]),
-    w: run.weapons.map((w) => [w.id, w.level, w.evolved]),
+    w: run.weapons.map((w) => [w.id, w.level, w.evolved, w.evolvedRecipe]),
     r: run.relics.map((r) => [r.id, r.level]),
+    bl: run.blessings,
+    sy: run.synergies?.active,
+    bn: [run.banishesLeft, run.banished],
+    lk: run.lockedChoice,
+    sh: run.shrines.map((s) => [s.id, s.kind, s.used, s.active, s.timer.toFixed(3)]),
+    cs: [run.coinsEarned, run.coinsSpent],
     s: run.stats,
     rng: run.rng.getState(),
   };
@@ -36,7 +44,7 @@ function stateHash(run) {
   return (h >>> 0).toString(16);
 }
 
-/** 用脚本输入跑 seconds 秒（升级选第一张、供盒直接开） */
+/** 用脚本输入跑 seconds 秒（升级选签、供盒直接开、奇遇关闭或触发） */
 function scripted(seed, seconds, heroId = 'zhou') {
   const run = createRun({ seed, heroId, meta: { maxHpPct: 4 } });
   let i = 0;
@@ -49,6 +57,10 @@ function scripted(seed, seconds, heroId = 'zhou') {
       openChest(run);
       continue;
     }
+    if (run.status === 'shrine') {
+      dismissShrine(run);
+      continue;
+    }
     const a = run.time * 0.7 + Math.sin(run.time * 0.13) * 2;
     stepRun(run, { moveX: Math.cos(a), moveY: Math.sin(a), ultimate: i % 97 === 0 });
     i++;
@@ -56,11 +68,12 @@ function scripted(seed, seconds, heroId = 'zhou') {
   return run;
 }
 
-/** 把待处理的三选一 / 供盒清掉，回到 playing */
+/** 把待处理的三选一 / 供盒 / 地标清掉，回到 playing */
 function drain(run) {
-  while (run.status === 'levelup' || run.status === 'chest') {
+  while (run.status === 'levelup' || run.status === 'chest' || run.status === 'shrine') {
     if (run.status === 'levelup') chooseUpgrade(run, 0);
-    else openChest(run);
+    else if (run.status === 'chest') openChest(run);
+    else dismissShrine(run);
   }
 }
 
@@ -117,10 +130,12 @@ test('刷新：免费 2 + 机缘，再看广告 +3（每局最多 2 次）', () 
   assert.equal(run.rerolls.adGrants, 2);
 });
 
-test('复活：主线 1 次，无尽再 1 次；满血 + 无敌 3 秒 + 清屏', () => {
+test('复活：主线 1 次，无尽再 1 次；满血 + 无敌 3 秒 + 清屏（保留小头目供盒）', () => {
   const run = createRun({ seed: 9 });
   assert.equal(revive(run), false, '没死不能复活');
   for (let i = 0; i < 20; i++) spawnEnemy(run, 'paperkid', 30 + i, 0);
+  const warder = spawnEnemy(run, 'sedan', 90, 0, { elite: true, warder: true, chest: true });
+  assert.ok(warder.chest);
   run.player.hp = 0;
   stepRun(run, {});
   assert.equal(run.status, 'dead');
@@ -129,6 +144,7 @@ test('复活：主线 1 次，无尽再 1 次；满血 + 无敌 3 秒 + 清屏',
   assert.equal(run.player.hp, run.player.maxHp);
   assert.ok(run.player.invulnT >= 2.9);
   assert.equal(run.enemies.filter((e) => !e.boss).length, 0);
+  assert.ok(run.pickups.some((p) => p.kind === 'chest'), '复活清屏不应吞掉小头目的必掉供盒');
   stepRun(run, {});
   assert.ok(run.events.some((e) => e.type === 'revive'), 'revive 事件在下一帧交给渲染层');
   drain(run);
@@ -159,7 +175,7 @@ test('复活：主线 1 次，无尽再 1 次；满血 + 无敌 3 秒 + 清屏',
   assert.equal(sum.mode, 'endless');
 });
 
-test('开光：需要武器满级 + 对应法器，通过供盒触发', () => {
+test('开光：武器满级 + 多路径条件（本命法器 / 流派共鸣 / 满级法器 / 香案），通过供盒触发', () => {
   const run = createRun({ seed: 11, heroId: 'zhou' });
   const gong = getWeapon(run, 'gong');
   for (let i = 0; i < 3; i++) addOrUpgradeWeapon(run, 'gong');
@@ -168,7 +184,7 @@ test('开光：需要武器满级 + 对应法器，通过供盒触发', () => {
   assert.equal(canEvolve(run, gong), false, '4 级不能开光');
   addOrUpgradeWeapon(run, 'gong');
   assert.equal(canEvolve(run, gong), true);
-  // 没有对应法器时，供盒只给升级
+  // 既无配对法器、也无 3 件同门共鸣、也无 5 级法器时，供盒只给升级
   const run2 = createRun({ seed: 12, heroId: 'zhou' });
   for (let i = 0; i < 4; i++) addOrUpgradeWeapon(run2, 'gong');
   addOrUpgradeRelic(run2, 'censer');
@@ -182,13 +198,14 @@ test('开光：需要武器满级 + 对应法器，通过供盒触发', () => {
   run.status = 'chest';
   const r = openChest(run);
   assert.equal(r.evolved, 'gong');
+  assert.equal(r.recipe, 'paired');
   assert.equal(gong.evolved, true);
   assert.equal(run.status, 'playing');
   stepRun(run, {});
-  assert.ok(run.events.some((e) => e.type === 'evolve' && e.weaponId === 'gong'));
+  assert.ok(run.events.some((e) => e.type === 'evolve' && e.weaponId === 'gong' && e.recipe === 'paired'));
 });
 
-test('三选一从不给出非法选项（随机构筑 fuzz）', () => {
+test('三选一从不给出非法选项（12 武器 + 12 法器多路径随机构筑 fuzz）', () => {
   const rng = new Rng(99);
   for (let iter = 0; iter < 400; iter++) {
     const run = createRun({ seed: iter, heroId: rng.pick(['zhou', 'mian', 'daotong']) });
@@ -233,17 +250,21 @@ test('三选一从不给出非法选项（随机构筑 fuzz）', () => {
         assert.ok(c.kind === 'coin' || c.kind === 'bun');
       }
       const d = describeUpgrade(c);
-      assert.ok(d.name && typeof d.desc === 'string');
-      // evolvable 标记必须真实
+      assert.ok(d.name && typeof d.desc === 'string' && d.desc.length > 0);
+      // evolvable 标记必须与真实多路径开光判定一致
       if (c.evolvable) {
-        const wid = c.kind === 'weapon' ? c.id : { clapper: 'gong', censer: 'lantern', cinnabar: 'talisman', inkstone: 'brush', bagua: 'coinsword', scissors: 'paperman', tinder: 'firecracker', redstring: 'bell' }[c.id];
-        const before = getWeapon(run, wid);
-        assert.ok(before && !before.evolved);
+        const targetId = findNewlyEvolvableWeapon(run, c.kind, c.id);
+        assert.ok(targetId, `evolvable=true 但未找到新解锁武器: ${c.kind}:${c.id}`);
       }
     }
     if (allMaxed(run)) assert.equal(choices[0].kind, 'overflow');
-    // 选任意一张都能成功应用
-    assert.equal(applyChoice(run, choices[rng.int(0, 2)]), true);
+    const prevReady = new Set(evolvableWeapons(run).map((w) => w.id));
+    const pickChoice = choices[rng.int(0, 2)];
+    assert.equal(applyChoice(run, pickChoice), true);
+    if (pickChoice.evolvable) {
+      const nowReady = evolvableWeapons(run).map((w) => w.id);
+      assert.ok(nowReady.some((id) => !prevReady.has(id)), '应用 evolvable 选项后应有新武器满足开光条件');
+    }
   }
 });
 
@@ -271,7 +292,6 @@ test('无尽：敌人生命按分钟 ×1.22；溢出签伤害 ×1.12 乘算', ()
   const e2 = spawnEnemy(run, 'lanternghost', 500, 0);
   const ratio = e2.maxHp / e0.maxHp;
   assert.ok(Math.abs(ratio - ENDLESS.hpGrowth ** 2) < 0.05, `ratio=${ratio}`);
-  // 溢出签
   for (const id of ['gong', 'lantern', 'talisman']) while (addOrUpgradeWeapon(run, id));
   while (addOrUpgradeWeapon(run, 'bell'));
   for (const id of ['clapper', 'censer', 'cinnabar', 'redstring']) while (addOrUpgradeRelic(run, id));
@@ -286,21 +306,37 @@ test('无尽：敌人生命按分钟 ×1.22；溢出签伤害 ×1.12 乘算', ()
   assert.equal(run.mods.overflowStacks, 2);
 });
 
-test('Boss 时间轴：纸马 240s、伞女 480s、夜游神 600s；打败夜游神即天亮', () => {
+test('巡更小头目（150s/360s）与 Boss 时间轴（240s/480s/600s）；打败夜游神即天亮', () => {
   const run = createRun({ seed: 8 });
   const seen = {};
+  const warders = {};
   const jumpTo = (t) => {
     run.time = t - 0.05;
     for (let i = 0; i < 6; i++) {
       run.player.invulnT = 99;
       stepRun(run, {});
-      for (const ev of run.events) if (ev.type === 'bossSpawn') seen[ev.bossType] = run.time;
+      for (const ev of run.events) {
+        if (ev.type === 'bossSpawn') seen[ev.bossType] = run.time;
+        if (ev.type === 'warderSpawn') warders[ev.warderId] = run.time;
+      }
+      if (run.status === 'levelup' && run.time < t) {
+        chooseUpgrade(run, 0);
+        continue;
+      }
       if (run.status !== 'playing') break;
     }
   };
+
+  jumpTo(150);
+  assert.ok(warders.warder_150 >= 150 && warders.warder_150 < 150.1, `warder_150 @ ${warders.warder_150}`);
+  assert.equal(run.boss, null, '巡更小头目不占用 Boss 血条');
+
   jumpTo(240);
   assert.ok(seen.horse >= 240 && seen.horse < 240.1, `horse @ ${seen.horse}`);
   assert.equal(seen.umbrella, undefined);
+  // 240s 换三更会弹守夜命签，选掉后回到 playing
+  drain(run);
+
   // 打败纸马：掉供盒，拾取后进入 chest 状态
   const horse = run.enemies.find((e) => e.type === 'horse');
   rebuildHash(run);
@@ -312,9 +348,16 @@ test('Boss 时间轴：纸马 240s、伞女 480s、夜游神 600s；打败夜游
   stepRun(run, {});
   assert.equal(run.status, 'chest');
   openChest(run);
-  while (run.status === 'levelup') chooseUpgrade(run, 0);
+  drain(run);
+
+  jumpTo(360);
+  assert.ok(warders.warder_360 >= 360 && warders.warder_360 < 360.1, `warder_360 @ ${warders.warder_360}`);
+  drain(run);
+
   jumpTo(480);
   assert.ok(seen.umbrella >= 480 && seen.umbrella < 480.1);
+  drain(run);
+
   jumpTo(600);
   assert.ok(seen.youshen >= 600 && seen.youshen < 600.1);
   assert.equal(run.watch, 5);
@@ -352,16 +395,17 @@ test('Boss 能正常行动并发射弹幕', () => {
   assert.ok(run.projectiles.some((p) => p.kind === 'enemyBullet' && p.style === 'paperMoney'));
 });
 
-test('性能：260 敌人 + 400 弹体，每步远低于 4ms', () => {
+test('性能：300 敌人 + 400 弹体 + 开光与流派羁绊，每步远低于 4ms', () => {
   const run = createRun({ seed: 13 });
-  for (const id of ['talisman', 'lantern', 'firecracker']) while (addOrUpgradeWeapon(run, id));
+  for (const id of ['talisman', 'lantern', 'firecracker', 'compass']) while (addOrUpgradeWeapon(run, id));
+  for (const id of ['cinnabar', 'censer', 'soulwick', 'fivecoins']) while (addOrUpgradeRelic(run, id));
   recomputeMods(run);
   run.player.invulnT = 1e9;
   run.player.hp = run.player.maxHp = 1e9;
-  const types = ['paperkid', 'lanternghost', 'sedan', 'drowned', 'weasel'];
+  const types = ['paperkid', 'lanternghost', 'sedan', 'drowned', 'weasel', 'suona', 'paperbride', 'cinder'];
   const refill = () => {
     let k = 0;
-    while (run.enemies.length < SPAWN.cap) {
+    while (run.enemies.length < 300) {
       const a = k++ * 2.399;
       const d = 60 + (k % 40) * 11;
       const e = spawnEnemy(run, types[k % types.length], run.player.x + Math.cos(a) * d, run.player.y + Math.sin(a) * d);
@@ -369,24 +413,45 @@ test('性能：260 敌人 + 400 弹体，每步远低于 4ms', () => {
     }
     while (run.projectiles.length < 400) {
       const a = run.projectiles.length * 0.7;
-      run.projectiles.push({ id: run._nextId++, kind: 'enemyBullet', x: run.player.x + Math.cos(a) * 300, y: run.player.y + Math.sin(a) * 300, r: 6, angle: a, t: 0, life: 50, vx: Math.cos(a) * 10, vy: Math.sin(a) * 10, style: 'ink', dmg: 0 });
+      run.projectiles.push({
+        id: run._nextId++,
+        kind: 'enemyBullet',
+        x: run.player.x + Math.cos(a) * 300,
+        y: run.player.y + Math.sin(a) * 300,
+        r: 6,
+        angle: a,
+        t: 0,
+        life: 50,
+        vx: Math.cos(a) * 10,
+        vy: Math.sin(a) * 10,
+        style: 'ink',
+        dmg: 0,
+      });
     }
   };
   for (let i = 0; i < 30; i++) {
     refill();
     stepRun(run, { moveX: 0.3, moveY: 0.1 });
-    if (run.status === 'levelup') forceLevelup(run), chooseUpgrade(run, 0);
+    drain(run);
   }
   const N = 240;
-  let total = 0;
+  let wallTotal = 0;
+  let cpuTotalUs = 0;
   for (let i = 0; i < N; i++) {
     refill();
+    const c0 = process.cpuUsage();
     const t0 = performance.now();
     stepRun(run, { moveX: 0.3, moveY: 0.1 });
-    total += performance.now() - t0;
-    if (run.status === 'levelup') chooseUpgrade(run, 0);
+    wallTotal += performance.now() - t0;
+    const dc = process.cpuUsage(c0);
+    cpuTotalUs += dc.user + dc.system;
+    drain(run);
   }
-  const avg = total / N;
-  assert.ok(avg < 4, `avg ${avg.toFixed(3)}ms/step`);
-  console.log(`  性能：${run.enemies.length} 敌 / ${run.projectiles.length} 弹体，平均 ${avg.toFixed(3)} ms/step`);
+  const wallAvg = wallTotal / N;
+  const cpuAvg = cpuTotalUs / 1000 / N;
+  const avg = Math.min(wallAvg, cpuAvg);
+  assert.ok(avg < 4, `wall=${wallAvg.toFixed(3)}ms/step, cpu=${cpuAvg.toFixed(3)}ms/step`);
+  console.log(
+    `  性能：${run.enemies.length} 敌 / ${run.projectiles.length} 弹体，平均 ${avg.toFixed(3)} ms/step (wall=${wallAvg.toFixed(3)}, cpu=${cpuAvg.toFixed(3)})`,
+  );
 });

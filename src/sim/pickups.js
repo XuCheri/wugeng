@@ -1,10 +1,9 @@
-// 拾取物（PLAN §3.6）：魂火（三档）、铜钱、包子、招魂幡、供盒。
-// 魂火和铜钱进入拾取范围后被吸附；包子 / 幡 / 供盒需要贴近。
-// 魂火超过上限时合并到最近的魂火上，保证数量有界。
+// 拾取物（PLAN §3.6）：魂火（三档）、铜钱（支持五帝钱加成）、包子、招魂幡、供盒。
 
 import { PICKUPS } from './balance.js';
 import { gainXp } from './xp.js';
-import { healPlayer } from './player.js';
+import { healPlayer, earnCoins } from './player.js';
+import { BLESSING_TUNING } from './blessings.js';
 
 export function xpTier(value) {
   return value >= PICKUPS.xpTier3 ? 3 : value >= PICKUPS.xpTier2 ? 2 : 1;
@@ -28,7 +27,6 @@ export function dropXp(run, x, y, value, split = 1) {
     return;
   }
   if (run._xpCount >= PICKUPS.xpOrbCap) {
-    // 合并：加到离掉落点最近的魂火上
     let best = null;
     let bd = Infinity;
     for (const o of run.pickups) {
@@ -85,6 +83,18 @@ export function updatePickups(run, dt) {
   arr.length = w;
 }
 
+function triggerSoulGourdIfOwned(run) {
+  const s = run.mods?.soulGourdStacks || 0;
+  if (s <= 0) return;
+  const SG = BLESSING_TUNING.soul_gourd;
+  run._scheduled.push({
+    delay: 0,
+    type: 'soulGourdPulse',
+    radius: SG.pulseRadius * (run.mods?.areaMul || 1),
+    dmg: SG.pulseBaseDmg * s + run.player.level * 4,
+  });
+}
+
 function collectPickup(run, o) {
   switch (o.kind) {
     case 'xp':
@@ -92,10 +102,10 @@ function collectPickup(run, o) {
       gainXp(run, o.value);
       break;
     case 'coin':
-      run.stats.coins += o.value;
+      o.value = earnCoins(run, o.value, true);
       break;
     case 'bun': {
-      const heal = PICKUPS.bunHeal * run.night.bunHealMul;
+      const heal = PICKUPS.bunHeal * run.night.bunHealMul * (run.mods?.bunHealMul || 1);
       healPlayer(run, heal);
       run.stats.bunsEaten++;
       if (run.stats.firstBunTime === null) run.stats.firstBunTime = run.time;
@@ -103,16 +113,17 @@ function collectPickup(run, o) {
       break;
     }
     case 'banner':
-      // 招魂幡：全图魂火吸过来
       for (const p of run.pickups) {
         if (p.kind === 'xp' && !p.mag) {
           p.mag = true;
           p.ms = PICKUPS.magnetStartSpeed;
         }
       }
+      triggerSoulGourdIfOwned(run);
       break;
     case 'chest':
       run._pendingChests++;
+      triggerSoulGourdIfOwned(run);
       break;
   }
   run.events.push({ type: 'pickup', kind: o.kind, value: o.value });

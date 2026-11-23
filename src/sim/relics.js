@@ -1,9 +1,30 @@
-// 法器：把已拥有的法器折算成属性加成（PLAN §3.4）。
+// 法器：把已拥有的法器折算成属性加成（PLAN §3.4 + F5）。
 
 import { RELICS, RELIC_IDS, MAX_RELIC_LEVEL, MAX_RELICS } from './balance.js';
 
 export function emptyRelicTotals() {
-  return { cdr: 0, areaPct: 0, dmgPct: 0, durPct: 0, armor: 0, maxHp: 0, amount: 0, xpPct: 0, pickupPct: 0, critChance: 0 };
+  return {
+    cdr: 0,
+    areaPct: 0,
+    dmgPct: 0,
+    durPct: 0,
+    armor: 0,
+    maxHp: 0,
+    amount: 0,
+    xpPct: 0,
+    pickupPct: 0,
+    critChance: 0,
+    // +4 新增民俗法器属性（草鞋、糯米、五帝钱、引魂灯芯）
+    speedPct: 0,
+    slowResist: 0,
+    hurtInvuln: 0,
+    killHeal: 0,
+    critDmg: 0,
+    coinPct: 0,
+    lightPct: 0,
+    ultChargePct: 0,
+    ultCdRefund: 0,
+  };
 }
 
 /** 单个法器在 level 级时的累计效果 */

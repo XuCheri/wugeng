@@ -1,8 +1,9 @@
-// Boss：纸马将军（三连冲锋）、无面伞女（撑伞减伤 + 纸钱弹幕）、夜游神（召唤 → 弹幕 → 狂暴）。
-// updateBoss 返回本帧期望速度，由 enemies.js 统一积分位置。
+// Boss：纸马将军（三连冲锋 + 预警走廊）、无面伞女（撑伞减伤 + 纸钱弹幕）、
+// 夜游神（召唤 → 弹幕 → 狂暴追击 + 蓄力挥戟突刺预警）。
 
 import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS } from './balance.js';
-import { spawnEnemy, queueSpawn } from './enemies.js';
+import { clamp } from '../core/math.js';
+import { spawnEnemy, queueSpawn, setTelegraph, clearTelegraph } from './enemies.js';
 import { dropPickup } from './pickups.js';
 
 const V = { x: 0, y: 0 };
@@ -12,7 +13,6 @@ export function spawnBoss(run, type, opts = {}) {
   const p = run.player;
   const a = run.rng.range(0, Math.PI * 2);
   const e = spawnEnemy(run, type, p.x + Math.cos(a) * BOSS_AI.spawnDist, p.y + Math.sin(a) * BOSS_AI.spawnDist);
-  // Boss 血量不吃分钟成长，只吃夜色 / 夜色词缀 / 无尽成长
   let hp = ENEMIES[type].hp * (1 + SPAWN.nightHpGrowth * run.nightLevel) * run.night.bossHpMul * BOSS_AI.hpMul * (BOSS_AI[type]?.hpMul || 1);
   if (run.mode === 'endless') hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - run._endlessStart) / 60));
   e.hp = e.maxHp = Math.round(hp);
@@ -24,6 +24,8 @@ export function spawnBoss(run, type, opts = {}) {
   e._summonT = 1;
   e._spiralA = 0;
   e._charges = 0;
+  e._windupTotal = 0;
+  e._lungeCd = BOSS_AI.youshen.lungeEvery * 0.6;
   if (type === 'horse') {
     e.state = 'chase';
     e.stateT = BOSS_AI.horse.chase;
@@ -40,8 +42,18 @@ export function spawnBoss(run, type, opts = {}) {
 
 function fireBullet(run, x, y, angle, speed, dmg, r, life, style) {
   run.projectiles.push({
-    id: run._nextId++, kind: 'enemyBullet', x, y, r, angle, t: 0, life,
-    vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, style, dmg,
+    id: run._nextId++,
+    kind: 'enemyBullet',
+    x,
+    y,
+    r,
+    angle,
+    t: 0,
+    life,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    style,
+    dmg,
   });
 }
 
@@ -56,14 +68,13 @@ export function updateBoss(run, e, dt, tx, ty, d) {
   V.x = 0;
   V.y = 0;
   const p = run.player;
-  // 拴绳：离玩家太远就拉回到屏幕边缘
   if (d > BOSS_AI.leashDist) {
     e.x = p.x - tx * BOSS_AI.spawnDist;
     e.y = p.y - ty * BOSS_AI.spawnDist;
   }
   if (e.type === 'horse') horse(run, e, dt, tx, ty);
   else if (e.type === 'umbrella') umbrella(run, e, dt, tx, ty);
-  else youshen(run, e, dt, tx, ty);
+  else youshen(run, e, dt, tx, ty, d);
   if (run.boss && run.boss.id === e.id) {
     run.boss.hp = Math.max(0, e.hp);
     run.boss.phase = e.phase;
@@ -79,27 +90,36 @@ function lockCharge(e, tx, ty) {
 
 function horse(run, e, dt, tx, ty) {
   const H = BOSS_AI.horse;
+  const telLen = H.chargeSpeed * H.chargeTime + e.r;
+  const telWid = e.r * 2;
   e.dmgMul = 1;
   switch (e.state) {
     case 'chase':
+      clearTelegraph(e);
       V.x = tx * e.speed;
       V.y = ty * e.speed;
       e.angle = Math.atan2(ty, tx);
       if (e.stateT <= 0) {
         e.state = 'windup';
         e.stateT = H.windup;
+        e._windupTotal = H.windup;
         e._charges = 0;
         lockCharge(e, tx, ty);
+        setTelegraph(e, telLen, telWid, 0.02);
       }
       break;
-    case 'windup':
-      // 蓄力：冲锋方向在蓄力开始时锁定（e.angle），渲染层可据此画出预警线，玩家横移即可躲开
+    case 'windup': {
+      const total = e._windupTotal || H.windup;
+      setTelegraph(e, telLen, telWid, clamp(1 - Math.max(0, e.stateT) / total, 0.01, 1));
       if (e.stateT <= 0) {
         e.state = 'charge';
         e.stateT = H.chargeTime;
+        clearTelegraph(e);
       }
       break;
+    }
     case 'charge':
+      clearTelegraph(e);
       V.x = e.dx * H.chargeSpeed;
       V.y = e.dy * H.chargeSpeed;
       e.dmgMul = H.chargeDmgMul;
@@ -111,11 +131,14 @@ function horse(run, e, dt, tx, ty) {
         } else {
           e.state = 'windup';
           e.stateT = H.gap + H.windup * H.rewindMul;
+          e._windupTotal = e.stateT;
           lockCharge(e, tx, ty);
+          setTelegraph(e, telLen, telWid, 0.02);
         }
       }
       break;
-    default: // rest
+    default:
+      clearTelegraph(e);
       if (e.stateT <= 0) {
         e.state = 'chase';
         e.stateT = H.chase;
@@ -125,9 +148,10 @@ function horse(run, e, dt, tx, ty) {
 
 function umbrella(run, e, dt, tx, ty) {
   const U = BOSS_AI.umbrella;
+  clearTelegraph(e);
   if (e.state === 'shield') {
     e.phase = 1;
-    e.angle += U.spinSpeed * dt; // 伞面旋转
+    e.angle += U.spinSpeed * dt;
     V.x = tx * e.speed * U.shieldMoveMul;
     V.y = ty * e.speed * U.shieldMoveMul;
     e._fireT -= dt;
@@ -151,17 +175,79 @@ function umbrella(run, e, dt, tx, ty) {
   }
 }
 
-function youshen(run, e, dt, tx, ty) {
+function youshen(run, e, dt, tx, ty, d) {
   const Y = BOSS_AI.youshen;
   const ratio = e.hp / e.maxHp;
-  e.phase = ratio > Y.phase2At ? 1 : ratio > Y.phase3At ? 2 : 3;
-  e.state = e.phase === 1 ? 'summon' : e.phase === 2 ? 'barrage' : 'enrage';
-  const spd = e.speed * (e.phase === 3 ? Y.enrageSpeedMul : 1);
-  V.x = tx * spd;
-  V.y = ty * spd;
-  e.angle = Math.atan2(ty, tx);
-  // 召唤：阶段 1 和 3
-  if (e.phase !== 2) {
+  const nextPhase = ratio > Y.phase2At ? 1 : ratio > Y.phase3At ? 2 : 3;
+
+  if (nextPhase < 3) {
+    e.phase = nextPhase;
+    e.state = e.phase === 1 ? 'summon' : 'barrage';
+    e.dmgMul = 1;
+    clearTelegraph(e);
+    V.x = tx * e.speed;
+    V.y = ty * e.speed;
+    e.angle = Math.atan2(ty, tx);
+  } else {
+    if (e.phase !== 3) {
+      e.phase = 3;
+      e.state = 'enrage';
+      e._lungeCd = 2.2;
+    }
+    const telLen = Y.lungeSpeed * Y.lungeTime + e.r;
+    const telWid = Math.round(e.r * 1.8);
+
+    if (e.state === 'windup') {
+      e.dmgMul = 1;
+      V.x = 0;
+      V.y = 0;
+      setTelegraph(e, telLen, telWid, clamp(1 - Math.max(0, e.stateT) / Y.lungeWindup, 0.01, 1));
+      if (e.stateT <= 0) {
+        e.state = 'lunge';
+        e.stateT = Y.lungeTime;
+        clearTelegraph(e);
+      }
+    } else if (e.state === 'lunge') {
+      clearTelegraph(e);
+      e.dmgMul = Y.lungeDmgMul;
+      V.x = e.dx * Y.lungeSpeed;
+      V.y = e.dy * Y.lungeSpeed;
+      if (e.stateT <= 0) {
+        e.state = 'recover';
+        e.stateT = Y.lungeRecover;
+        e.dmgMul = 1;
+        e._lungeCd = Y.lungeEvery;
+      }
+    } else if (e.state === 'recover') {
+      clearTelegraph(e);
+      e.dmgMul = 1;
+      const spd = e.speed * Y.enrageSpeedMul * 0.35;
+      V.x = tx * spd;
+      V.y = ty * spd;
+      e.angle = Math.atan2(ty, tx);
+      if (e.stateT <= 0) {
+        e.state = 'enrage';
+      }
+    } else {
+      e.state = 'enrage';
+      clearTelegraph(e);
+      e.dmgMul = 1;
+      const spd = e.speed * Y.enrageSpeedMul;
+      V.x = tx * spd;
+      V.y = ty * spd;
+      e.angle = Math.atan2(ty, tx);
+      e._lungeCd = (e._lungeCd ?? Y.lungeEvery) - dt;
+      if (e._lungeCd <= 0 && d <= 340) {
+        e.state = 'windup';
+        e.stateT = Y.lungeWindup;
+        lockCharge(e, tx, ty);
+        setTelegraph(e, telLen, telWid, 0.02);
+      }
+    }
+  }
+
+  const lunging = e.state === 'windup' || e.state === 'lunge';
+  if (!lunging && e.phase !== 2) {
     e._summonT -= dt;
     if (e._summonT <= 0) {
       e._summonT = e.phase === 3 ? Y.enrageSummonInterval : Y.summonInterval;
@@ -172,18 +258,20 @@ function youshen(run, e, dt, tx, ty) {
       }
     }
   }
-  // 弹幕：阶段 2 螺旋，阶段 3 圆环
-  e._fireT -= dt;
-  if (e.phase === 2 && e._fireT <= 0) {
-    e._fireT = Y.spiralInterval;
-    e._spiralA += Y.spiralTurn;
-    for (let k = 0; k < Y.spiralArms; k++) {
-      fireBullet(run, e.x, e.y, e._spiralA + (k / Y.spiralArms) * Math.PI * 2, Y.bulletSpeed, Y.bulletDmg, Y.bulletR, Y.bulletLife, 'ink');
+
+  if (!lunging) {
+    e._fireT -= dt;
+    if (e.phase === 2 && e._fireT <= 0) {
+      e._fireT = Y.spiralInterval;
+      e._spiralA += Y.spiralTurn;
+      for (let k = 0; k < Y.spiralArms; k++) {
+        fireBullet(run, e.x, e.y, e._spiralA + (k / Y.spiralArms) * Math.PI * 2, Y.bulletSpeed, Y.bulletDmg, Y.bulletR, Y.bulletLife, 'ink');
+      }
+    } else if (e.phase === 3 && e._fireT <= 0) {
+      e._fireT = Y.enrageRingInterval;
+      e._spiralA += Y.ringTurn;
+      ring(run, e, Y.enrageRingCount, e._spiralA, Y, 'ink');
     }
-  } else if (e.phase === 3 && e._fireT <= 0) {
-    e._fireT = Y.enrageRingInterval;
-    e._spiralA += Y.ringTurn;
-    ring(run, e, Y.enrageRingCount, e._spiralA, Y, 'ink');
   }
 }
 
@@ -191,17 +279,16 @@ function youshen(run, e, dt, tx, ty) {
 export function onBossKilled(run, e) {
   run.events.push({ type: 'bossDefeated', bossType: e.type });
   if (e.chest) dropPickup(run, 'chest', e.x, e.y, 0);
-  // Boss 血条切到另一只仍存活的 Boss（若有）
   run.boss = null;
   for (const o of run.enemies) {
     if (o.boss && !o.dead && o !== e) run.boss = { id: o.id, type: o.type, hp: o.hp, maxHp: o.maxHp, phase: o.phase };
   }
   if (e.final && run.mode === 'main') {
-    // 鸡鸣天亮：通关
     run.status = 'cleared';
     run.watch = 6;
     run.darkness = DARKNESS.dawn;
     run.events.push({ type: 'dawn' });
     for (const pr of run.projectiles) if (pr.kind === 'enemyBullet') pr.dead = true;
+    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet');
   }
 }

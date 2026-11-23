@@ -24,14 +24,19 @@ export class SpatialHash {
   }
 
   clear() {
-    for (const k of this.used) this.buckets[k].length = 0;
-    this.used.length = 0;
+    const used = this.used;
+    const buckets = this.buckets;
+    for (let i = 0; i < used.length; i++) buckets[used[i]].length = 0;
+    used.length = 0;
     this.count = 0;
   }
 
   /** 插入一个带 x, y 的对象（按中心点落格） */
   insert(item) {
-    const k = this._key(Math.floor(item.x * this.inv), Math.floor(item.y * this.inv));
+    if (!item || !Number.isFinite(item.x) || !Number.isFinite(item.y)) return;
+    const cx = Math.max(-1048576, Math.min(1048575, Math.floor(item.x * this.inv)));
+    const cy = Math.max(-1048576, Math.min(1048575, Math.floor(item.y * this.inv)));
+    const k = this._key(cx, cy);
     const b = this.buckets[k];
     if (b.length === 0) this.used.push(k);
     b.push(item);
@@ -45,25 +50,61 @@ export class SpatialHash {
    */
   queryCircle(x, y, r, out, pad = 48) {
     out.length = 0;
-    const R = r + pad;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r < 0) return out;
+    const R = r + (Number.isFinite(pad) && pad > 0 ? pad : 0);
     const inv = this.inv;
-    const x0 = Math.floor((x - R) * inv);
-    const x1 = Math.floor((x + R) * inv);
-    const y0 = Math.floor((y - R) * inv);
-    const y1 = Math.floor((y + R) * inv);
-    const st = ++this.stamp;
-    for (let cx = x0; cx <= x1; cx++) {
-      for (let cy = y0; cy <= y1; cy++) {
-        const b = this.buckets[this._key(cx, cy)];
-        for (let i = 0; i < b.length; i++) {
-          const it = b[i];
-          if (it._qs === st) continue;
-          it._qs = st;
-          const dx = it.x - x;
-          const dy = it.y - y;
-          const rr = r + (it.r || 0);
-          if (dx * dx + dy * dy <= rr * rr) out.push(it);
+    const st = (this.stamp = (this.stamp + 1) & 0x3fffffff);
+    const buckets = this.buckets;
+    if (Number.isFinite(R)) {
+      const x0 = Math.floor((x - R) * inv);
+      const x1 = Math.floor((x + R) * inv);
+      const y0 = Math.floor((y - R) * inv);
+      const y1 = Math.floor((y + R) * inv);
+      if (
+        Number.isSafeInteger(x0) &&
+        Number.isSafeInteger(x1) &&
+        Number.isSafeInteger(y0) &&
+        Number.isSafeInteger(y1) &&
+        x0 >= -1048576 &&
+        x1 <= 1048575 &&
+        y0 >= -1048576 &&
+        y1 <= 1048575 &&
+        (x1 - x0 + 1) * (y1 - y0 + 1) <= Math.max(64, this.used.length * 4)
+      ) {
+        const mask = this.mask;
+        for (let cx = x0; cx <= x1; cx++) {
+          const hx = Math.imul(cx, 73856093);
+          for (let cy = y0; cy <= y1; cy++) {
+            const b = buckets[(hx ^ Math.imul(cy, 19349663)) & mask];
+            const bLen = b.length;
+            for (let i = 0; i < bLen; i++) {
+              const it = b[i];
+              if (it._qs === st) continue;
+              it._qs = st;
+              const dx = it.x - x;
+              const dy = it.y - y;
+              const rr = r + (it.r || 0);
+              const d2 = dx * dx + dy * dy;
+              if (Number.isFinite(d2) ? d2 <= rr * rr : Math.hypot(dx, dy) <= rr) out.push(it);
+            }
+          }
         }
+        return out;
+      }
+    }
+    const used = this.used;
+    for (let u = 0; u < used.length; u++) {
+      const b = buckets[used[u]];
+      const bLen = b.length;
+      for (let i = 0; i < bLen; i++) {
+        const it = b[i];
+        if (it._qs === st) continue;
+        it._qs = st;
+        const dx = it.x - x;
+        const dy = it.y - y;
+        const rr = r + (it.r || 0);
+        const d2 = dx * dx + dy * dy;
+        if (Number.isFinite(d2) ? d2 <= rr * rr : Math.hypot(dx, dy) <= rr) out.push(it);
       }
     }
     return out;
@@ -71,10 +112,12 @@ export class SpatialHash {
 
   /** 查询离 (x,y) 最近、且满足 filter 的对象，搜索半径 maxR */
   nearest(x, y, maxR, scratch, filter = null) {
-    this.queryCircle(x, y, maxR, scratch, 0);
+    this.queryCircle(x, y, maxR, scratch, 48);
     let best = null;
     let bd = Infinity;
-    for (const it of scratch) {
+    let bdHypot = Infinity;
+    for (let i = 0; i < scratch.length; i++) {
+      const it = scratch[i];
       if (filter && !filter(it)) continue;
       const dx = it.x - x;
       const dy = it.y - y;
@@ -82,6 +125,12 @@ export class SpatialHash {
       if (d < bd) {
         bd = d;
         best = it;
+      } else if (bd === Infinity) {
+        const h = Math.hypot(dx, dy);
+        if (h < bdHypot) {
+          bdHypot = h;
+          best = it;
+        }
       }
     }
     return best;
