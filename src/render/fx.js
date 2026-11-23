@@ -1,10 +1,10 @@
-// fx.js —— 打击感：墨点飞溅、纸屑 / 墨烟、地面墨渍、震屏（有上限、可关）、顿帧、升级墨晕、更次横幅
-import { INK, VERM, PAPER, FONT_CN, inkA, vermA, paperA } from './palette.js';
-import { makeRng, makeCanvas, brushStroke, softBlob } from './ink.js';
+// fx.js —— 打击感：墨点飞溅、留白刀花与暴击星芒、纸屑 / 墨烟、混合方向震屏、顿帧、开光与奇遇墨晕、更次横幅
+import { INK, VERM, PAPER, LANTERN, RGB, FONT_CN, vermA, paperA } from './palette.js';
+import { makeRng, makeCanvas, brushStroke } from './ink.js';
 import { dotSprite, scrapSprite, inkPoolSprite, puffSprite, blit } from './sprites.js';
 
 const TAU = Math.PI * 2;
-const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'horse', 'umbrella']);
+const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'paperbride', 'suona', 'horse', 'umbrella']);
 const CN_NUM = ['', '一', '二', '三', '四', '五'];
 export const BOSS_NAMES = { horse: '纸马将军', umbrella: '无面伞女', youshen: '夜游神' };
 export const EVOLVED_NAMES = {
@@ -16,10 +16,14 @@ export const EVOLVED_NAMES = {
   paperman: '纸扎仪仗',
   firecracker: '满堂红',
   bell: '千铃引魂',
+  compass: '天星定穴盘',
+  soulbanner: '无常勾魂幡',
+  bronze_mirror: '乾坤赤阳镜',
+  paperhorse: '百鬼夜行图',
 };
 
-const SHAKE_CAP = 7; // px
-const HITSTOP_MIN_GAP = 0.3;
+const SHAKE_CAP = 5.5; // 混合震屏峰值 CSS px（兼顾打击感与防眩晕）
+const HITSTOP_MIN_GAP = 0.26;
 
 export function createFx(opts = {}) {
   let low = !!opts.lowQuality;
@@ -30,6 +34,8 @@ export function createFx(opts = {}) {
   let maxParts = low ? 220 : 650;
   let maxDecals = low ? 20 : 56;
   let trauma = 0;
+  let kickX = 0;
+  let kickY = 0;
   let hitstop = 0;
   let sinceHitstop = 1;
   let time = 0;
@@ -53,30 +59,46 @@ export function createFx(opts = {}) {
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v,
         t: 0,
-        life: 0.25 + rng() * 0.3,
-        size: 0.8 + rng() * 2.2,
+        life: 0.22 + rng() * 0.28,
+        size: 0.9 + rng() * 2.3,
         color,
-        stain: rng() < 0.25,
+        stain: color === 'ink' && rng() < 0.25,
       });
     }
+  }
+  function slashSpark(x, y, crit = false) {
+    // 宣纸留白斩击花火 + 暴击朱砂十字星芒
+    const a0 = rng() * Math.PI;
+    part({
+      k: 3,
+      x,
+      y: y - 8,
+      vx: 0,
+      vy: 0,
+      t: 0,
+      life: crit ? 0.16 : 0.11,
+      rot: a0,
+      size: crit ? 15 : 9,
+      crit,
+    });
   }
   function scraps(x, y, n, color = 'paper') {
     for (let i = 0; i < n; i++) {
       const a = rng() * TAU;
-      const v = 40 + rng() * 110;
+      const v = 40 + rng() * 115;
       part({
         k: 1,
         x,
         y: y - 8,
         vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - 40,
+        vy: Math.sin(a) * v - 42,
         t: 0,
-        life: 0.6 + rng() * 0.6,
+        life: 0.58 + rng() * 0.58,
         rot: rng() * TAU,
         vr: (rng() - 0.5) * 14,
         idx: Math.floor(rng() * 4),
-        color: rng() < 0.3 ? 'verm' : color,
-        size: 0.7 + rng() * 0.6,
+        color: rng() < 0.35 ? 'verm' : color,
+        size: 0.72 + rng() * 0.62,
       });
     }
   }
@@ -129,6 +151,13 @@ export function createFx(opts = {}) {
     return { canvas: c, w, h };
   }
 
+  function hasActiveBanner() {
+    for (let i = 0; i < screen.length; i++) {
+      if (screen[i].k === 'banner') return true;
+    }
+    return false;
+  }
+
   function banner(text, sub, color = INK, dur = 2.2) {
     screen.push({ k: 'banner', t: 0, life: dur, text, sub, color, img: null });
   }
@@ -147,24 +176,39 @@ export function createFx(opts = {}) {
     get hitstop() {
       return hitstop;
     },
-    addShake(a) {
+    addShake(a, dx = 0, dy = 0) {
       trauma = Math.min(1, trauma + a);
+      if (dx || dy) {
+        const l = Math.hypot(dx, dy) || 1;
+        const amp = Math.min(3.2, a * 4.5);
+        kickX = Math.max(-3.5, Math.min(3.5, kickX + (dx / l) * amp));
+        kickY = Math.max(-3.5, Math.min(3.5, kickY + (dy / l) * amp));
+      } else {
+        const ang = rng() * TAU;
+        const amp = Math.min(2.2, a * 2.6);
+        kickX = Math.max(-3.5, Math.min(3.5, kickX + Math.cos(ang) * amp));
+        kickY = Math.max(-3.5, Math.min(3.5, kickY + Math.sin(ang) * amp));
+      }
     },
     addHitstop(s) {
-      if (sinceHitstop < HITSTOP_MIN_GAP && s < 0.06) return;
+      if (sinceHitstop < HITSTOP_MIN_GAP && s < 0.05) return;
       hitstop = Math.max(hitstop, Math.min(0.06, s));
       sinceHitstop = 0;
     },
 
-    /** 处理一条 sim 事件 */
+    /** 处理一条 sim 事件（注意：hit 为对象池复用，严禁保留 e 引用！） */
     onEvent(e) {
       switch (e.type) {
         case 'hit': {
-          const n = low ? 2 : e.crit ? 7 : 3;
-          drops(e.x, e.y - 8, n, e.crit ? 170 : 110, e.crit && rng() < 0.5 ? 'verm' : 'ink');
-          if (e.crit) {
+          const hx = e.x || 0;
+          const hy = e.y || 0;
+          const crit = !!e.crit;
+          const n = low ? 2 : crit ? 8 : 3;
+          drops(hx, hy - 8, n, crit ? 185 : 115, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink');
+          if (!low || crit) slashSpark(hx, hy, crit);
+          if (crit) {
             this.addHitstop(0.03);
-            this.addShake(0.12);
+            this.addShake(0.16);
           }
           break;
         }
@@ -172,11 +216,11 @@ export function createFx(opts = {}) {
           const isPaper = PAPER_TYPES.has(e.enemyType);
           const big = e.boss ? 3 : e.elite ? 1.8 : 1;
           if (isPaper) {
-            scraps(e.x, e.y, Math.round((low ? 3 : 7) * big));
-            drops(e.x, e.y - 8, Math.round((low ? 2 : 4) * big), 120);
+            scraps(e.x, e.y, Math.round((low ? 3 : 7) * big), e.enemyType === 'paperbride' ? 'verm' : 'paper');
+            drops(e.x, e.y - 8, Math.round((low ? 2 : 4) * big), 125);
           } else {
             smoke(e.x, e.y, Math.round((low ? 2 : 4) * big), 12 * big);
-            drops(e.x, e.y - 8, Math.round((low ? 3 : 7) * big), 150);
+            drops(e.x, e.y - 8, Math.round((low ? 3 : 7) * big), 150, e.enemyType === 'cinder' ? 'verm' : 'ink');
           }
           if (!low || e.elite || e.boss) decal(e.x, e.y + 4, 9 * big, isPaper ? 0.12 : 0.2);
           if (e.boss) {
@@ -188,42 +232,88 @@ export function createFx(opts = {}) {
           }
           break;
         }
+        case 'explosion': {
+          const ex = e.x || 0;
+          const ey = e.y || 0;
+          const rad = Math.max(24, Math.min(180, e.radius || 60));
+          const scaleK = Math.min(1.5, rad / 65);
+          if (!low) {
+            scraps(ex, ey, Math.round((e.evolved ? 7 : 4) * scaleK), 'verm');
+            drops(ex, ey - 4, Math.round((e.evolved ? 8 : 5) * scaleK), 175, rng() < 0.5 ? 'lantern' : 'verm');
+          } else {
+            drops(ex, ey - 4, 3, 140, 'verm');
+          }
+          this.addShake((e.evolved ? 0.34 : 0.22) * scaleK);
+          break;
+        }
         case 'propBreak':
           scraps(e.x, e.y - 20, low ? 4 : 10, 'paper');
           drops(e.x, e.y - 20, 6, 120, 'verm');
-          this.addShake(0.15);
+          this.addShake(0.16);
           break;
         case 'playerHurt':
-          this.addShake(0.22);
-          screen.push({ k: 'hurt', t: 0, life: 0.35 });
+          this.addShake(0.32);
+          screen.push({ k: 'hurt', t: 0, life: 0.36 });
+          break;
+        case 'shieldBlock':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
+            drops(e.x, e.y - 10, low ? 3 : 6, 130, 'lantern');
+          }
+          this.addShake(0.14);
           break;
         case 'ult':
           this.addShake(0.75);
-          screen.push({ k: 'bloom', t: 0, life: 0.7, color: 'ink', strength: 0.4 });
+          screen.push({ k: 'bloom', t: 0, life: 0.72, color: e.heroId === 'mian' ? 'verm' : e.heroId === 'daotong' ? 'lantern' : 'ink', strength: 0.42 });
           break;
         case 'levelup':
-          screen.push({ k: 'bloom', t: 0, life: 0.75, color: 'ink', strength: 0.5 });
+          screen.push({ k: 'bloom', t: 0, life: 0.75, color: 'ink', strength: 0.48 });
+          break;
+        case 'synergyUp':
+          screen.push({ k: 'bloom', t: 0, life: 0.6, color: 'verm', strength: 0.24 });
+          break;
+        case 'shrineActivate':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y) && !low) {
+            drops(e.x, e.y - 18, 8, 95, 'lantern');
+            scraps(e.x, e.y - 12, 4, 'verm');
+          }
+          this.addShake(0.18);
+          screen.push({ k: 'bloom', t: 0, life: 0.65, color: 'lantern', strength: 0.26 });
+          break;
+        case 'wave':
+          screen.push({ k: 'wave', t: 0, life: 0.95 });
+          if (!hasActiveBanner() && (e.count || 0) >= 8) {
+            banner('阴风起', '群祟压境', INK, 1.45);
+          }
+          break;
+        case 'warderSpawn':
+          this.addShake(0.3);
+          banner(e.name || '巡夜头目', '夜巡拦路', VERM, 1.85);
           break;
         case 'watchChange':
           if (e.watch >= 1 && e.watch <= 5) banner(CN_NUM[e.watch] + '更', e.watch === 5 ? '天将破晓' : '夜色渐浓', INK);
           break;
         case 'bossSpawn':
-          this.addShake(0.4);
+          this.addShake(0.45);
           banner(BOSS_NAMES[e.bossType] || '夜主', '夜主现身', VERM, 2.4);
           break;
         case 'bossDefeated':
+          this.addHitstop(0.06);
+          this.addShake(0.65);
           banner('破', BOSS_NAMES[e.bossType] || '', INK, 1.6);
           break;
         case 'evolve':
-          screen.push({ k: 'bloom', t: 0, life: 0.9, color: 'verm', strength: 0.35 });
-          banner('开光', EVOLVED_NAMES[e.weaponId] || '', VERM, 2);
+          this.addHitstop(0.05);
+          this.addShake(0.48);
+          screen.push({ k: 'bloom', t: 0, life: 0.95, color: 'verm', strength: 0.42 });
+          banner('开光', e.evoName || EVOLVED_NAMES[e.weaponId] || '', VERM, 2.1);
           break;
         case 'dawn':
           screen.push({ k: 'dawn', t: 0, life: 2.6 });
           banner('鸡鸣 · 天亮', '守夜功成', VERM, 3);
           break;
         case 'revive':
-          screen.push({ k: 'bloom', t: 0, life: 0.9, color: 'ink', strength: 0.6 });
+          this.addShake(0.4);
+          screen.push({ k: 'bloom', t: 0, life: 0.9, color: 'lantern', strength: 0.55 });
           break;
         default:
           break;
@@ -234,7 +324,13 @@ export function createFx(opts = {}) {
       time += dt;
       sinceHitstop += dt;
       hitstop = Math.max(0, hitstop - dt);
-      trauma = Math.max(0, trauma - dt * 2.2);
+      trauma = Math.max(0, trauma - dt * 2.1);
+      const kd = Math.exp(-dt * 18);
+      kickX *= kd;
+      kickY *= kd;
+      if (Math.abs(kickX) < 0.02) kickX = 0;
+      if (Math.abs(kickY) < 0.02) kickY = 0;
+
       let w = 0;
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
@@ -251,7 +347,7 @@ export function createFx(opts = {}) {
           p.vx *= Math.exp(-dt * 3);
           p.vy = p.vy * Math.exp(-dt * 3) + 60 * dt;
           p.rot += p.vr * dt;
-        } else {
+        } else if (p.k === 2) {
           p.vx *= Math.exp(-dt * 2);
         }
         p.x += p.vx * dt;
@@ -275,13 +371,15 @@ export function createFx(opts = {}) {
       screen.length = s;
     },
 
-    /** 震屏偏移（CSS px） */
+    /** 混合方向震屏偏移（CSS px；settings.shake === false 时严格为 0） */
     shakeOffset(enabled = true) {
-      if (!enabled || trauma <= 0) return { x: 0, y: 0 };
+      if (!enabled || (trauma <= 0 && kickX === 0 && kickY === 0)) return { x: 0, y: 0 };
       const m = SHAKE_CAP * trauma * trauma;
+      const ox = kickX + Math.sin(time * 71.3) * m + Math.sin(time * 37.1) * m * 0.35;
+      const oy = kickY + Math.cos(time * 63.7) * m * 0.8;
       return {
-        x: Math.sin(time * 71.3) * m + Math.sin(time * 37.1) * m * 0.4,
-        y: Math.cos(time * 63.7) * m * 0.8,
+        x: Math.max(-SHAKE_CAP, Math.min(SHAKE_CAP, ox)),
+        y: Math.max(-SHAKE_CAP, Math.min(SHAKE_CAP, oy)),
       };
     },
 
@@ -309,8 +407,32 @@ export function createFx(opts = {}) {
         } else if (p.k === 1) {
           const spr = scrapSprite(p.idx, p.color);
           blit(ctx, spr, p.x, p.y, p.size, p.size * Math.abs(Math.cos(p.rot * 0.7)) + 0.2, p.rot, k > 0.7 ? (1 - k) / 0.3 : 1);
+        } else if (p.k === 3) {
+          // 留白斩击花火 / 暴击星芒
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.globalAlpha = 1 - k;
+          const len = p.size * (0.65 + 0.55 * k);
+          ctx.strokeStyle = p.crit ? VERM : PAPER;
+          ctx.lineWidth = p.crit ? 2.4 : 1.8;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-len, 0);
+          ctx.lineTo(len, 0);
+          if (p.crit) {
+            ctx.moveTo(0, -len * 0.78);
+            ctx.lineTo(0, len * 0.78);
+          }
+          ctx.stroke();
+          if (p.crit) {
+            ctx.fillStyle = LANTERN;
+            ctx.beginPath();
+            ctx.arc(0, 0, 2.4 * (1 - k), 0, TAU);
+            ctx.fill();
+          }
+          ctx.restore();
         } else {
-          // 墨烟：硬边墨团，上飘、变淡、略缩
           const spr = puffSprite(p.idx || 0);
           const sz = (p.size / 20) * (1 + k * 0.5) * (1 - k * 0.35);
           blit(ctx, spr, p.x, p.y, sz, sz, p.rot || 0, 0.75 * (1 - k) * (1 - k));
@@ -323,11 +445,10 @@ export function createFx(opts = {}) {
       for (const q of screen) {
         const k = q.t / q.life;
         if (q.k === 'bloom') {
-          // 墨从屏幕中心晕开
           const R = Math.hypot(W, H) * (0.15 + 0.75 * (1 - (1 - k) * (1 - k)));
           const a = q.strength * (1 - k);
           const grd = ctx.createRadialGradient(W / 2, H / 2, R * 0.55, W / 2, H / 2, R);
-          const col = q.color === 'verm' ? [194, 59, 38] : [28, 26, 23];
+          const col = q.color === 'verm' ? RGB.verm : q.color === 'lantern' ? RGB.lantern : RGB.ink;
           grd.addColorStop(0, `rgba(${col},0)`);
           grd.addColorStop(0.75, `rgba(${col},${a})`);
           grd.addColorStop(1, `rgba(${col},0)`);
@@ -336,6 +457,14 @@ export function createFx(opts = {}) {
         } else if (q.k === 'hurt') {
           const a = 0.32 * (1 - k);
           const grd = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+          grd.addColorStop(0, vermA(0));
+          grd.addColorStop(1, vermA(a));
+          ctx.fillStyle = grd;
+          ctx.fillRect(0, 0, W, H);
+        } else if (q.k === 'wave') {
+          // 尸潮来袭：四周阴风淡朱墨晕脉动
+          const a = 0.18 * Math.sin(k * Math.PI);
+          const grd = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.38, W / 2, H / 2, Math.hypot(W, H) * 0.58);
           grd.addColorStop(0, vermA(0));
           grd.addColorStop(1, vermA(a));
           ctx.fillStyle = grd;

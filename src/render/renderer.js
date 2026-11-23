@@ -1,8 +1,9 @@
 // renderer.js —— 渲染入口（ARCHITECTURE §4）
 // createRenderer(canvas, { lowQuality }) → { resize, render, consumeEvents, hitstop, getUltButtonRect, setLowQuality }
 // 渲染层只读 run，绝不修改。
-import { INK, VERM, PAPER, LANTERN, RGB, inkA, paperA, vermA, lanternA } from './palette.js';
+import { INK, VERM, PAPER, PAPER_SHADE, LANTERN, RGB, FONT_CN, inkA, paperA, vermA, lanternA } from './palette.js';
 import { getPaperTile, getWashTile, setMisregistration, softBlob, makeCanvas } from './ink.js';
+import { drawStamp } from './glyphs.js';
 import {
   setSpriteScale,
   clearSpriteCache,
@@ -15,12 +16,18 @@ import {
   shadowSprite,
   eliteRingSprite,
   propSprite,
+  shrineSprite,
   pickupSprite,
   projSprite,
   ringSprite,
   brushArcSprite,
   inkPoolSprite,
+  emberPoolSprite,
   burstSprite,
+  baguaArraySprite,
+  inkWaveSprite,
+  dotSprite,
+  scrapSprite,
 } from './sprites.js';
 import { createGround } from './ground.js';
 import { createFx } from './fx.js';
@@ -29,30 +36,83 @@ import { createHud } from './hud.js';
 
 const TAU = Math.PI * 2;
 
-// 弹体 kind → 所属武器（用于判断开光外观）
+// 弹体 kind → 所属武器（用于缺省开光外观推断）
 const KIND_WEAPON = {
   gongPulse: 'gong',
+  gongWave: 'gong',
   lantern: 'lantern',
   flameRing: 'lantern',
+  lanternRing: 'lantern',
   talisman: 'talisman',
+  talismanChain: 'talisman',
+  talismanArray: 'talisman',
   brushArc: 'brush',
+  inkWave: 'brush',
   inkPool: 'brush',
   coinsword: 'coinsword',
   paperman: 'paperman',
   firecracker: 'firecracker',
   explosion: 'firecracker',
   bellChain: 'bell',
+  compassField: 'compass',
+  soulSweep: 'soulbanner',
+  mirrorBeam: 'bronze_mirror',
+  paperHorse: 'paperhorse',
 };
-const GROUND_KINDS = new Set(['inkPool', 'gongPulse', 'ultPulse', 'flameRing']);
+
+const GROUND_KINDS = new Set([
+  'inkPool',
+  'gongPulse',
+  'gongWave',
+  'ultPulse',
+  'flameRing',
+  'lanternRing',
+  'talismanArray',
+  'compassField',
+  'cinderCore',
+]);
 
 // 精灵朝右绘制、需要随朝向翻转的敌人
-const FLIP_TYPES = new Set(['weasel', 'drowned', 'horse', 'umbrella', 'shade', 'youshen', 'sedan']);
-const FLOAT_TYPES = new Set(['shade', 'lanternghost', 'sedan', 'drowned', 'umbrella']);
-const LANTERN_R = 118; // 灯笼光圈半径（CSS px）
+const FLIP_TYPES = new Set(['weasel', 'drowned', 'suona', 'horse', 'umbrella', 'shade', 'youshen', 'sedan']);
+const FLOAT_TYPES = new Set(['shade', 'lanternghost', 'paperbride', 'sedan', 'drowned', 'umbrella']);
+const LANTERN_R = 118; // 基础灯笼光圈半径（CSS px）
+const SHRINE_GLYPH = { altar: '香', trial: '碑', peddler: '货' };
+const SHRINE_TITLE = { altar: '土地香案', trial: '镇邪试炼碑', peddler: '鬼市货郎' };
 
 function smooth01(a, b, x) {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
+}
+
+function isTelegraphing(e) {
+  if (!e || e.dead) return false;
+  if (e.telegraphProgress > 0 && e.telegraphLen > 0) return true;
+  if (e.state === 'windup' || e.state === 'telegraph' || e.windupT > 0) return true;
+  if (e.type === 'weasel' && e.state === 'pause') return true;
+  return false;
+}
+
+function resolveTelegraphDir(e, ex, ey, px, py) {
+  if (Number.isFinite(e.dx) && Number.isFinite(e.dy) && Math.hypot(e.dx, e.dy) > 0.1) {
+    const l = Math.hypot(e.dx, e.dy);
+    return { ux: e.dx / l, uy: e.dy / l };
+  }
+  if (Number.isFinite(e.telegraphX) && Number.isFinite(e.telegraphY)) {
+    const wx = e.telegraphX - ex;
+    const wy = e.telegraphY - ey;
+    const wl = Math.hypot(wx, wy);
+    if (wl > 3) return { ux: wx / wl, uy: wy / wl };
+    const ul = Math.hypot(e.telegraphX, e.telegraphY);
+    if (ul > 0.1 && ul <= 1.5) return { ux: e.telegraphX / ul, uy: e.telegraphY / ul };
+  }
+  if (Number.isFinite(e.angle) && e.angle !== 0) {
+    return { ux: Math.cos(e.angle), uy: Math.sin(e.angle) };
+  }
+  const dx = px - ex;
+  const dy = py - ey;
+  const dl = Math.hypot(dx, dy);
+  if (dl > 0.01) return { ux: dx / dl, uy: dy / dl };
+  return { ux: 1, uy: 0 };
 }
 
 export function createRenderer(canvas, opts = {}) {
@@ -111,7 +171,7 @@ export function createRenderer(canvas, opts = {}) {
     fx.setLowQuality(low);
   }
 
-  /** 位置插值：记录上一逻辑步与当前逻辑步 */
+  /** 位置插值：记录上一逻辑步与当前逻辑步（若非步进帧坐标直接跳变则立即对齐） */
   function track(key, x, y, newStep) {
     let s = interp.get(key);
     if (!s) {
@@ -126,6 +186,11 @@ export function createRenderer(canvas, opts = {}) {
         s.px = x;
         s.py = y;
       }
+    } else if (s.x !== x || s.y !== y) {
+      s.px = x;
+      s.py = y;
+      s.x = x;
+      s.y = y;
     }
     s.f = frameNo;
     return s;
@@ -155,7 +220,7 @@ export function createRenderer(canvas, opts = {}) {
     return px < e.x ? -1 : 1;
   }
 
-  function drawEnemy(e, x, y, px, a) {
+  function drawEnemy(e, x, y, px, a, crowded) {
     const d = enemyDef(e.type);
     const s = (e.r || d.r) / d.r;
     const id = e.id || 0;
@@ -170,44 +235,226 @@ export function createRenderer(canvas, opts = {}) {
     else if (e.type === 'paperkid') oy = -Math.abs(Math.sin(clock * 9 + id)) * 2.2;
     else rot = Math.sin(clock * 7 + id) * 0.05;
     if (e.type === 'paperkid' || e.type === 'lanternghost') rot = Math.sin(clock * 3.2 + id) * 0.07;
-    if (e.state === 'windup') {
-      sx *= 1.14;
-      sy *= 0.84;
-    } else if (e.state === 'pounce' || e.state === 'charge' || e.state === 'dash') {
-      sx *= 1.12;
-      sy *= 0.94;
+
+    if (e.state === 'windup' || (e.type === 'weasel' && e.state === 'pause')) {
+      sx *= 1.15;
+      sy *= 0.83;
+    } else if (e.state === 'pounce' || e.state === 'charge' || e.state === 'dash' || e.state === 'lunge') {
+      sx *= 1.13;
+      sy *= 0.93;
       rot = 0.18 * flip;
     }
-    const feetY = y + (e.r || d.r) * 0.72;
-    const sh = shadowSprite((e.r || d.r) * 0.95);
-    blit(ctx, sh, x, feetY, 1, 1, 0, a);
-    if (e.elite || e.boss) blit(ctx, eliteRingSprite((e.r || d.r) * 1.15), x, feetY, 1, 1, 0, a);
-    if (e.type === 'drowned') {
-      // 减速光环：墨色涟漪
-      ctx.strokeStyle = inkA(0.22 * a);
-      ctx.lineWidth = 1.2;
-      for (let i = 0; i < 2; i++) {
-        const k = (clock * 0.6 + i * 0.5 + id * 0.13) % 1;
-        const R = (e.r || 13) * (1.4 + k * 2.4);
-        ctx.globalAlpha = 1 - k;
+    // 受击挤压回弹（F11 打击感）
+    if (e.hitT > 0) {
+      const hk = Math.min(1, e.hitT / 0.12);
+      sx *= 1 + hk * 0.14;
+      sy *= 1 - hk * 0.11;
+      rot += -0.08 * hk * flip;
+    }
+
+    const er = e.r || d.r;
+    const feetY = y + er * 0.72;
+    const alpha = e.mirrorClone ? a * 0.78 : a;
+    const sh = shadowSprite(er * 0.95);
+    blit(ctx, sh, x, feetY, 1, 1, 0, alpha);
+
+    if (e.elite || e.boss || e.warder) {
+      blit(ctx, eliteRingSprite(er * (e.warder ? 1.3 : 1.15)), x, feetY, 1, 1, 0, alpha);
+      if (e.warder) {
+        ctx.strokeStyle = lanternA(0.75 * alpha);
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.ellipse(x, feetY, R, R * 0.42, 0, 0, TAU);
+        ctx.ellipse(x, feetY, er * 1.42, er * 0.62, 0, 0, TAU);
         ctx.stroke();
       }
-      ctx.globalAlpha = 1;
     }
-    if (e.boss && (e.phase === 3 || e.state === 'enraged')) {
+
+    // 无面伞女：护盾结界 vs 旋伞破绽地面法环（T1-F2-05）
+    if (e.type === 'umbrella') {
+      const shielded = e.state === 'shield';
+      ctx.save();
+      ctx.strokeStyle = shielded ? VERM : LANTERN;
+      ctx.lineWidth = shielded ? 2.8 : 1.6;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 8, er * (shielded ? 1.55 : 1.25), er * (shielded ? 1.45 : 0.65), 0, 0, TAU);
+      ctx.stroke();
+      if (shielded) {
+        ctx.fillStyle = vermA(0.18);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (!crowded) {
+      if (e.type === 'drowned') {
+        ctx.strokeStyle = inkA(0.22 * alpha);
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 2; i++) {
+          const k = (clock * 0.6 + i * 0.5 + id * 0.13) % 1;
+          const R = er * (1.4 + k * 2.4);
+          ctx.globalAlpha = 1 - k;
+          ctx.beginPath();
+          ctx.ellipse(x, feetY, R, R * 0.42, 0, 0, TAU);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      } else if (e.type === 'suona') {
+        // 吹鼓鬼增益光环
+        const k = (clock * 0.8 + id * 0.2) % 1;
+        ctx.strokeStyle = vermA((1 - k) * 0.32 * alpha);
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.ellipse(x, feetY, er * (1.5 + k * 2.8), er * (0.65 + k * 1.2), 0, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    if (e.boss && (e.phase === 3 || e.state === 'enraged' || e.state === 'enrage')) {
       const img = softBlob(64, 'verm');
-      const R = (e.r || 44) * (2.4 + Math.sin(clock * 6) * 0.15);
+      const R = er * (2.4 + Math.sin(clock * 6) * 0.15);
       ctx.globalAlpha = 0.35;
       ctx.drawImage(img, x - R, feetY - R * 1.6, R * 2, R * 2);
       ctx.globalAlpha = 1;
     }
+
+    // 精英词缀辨识度（F10 5种词缀）
+    if (e.affix && !low) {
+      if (e.affix === 'mirror_twin') {
+        const ghostSpr = enemySprite(e.type, frame, false, e.type === 'umbrella' ? e.state : '');
+        blit(ctx, ghostSpr, x - flip * 7, feetY + oy - 2, sx, sy, rot, 0.32 * alpha);
+      } else if (e.affix === 'swift_step') {
+        ctx.strokeStyle = vermA(0.65);
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x - flip * (er + 4), y - 4);
+        ctx.lineTo(x - flip * (er + 14), y - 4);
+        ctx.moveTo(x - flip * (er + 2), y + 3);
+        ctx.lineTo(x - flip * (er + 11), y + 3);
+        ctx.stroke();
+      }
+    }
+
     const flash = e.hitT > 0;
-    blit(ctx, enemySprite(e.type, frame, flash), x, feetY + oy, sx, sy, rot, a);
+    const stateVariant = e.type === 'umbrella' ? (e.state === 'shield' ? 'shield' : 'open') : '';
+    blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
+
+    // 词缀前景标记（纸甲、阴火、藏宝）
+    if (e.affix) {
+      if (e.affix === 'paper_armor' && (e.paperArmor ?? 1) > 0) {
+        const cnt = Math.min(4, Math.max(1, e.paperArmor || 2));
+        for (let i = 0; i < cnt; i++) {
+          const a0 = clock * 2.6 + (i / cnt) * TAU;
+          const px0 = x + Math.cos(a0) * (er + 5);
+          const py0 = y - 6 + Math.sin(a0) * (er * 0.55);
+          ctx.fillStyle = PAPER;
+          ctx.fillRect(px0 - 2.5, py0 - 4, 5, 8);
+          ctx.strokeStyle = VERM;
+          ctx.lineWidth = 0.9;
+          ctx.strokeRect(px0 - 2.5, py0 - 4, 5, 8);
+        }
+      } else if (e.affix === 'soul_fire') {
+        for (let i = 0; i < 2; i++) {
+          const a0 = clock * 3.4 + i * Math.PI;
+          blit(ctx, pickupSprite('xp', 1), x + Math.cos(a0) * (er + 5), y - 8 + Math.sin(a0) * 5, 0.75, 0.75);
+        }
+      } else if (e.affix === 'treasure_bearer') {
+        blit(ctx, pickupSprite('coin'), x, feetY - d.h * s - 4 + Math.sin(clock * 5) * 2, 0.95, 0.95);
+      }
+    }
+
+    // 异常状态印记（眩晕「定」、减速墨环、阳炎火印、破甲裂印、流血红痕）
+    if (!crowded) {
+      const headY = feetY - d.h * s * 0.88;
+      if (e.stunT > 0) {
+        drawStamp(ctx, '定', x, headY - 6, 9, { seed: 2 });
+      } else if (e.yangyanMarkT > 0 || e.burnT > 0) {
+        blit(ctx, projSprite('flame'), x, headY - 2, 0.9, 0.9, Math.sin(clock * 14 + id) * 0.2);
+      } else if (e.vulnT > 0) {
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x - 4, headY - 6);
+        ctx.lineTo(x + 4, headY + 2);
+        ctx.moveTo(x + 4, headY - 6);
+        ctx.lineTo(x - 4, headY + 2);
+        ctx.stroke();
+      }
+      if (e.slowT > 0) {
+        ctx.strokeStyle = inkA(0.45);
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(x, feetY, er * 1.15, er * 0.45, 0, 0, TAU);
+        ctx.stroke();
+      }
+      if (e.bleedT > 0) {
+        blit(ctx, dotSprite(2, 'verm'), x + Math.sin(clock * 8 + id) * 4, y - 6, 1, 1, 0, 0.85);
+      }
+    }
+
+    // 小头目名牌（巡街轿头 / 冥婚喜娘）
+    if (e.warder && e.warderName) {
+      const ty = feetY - d.h * s - 10;
+      ctx.font = `10px ${FONT_CN}`;
+      const tw = ctx.measureText(e.warderName).width + 8;
+      ctx.fillStyle = VERM;
+      ctx.fillRect(x - tw / 2, ty - 7, tw, 14);
+      ctx.strokeStyle = PAPER;
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(x - tw / 2 + 1, ty - 6, tw - 2, 12);
+      ctx.fillStyle = PAPER;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(e.warderName, x, ty);
+    }
   }
 
-  function drawPlayer(p, x, y, run, a, cosmetics) {
+  function drawShrine(s, pxI, pyI, nearbyId) {
+    const used = !!s.used;
+    const active = !!s.active;
+    const near = !used && !active && (nearbyId === s.id || Math.hypot(s.x - pxI, s.y - pyI) <= 78);
+
+    blit(ctx, shadowSprite(24), s.x, s.y + 3, 1, 1, 0, 0.85);
+
+    // 地面法坛石圈 / 试炼倒计时环
+    if (!used || active) {
+      const pulse = 0.7 + 0.3 * Math.sin(clock * (active ? 7 : 3.2));
+      ctx.save();
+      ctx.strokeStyle = active ? VERM : near ? LANTERN : vermA(0.55 * pulse);
+      ctx.lineWidth = active || near ? 2.4 : 1.5;
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, 32, 15, 0, 0, TAU);
+      ctx.stroke();
+      if (active && s.maxTimer > 0) {
+        const frac = Math.max(0, Math.min(1, s.timer / s.maxTimer));
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, 36, 17, 0, -Math.PI / 2, -Math.PI / 2 + TAU * frac);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    blit(ctx, shrineSprite(s.kind, used, active), s.x, s.y);
+
+    if (near || active) {
+      const label = active ? `镇邪试炼 · ${Math.ceil(s.timer || 0)}` : SHRINE_TITLE[s.kind] || '奇遇';
+      const ly = s.y - 68 + Math.sin(clock * 4) * 2;
+      ctx.font = `11px ${FONT_CN}`;
+      const lw = ctx.measureText(label).width + 12;
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(s.x - lw / 2, ly - 8, lw, 16);
+      ctx.strokeStyle = VERM;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(s.x - lw / 2, ly - 8, lw, 16);
+      ctx.fillStyle = VERM;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, s.x, ly + 0.5);
+    }
+  }
+
+  function drawPlayer(p, x, y, run, a, cosmetics, evoCount) {
     const heroId = p.heroId || run.heroId || 'zhou';
     const moving = !!p.moving;
     const frame = moving ? Math.floor(clock * 10) % 4 : 0;
@@ -217,10 +464,43 @@ export function createRenderer(canvas, opts = {}) {
     let alpha = a;
     if (p.invulnT > 0) alpha *= 0.55 + 0.45 * (Math.sin(clock * 30) > 0 ? 1 : 0.3);
     if (run.status === 'dead') alpha *= 0.5;
+
+    // 开光常驻脚底朱砂八卦法环（T1-F11-02）
+    if (evoCount > 0) {
+      const pulse = 0.94 + 0.06 * Math.sin(clock * 4.2);
+      ctx.save();
+      const grd = ctx.createRadialGradient(x, y + 2, 10, x, y + 2, 46);
+      grd.addColorStop(0, lanternA(0.28 * alpha));
+      grd.addColorStop(0.68, vermA(0.24 * alpha));
+      grd.addColorStop(1, vermA(0));
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(x, y + 2, 46, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+
+      const auraSpr = baguaArraySprite('awakened');
+      const scaleK = (0.88 + Math.min(3, evoCount - 1) * 0.06) * pulse;
+      blit(ctx, auraSpr, x, y + 2, scaleK, scaleK * 0.92, clock * 0.85, 0.92 * alpha);
+      if (evoCount >= 2) {
+        blit(ctx, ringSprite('vthin', 1), x, y + 2, 0.28 * pulse, 0.26 * pulse, -clock * 1.3, 0.75 * alpha);
+      }
+    }
+
     blit(ctx, shadowSprite(10), x, feetY, 1, 1, 0, alpha);
     const spr = heroSprite(heroId, frame, p.hurtT > 0, cosmetics?.outfit || null);
     const lean = moving ? 0.05 * flip : 0;
     blit(ctx, spr, x, feetY + bob, flip, 1, lean, alpha);
+
+    // 无常勾魂幡：护体魂障环绕符纸
+    const barrier = p.soulBarrier || 0;
+    if (barrier > 0) {
+      for (let i = 0; i < barrier; i++) {
+        const ba = clock * 2.8 + (i / barrier) * TAU;
+        blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 20, y - 6 + Math.sin(ba) * 11, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
+      }
+    }
+
     // 手提灯笼：以手为轴摆动
     const hand = heroHand();
     const hx = x + hand.x * flip;
@@ -255,67 +535,192 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
+  function drawLightningPath(pts, off, seed, jitterAmp = 10) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x + off, pts[0].y + off);
+    for (let i = 1; i < pts.length; i++) {
+      const a0 = pts[i - 1];
+      const b0 = pts[i];
+      const nx = -(b0.y - a0.y);
+      const ny = b0.x - a0.x;
+      const l = Math.hypot(nx, ny) || 1;
+      for (let s = 1; s <= 3; s++) {
+        const tt = s / 4;
+        const j = ((((seed * 131 + i * 17 + s * 7) % 23) / 23) - 0.5) * jitterAmp;
+        ctx.lineTo(a0.x + (b0.x - a0.x) * tt + (nx / l) * j + off, a0.y + (b0.y - a0.y) * tt + (ny / l) * j + off);
+      }
+      ctx.lineTo(b0.x + off, b0.y + off);
+    }
+  }
+
   function drawProjectile(p, evo, run, playerPos) {
     const k = p.life > 0 ? Math.max(0, Math.min(1, p.t / p.life)) : 0;
     const id = p.id || 0;
-    const evolved = p.evolved || evo.has(KIND_WEAPON[p.kind]);
+    const evolved = p.evolved !== undefined ? !!p.evolved : evo.has(p.weaponId || KIND_WEAPON[p.kind]);
+
     switch (p.kind) {
-      case 'gongPulse': {
-        const r = p.radius || 60;
-        const a = Math.pow(1 - k, 1.1) * 0.9;
-        blit(ctx, ringSprite(evolved ? 'verm' : 'ink', id % 3), p.x, p.y, r / 100, (r / 100) * 0.92, id * 0.7, a);
-        if (evolved) blit(ctx, ringSprite('thin', (id + 1) % 3), p.x, p.y, (r * 0.82) / 100, (r * 0.82 * 0.92) / 100, 0, a * 0.8);
+      case 'gongPulse':
+      case 'gongWave': {
+        const maxR = p.maxRadius || p.r || 80;
+        const r = p.radius > 0 ? p.radius : maxR * Math.max(0.18, k);
+        const a = Math.pow(1 - k, 1.05) * 0.92;
+        const isThird = (p.waveIdx || 1) >= 3;
+        blit(ctx, ringSprite(evolved || isThird ? 'verm' : 'ink', id % 3), p.x, p.y, r / 100, (r / 100) * 0.92, id * 0.7, a);
+        if (evolved) {
+          blit(ctx, ringSprite('thin', (id + 1) % 3), p.x, p.y, (r * 0.8) / 100, (r * 0.8 * 0.92) / 100, -clock, a * 0.8);
+          if (isThird) {
+            ctx.strokeStyle = lanternA(a * 0.85);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 0.94, 0, TAU);
+            ctx.stroke();
+          }
+        }
         break;
       }
       case 'ultPulse': {
-        const r = p.radius || 100;
-        blit(ctx, ringSprite('ult', id % 3), p.x, p.y, r / 100, (r / 100) * 0.92, 0, 1 - k * k);
+        const maxR = p.maxRadius || p.r || 180;
+        const r = p.radius > 0 ? p.radius : maxR * Math.max(0.2, k);
+        const a = 1 - k * k;
+        blit(ctx, ringSprite('ult', id % 3), p.x, p.y, r / 100, (r / 100) * 0.92, clock * 0.5, a);
+        blit(ctx, ringSprite('verm', (id + 1) % 3), p.x, p.y, (r * 0.68) / 100, (r * 0.68 * 0.92) / 100, -clock * 0.8, a * 0.75);
         break;
       }
       case 'inkPool': {
-        const r = p.radius || 40;
-        const a = Math.min(1, p.t / 0.15) * (k > 0.75 ? (1 - k) / 0.25 : 1);
-        blit(ctx, inkPoolSprite(id), p.x, p.y, r / 50, r / 50, 0, a);
+        const r = p.radius || p.r || 42;
+        const a = Math.min(1, (p.t + 0.04) / 0.15) * (k > 0.75 ? (1 - k) / 0.25 : 1);
+        if (p.subKind === 'emberZone') {
+          blit(ctx, emberPoolSprite(id), p.x, p.y, r / 50, r / 50, (id % 4) * 0.8, a);
+        } else {
+          blit(ctx, inkPoolSprite(id), p.x, p.y, r / 50, r / 50, 0, a);
+          if (p.subKind === 'inkRiver' && !low) {
+            ctx.strokeStyle = paperA(0.32 * a);
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 0.52, clock, clock + 2.2);
+            ctx.stroke();
+          }
+        }
         break;
       }
-      case 'flameRing': {
-        const R = p.radius || 70;
+      case 'talismanArray': {
+        const R = p.radius || 95;
+        const a = Math.min(1, (p.t + 0.03) / 0.14) * (k > 0.82 ? (1 - k) / 0.18 : 1);
+        blit(ctx, baguaArraySprite('talisman'), p.x, p.y, R / 100, R / 100, clock * 0.9 + id * 0.3, a * 0.92);
+        if (!low) {
+          blit(ctx, ringSprite('vthin', id % 3), p.x, p.y, (R * 0.52) / 100, (R * 0.52) / 100, -clock * 1.6, a * 0.75);
+        }
+        break;
+      }
+      case 'compassField': {
+        const R = p.radius || 85;
+        const a = Math.min(1, (p.t + 0.03) / 0.15) * (k > 0.82 ? (1 - k) / 0.18 : 1);
+        const dir = clock * (evolved ? 1.6 : 1.0);
+        blit(ctx, baguaArraySprite(evolved ? 'compassEvo' : 'compass'), p.x, p.y, R / 100, R / 100, dir, a * 0.9);
+        blit(ctx, projSprite('compass'), p.x, p.y, evolved ? 1.15 : 0.95, evolved ? 1.15 : 0.95, -dir * 1.5, a);
+        break;
+      }
+      case 'cinderCore': {
+        const R = p.radius || 68;
+        const pulse = 1 + Math.sin(clock * 28 + id) * 0.18;
+        ctx.save();
+        ctx.strokeStyle = vermA(0.32 + 0.45 * k);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, R, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = vermA(0.08 + 0.14 * k);
+        ctx.fill();
+        // 向内收束的引爆倒计时红环
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(8, R * (1 - k * 0.86)), 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+        blit(ctx, projSprite('cinderCore'), p.x, p.y, pulse, pulse, clock * 6 + id);
+        break;
+      }
+      case 'flameRing':
+      case 'lanternRing': {
+        const R = p.radius || 75;
         const cx = p.x ?? playerPos.x;
         const cy = p.y ?? playerPos.y;
-        ctx.strokeStyle = vermA(0.35);
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = vermA(0.38);
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
         ctx.ellipse(cx, cy, R, R, 0, 0, TAU);
         ctx.stroke();
-        const n = Math.max(10, Math.round((TAU * R) / (low ? 22 : 15)));
+        const n = Math.max(10, Math.round((TAU * R) / (low ? 24 : 16)));
         const spr = projSprite('flame');
-        const rotBase = clock * 0.8;
+        const rotBase = clock * 0.9;
         for (let i = 0; i < n; i++) {
           const a = rotBase + (i / n) * TAU;
           const fl = 0.85 + 0.3 * Math.sin(clock * 12 + i * 1.9);
           blit(ctx, spr, cx + Math.cos(a) * R, cy + Math.sin(a) * R, fl * 0.9, fl, a + Math.PI / 2);
         }
+        // 长明灯：逆向旋转内层双火莲环
+        if (p.dualLotus || p.innerRadius > 0) {
+          const ir = p.innerRadius || R * 0.56;
+          ctx.strokeStyle = lanternA(0.5);
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(cx, cy, ir, 0, TAU);
+          ctx.stroke();
+          const inCount = Math.max(6, Math.round(n * 0.55));
+          for (let i = 0; i < inCount; i++) {
+            const a = -rotBase * 1.35 + (i / inCount) * TAU;
+            blit(ctx, spr, cx + Math.cos(a) * ir, cy + Math.sin(a) * ir, 0.72, 0.78, a - Math.PI / 2, 0.9);
+          }
+        }
         break;
       }
       case 'lantern': {
-        const fl = 1 + Math.sin(clock * 14 + id) * 0.06;
+        const fl = 1 + Math.sin(clock * 14 + id) * 0.07;
         blit(ctx, shadowSprite(5), p.x, p.y + 12, 1, 1, 0, 0.6);
-        blit(ctx, projSprite('lantern'), p.x, p.y, fl, fl, Math.sin(clock * 4 + id) * 0.15);
+        blit(ctx, projSprite(evolved ? 'lanternEvo' : 'lantern'), p.x, p.y, fl, fl, Math.sin(clock * 4 + id) * 0.15);
         break;
       }
       case 'talisman': {
         const a = Math.atan2(p.vy || 0, p.vx || 1) + Math.PI / 2;
         const flutter = 0.75 + 0.25 * Math.cos(clock * 16 + id);
         if (!low) {
-          ctx.fillStyle = evolved ? vermA(0.35) : inkA(0.25);
-          const bx = p.x - Math.sin(a) * -10;
-          const by = p.y + Math.cos(a) * 10;
+          ctx.fillStyle = evolved ? lanternA(0.65) : inkA(0.25);
+          const bx = p.x + Math.sin(a) * 10;
+          const by = p.y - Math.cos(a) * 10;
           ctx.beginPath();
-          ctx.arc(bx, by, 1.2, 0, TAU);
-          ctx.arc(bx - Math.sin(a) * -6, by + Math.cos(a) * 6, 0.8, 0, TAU);
+          ctx.arc(bx, by, evolved ? 1.8 : 1.2, 0, TAU);
           ctx.fill();
         }
         blit(ctx, projSprite(evolved ? 'talismanEvo' : 'talisman'), p.x, p.y, flutter, 1, a);
+        break;
+      }
+      case 'talismanChain': {
+        // 天师符阵雷电链（朱砂金雷折线 + 符印星火，绝不绘制铜铃！）
+        const pts = p.points || (p.x1 != null ? [{ x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 }] : []);
+        if (pts.length < 2) break;
+        const a = 1 - k;
+        const seed = Math.floor(clock * 30) + id;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 3.4;
+        drawLightningPath(pts, 0, seed, 14);
+        ctx.stroke();
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 1.8;
+        drawLightningPath(pts, low ? 0 : 0.8, seed + 3, 10);
+        ctx.stroke();
+        ctx.fillStyle = PAPER;
+        for (let i = 0; i < pts.length; i++) {
+          const q = pts[i];
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, 3.2, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
         break;
       }
       case 'brushArc': {
@@ -326,11 +731,10 @@ export function createRenderer(canvas, opts = {}) {
         const a = k < 0.15 ? 1 : 1 - Math.pow((k - 0.15) / 0.85, 2);
         ctx.save();
         if (k < 0.3) {
-          // 扫出：扇形裁剪
           const sweep = Math.max(0.05, k / 0.3);
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
-          ctx.arc(p.x, p.y, R * 1.5, p.angle - spread / 2 - 0.3, p.angle - spread / 2 + (spread + 0.6) * sweep);
+          ctx.arc(p.x, p.y, R * 1.5, (p.angle || 0) - spread / 2 - 0.3, (p.angle || 0) - spread / 2 + (spread + 0.6) * sweep);
           ctx.closePath();
           ctx.clip();
         }
@@ -338,8 +742,41 @@ export function createRenderer(canvas, opts = {}) {
         ctx.restore();
         break;
       }
+      case 'inkWave': {
+        const R = p.radius || p.hitR || 26;
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        const a = k > 0.82 ? (1 - k) / 0.18 : 1;
+        const sc = R / 26;
+        if (!low) {
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          ctx.strokeStyle = vermA(0.45 * a);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p.x - ux * 22, p.y - uy * 22);
+          ctx.lineTo(p.x - ux * 4, p.y - uy * 4);
+          ctx.stroke();
+        }
+        blit(ctx, inkWaveSprite(evolved), p.x, p.y, sc, sc, ang, a);
+        break;
+      }
       case 'coinsword': {
-        const a = p.returning ? clock * 16 + id : Math.atan2(p.vy || 0, p.vx || 1);
+        const a = Number.isFinite(p.angle) ? p.angle : p.returning ? clock * 16 + id : Math.atan2(p.vy || 0, p.vx || 1);
+        if (evolved && !low) {
+          const vx = p.vx || Math.cos(a) * 120;
+          const vy = p.vy || Math.sin(a) * 120;
+          const l = Math.hypot(vx, vy) || 1;
+          ctx.strokeStyle = vermA(0.55);
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - (vx / l) * 22, p.y - (vy / l) * 22);
+          ctx.stroke();
+          ctx.fillStyle = LANTERN;
+          ctx.beginPath();
+          ctx.arc(p.x - (vx / l) * 10, p.y - (vy / l) * 10, 2, 0, TAU);
+          ctx.fill();
+        }
         blit(ctx, shadowSprite(6), p.x, p.y + 10, 1, 1, 0, 0.4);
         blit(ctx, projSprite(evolved ? 'coinswordEvo' : 'coinsword'), p.x, p.y, 1, 1, a);
         break;
@@ -350,8 +787,23 @@ export function createRenderer(canvas, opts = {}) {
         if (last && Math.abs(p.x - last.x) > 0.3) flip = p.x < last.x ? -1 : 1;
         pmLast.set(id, { x: p.x, flip, f: frameNo });
         const fr = Math.floor(clock * 10 + id) % 2;
-        blit(ctx, shadowSprite(6), p.x, p.y + 8, 1, 1, 0, 0.8);
-        blit(ctx, projSprite((evolved ? 'papermanEvo' : 'paperman') + fr), p.x, p.y + 8, flip, 1, Math.sin(clock * 12 + id) * 0.08);
+        const role = p.role || 'seeker';
+        const fade = p.persistent === false && k > 0.85 ? (1 - k) / 0.15 : 1;
+        let sprName = (evolved ? 'papermanEvo' : 'paperman') + fr;
+        if (role === 'guard') sprName = 'papermanGuard' + fr;
+        else if (role === 'cavalry') sprName = 'papermanCavalry' + fr;
+        else if (role === 'imp') sprName = 'papermanImp' + fr;
+
+        if (role === 'cavalry' && p.mode === 'charge' && !low) {
+          ctx.strokeStyle = vermA(0.6);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p.x - flip * 18, p.y - 4);
+          ctx.lineTo(p.x - flip * 4, p.y - 4);
+          ctx.stroke();
+        }
+        blit(ctx, shadowSprite(role === 'cavalry' ? 9 : 6), p.x, p.y + 8, 1, 1, 0, 0.8 * fade);
+        blit(ctx, projSprite(sprName), p.x, p.y + 8, flip, 1, Math.sin(clock * 12 + id) * 0.08, fade);
         break;
       }
       case 'firecracker': {
@@ -362,18 +814,29 @@ export function createRenderer(canvas, opts = {}) {
         const gx = fx0 + (tx - fx0) * k;
         const gy = fy0 + (ty - fy0) * k;
         const h = Math.sin(Math.PI * k) * 70;
+        const tr = (p.radius || 55) / 100;
         blit(ctx, shadowSprite(4), gx, gy + 4, 1 - h / 160, 1 - h / 160, 0, 0.7);
-        // 目标点：朱红笔圈
-        blit(ctx, ringSprite('vthin', id % 3), tx, ty, 0.2, 0.09, 0, 0.35 + 0.4 * k);
-        blit(ctx, projSprite('firecracker'), gx, gy - h, 1, 1, clock * 12 + id);
+        blit(ctx, ringSprite('vthin', id % 3), tx, ty, tr, tr * 0.5, 0, 0.35 + 0.45 * k);
+        const rot = clock * 12 + id;
+        blit(ctx, projSprite('firecracker'), gx, gy - h, evolved ? 1.2 : 1, evolved ? 1.2 : 1, rot);
+        if (evolved) {
+          blit(ctx, projSprite('firecracker'), gx - 5, gy - h + 3, 0.9, 0.9, rot + 1.2);
+          blit(ctx, projSprite('firecracker'), gx + 5, gy - h + 3, 0.9, 0.9, rot - 1.2);
+        }
         break;
       }
       case 'explosion': {
-        const r = p.radius || 50;
+        const r = p.radius || p.r || 50;
         const e = 1 - (1 - k) * (1 - k);
         const fa = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;
-        blit(ctx, burstSprite(id), p.x, p.y, (r / 50) * (0.55 + 0.5 * e), (r / 50) * (0.55 + 0.5 * e) * 0.85, id, fa);
-        blit(ctx, ringSprite('thin', id % 3), p.x, p.y, (r * (0.8 + 0.4 * e)) / 100, (r * (0.8 + 0.4 * e) * 0.85) / 100, 0, (1 - k) * 0.5);
+        blit(ctx, burstSprite(id), p.x, p.y, (r / 50) * (0.55 + 0.5 * e), (r / 50) * (0.55 + 0.5 * e) * 0.88, id, fa);
+        blit(ctx, ringSprite(evolved ? 'verm' : 'thin', id % 3), p.x, p.y, (r * (0.82 + 0.42 * e)) / 100, (r * (0.82 + 0.42 * e) * 0.88) / 100, 0, (1 - k) * 0.65);
+        if (evolved || p.subKind === 'firecrackerLotus' || p.subKind === 'solarFlare' || p.subKind === 'starCleave') {
+          ctx.fillStyle = lanternA((1 - k) * 0.65);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 0.34 * (1 - k * 0.4), 0, TAU);
+          ctx.fill();
+        }
         break;
       }
       case 'bellChain': {
@@ -385,39 +848,152 @@ export function createRenderer(canvas, opts = {}) {
         ctx.globalAlpha = a;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        const path = (off) => {
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x + off, pts[0].y + off);
-          for (let i = 1; i < pts.length; i++) {
-            const a0 = pts[i - 1];
-            const b0 = pts[i];
-            const nx = -(b0.y - a0.y);
-            const ny = b0.x - a0.x;
-            const l = Math.hypot(nx, ny) || 1;
-            for (let s = 1; s <= 3; s++) {
-              const tt = s / 4;
-              const j = ((((seed * 131 + i * 17 + s * 7) % 23) / 23) - 0.5) * 12;
-              ctx.lineTo(a0.x + (b0.x - a0.x) * tt + (nx / l) * j + off, a0.y + (b0.y - a0.y) * tt + (ny / l) * j + off);
-            }
-            ctx.lineTo(b0.x + off, b0.y + off);
-          }
-        };
         ctx.strokeStyle = evolved ? VERM : INK;
-        ctx.lineWidth = 2.2;
-        path(0);
+        ctx.lineWidth = p.subKind === 'soulEcho' ? 3 : 2.2;
+        drawLightningPath(pts, 0, seed, 11);
         ctx.stroke();
-        ctx.strokeStyle = evolved ? INK : VERM;
-        ctx.lineWidth = 1;
-        path(low ? 0 : 1);
+        ctx.strokeStyle = p.subKind === 'soulEcho' ? LANTERN : evolved ? INK : VERM;
+        ctx.lineWidth = 1.1;
+        drawLightningPath(pts, low ? 0 : 1, seed + 5, 9);
         ctx.stroke();
         ctx.restore();
         const bell = projSprite('bell');
-        for (const q of pts) blit(ctx, bell, q.x, q.y - 4, 1, 1, Math.sin(clock * 20 + q.x) * 0.3, a);
+        const step = pts.length > 10 ? Math.ceil(pts.length / 10) : 1;
+        for (let i = 0; i < pts.length; i += step) {
+          const q = pts[i];
+          blit(ctx, bell, q.x, q.y - 4, 1, 1, Math.sin(clock * 20 + q.x) * 0.3, a);
+        }
+        if (p.subKind === 'soulEcho') {
+          const end = pts[pts.length - 1];
+          blit(ctx, ringSprite('verm', id % 3), end.x, end.y, (0.25 + 0.35 * k), (0.25 + 0.35 * k), 0, a * 0.8);
+        }
+        break;
+      }
+      case 'soulSweep': {
+        // 招魂幡 / 无常勾魂幡：浓墨朱砂扇弧横扫
+        const R = p.radius || 115;
+        const spread = Math.min(TAU * 0.94, p.spread ?? p.arc ?? 2.1);
+        const ang = p.angle || 0;
+        const a = k < 0.2 ? 1 : 1 - Math.pow((k - 0.2) / 0.8, 1.8);
+        const spr = brushArcSprite(R, spread, true);
+        const sc = R / Math.max(30, Math.round(R / 8) * 8);
+        blit(ctx, spr, p.x, p.y, sc, sc * (p.reverse ? -1 : 1), ang, a * 0.92);
+        ctx.save();
+        ctx.strokeStyle = evolved ? LANTERN : VERM;
+        ctx.lineWidth = evolved ? 3.2 : 2.2;
+        ctx.globalAlpha = a * 0.85;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, R * 0.95, ang - spread * 0.46, ang + spread * 0.46);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      }
+      case 'mirrorBeam': {
+        // 照妖铜镜 / 乾坤赤阳镜：横扫赤阳神光柱
+        const len = p.length || p.radius || 220;
+        const ang = p.angle || 0;
+        const x0 = p.x;
+        const y0 = p.y;
+        const x1 = Number.isFinite(p.endX) ? p.endX : x0 + Math.cos(ang) * len;
+        const y1 = Number.isFinite(p.endY) ? p.endY : y0 + Math.sin(ang) * len;
+        const w = p.width || (evolved ? 30 : 18);
+        const fade = Math.min(1, (p.t + 0.03) / 0.08) * (k > 0.86 ? (1 - k) / 0.14 : 1);
+        const pulse = 0.9 + 0.1 * Math.sin(clock * 32 + id);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = vermA(evolved ? 0.46 : 0.3);
+        ctx.lineWidth = w * 1.25 * pulse;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = w * 0.62 * pulse;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.strokeStyle = PAPER;
+        ctx.lineWidth = Math.max(2, w * 0.24);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        // 光束末端耀斑
+        ctx.fillStyle = LANTERN;
+        ctx.beginPath();
+        ctx.arc(x1, y1, w * 0.42 * pulse, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        blit(ctx, projSprite('bronzeMirror'), x0 + Math.cos(ang) * 14, y0 + Math.sin(ang) * 14, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        break;
+      }
+      case 'paperHorse': {
+        // 纸马镖 / 百鬼夜行铁骑
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        const flipY = Math.cos(ang) < 0 ? -1 : 1;
+        const isEvo = evolved || !!p.trampleBullets || !!p.ult;
+        const gallop = Math.sin(clock * 22 + id) * 1.8;
+        if (!low) {
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          ctx.strokeStyle = isEvo ? lanternA(0.65) : vermA(0.45);
+          ctx.lineWidth = isEvo ? 2.6 : 1.8;
+          ctx.beginPath();
+          ctx.moveTo(p.x - ux * 26, p.y - uy * 26);
+          ctx.lineTo(p.x - ux * 6, p.y - uy * 6);
+          ctx.stroke();
+        }
+        blit(ctx, shadowSprite(9), p.x, p.y + 10, 1, 1, 0, 0.55);
+        blit(ctx, projSprite(isEvo ? 'paperHorseEvo' : 'paperHorse'), p.x, p.y + gallop, isEvo ? 1.15 : 1, (isEvo ? 1.15 : 1) * flipY, ang);
+        break;
+      }
+      case 'thunderBolt': {
+        // 九天玄雷敕 / 道法天雷：通天雷柱 + 地面焦印
+        const R = p.radius || 56;
+        const a = 1 - k;
+        blit(ctx, ringSprite('verm', id % 3), p.x, p.y, R / 100, (R / 100) * 0.72, id, a * 0.9);
+        const boltPts = [
+          { x: p.x + ((id % 5) - 2) * 8, y: p.y - 230 },
+          { x: p.x - 10, y: p.y - 140 },
+          { x: p.x + 9, y: p.y - 68 },
+          { x: p.x, y: p.y },
+        ];
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 6.5 * (1 - k * 0.4);
+        drawLightningPath(boltPts, 0, id + 11, 12);
+        ctx.stroke();
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 3.4 * (1 - k * 0.3);
+        drawLightningPath(boltPts, 0, id + 11, 8);
+        ctx.stroke();
+        ctx.strokeStyle = PAPER;
+        ctx.lineWidth = 1.6;
+        drawLightningPath(boltPts, 0, id + 11, 4);
+        ctx.stroke();
+        if (k < 0.35) {
+          ctx.fillStyle = paperA((1 - k / 0.35) * 0.75);
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, R * 0.55, R * 0.35, 0, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
         break;
       }
       case 'enemyBullet': {
-        if (p.style === 'ink') blit(ctx, projSprite('inkBullet'), p.x, p.y, 1, 1, clock * 3 + id);
-        else blit(ctx, projSprite('paperMoney'), p.x, p.y, Math.max(0.3, Math.abs(Math.cos(clock * 9 + id))), 1, id);
+        if (p.style === 'ink') {
+          blit(ctx, projSprite('inkBullet'), p.x, p.y, 1, 1, clock * 3 + id);
+        } else if (p.source === 'paperbride' || p.source === 'soul_fire' || p.style === 'soulFire') {
+          const ang = Math.atan2(p.vy || 0, p.vx || 1);
+          blit(ctx, projSprite('soulFireBullet'), p.x, p.y, 1.05, 1.05, ang);
+        } else {
+          blit(ctx, projSprite('paperMoney'), p.x, p.y, Math.max(0.3, Math.abs(Math.cos(clock * 9 + id))), 1, id);
+        }
         break;
       }
       default: {
@@ -429,8 +1005,8 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
-  /** 夜色：墨晕遮罩 + 灯笼光圈挖空；darkness ∈ [0,1] */
-  function drawDarkness(darkness, lsx, lsy, camx, camy) {
+  /** 夜色遮罩 + 动态灯笼/神龛光圈挖空 */
+  function drawDarkness(darkness, lsx, lsy, camx, camy, lightR, evoCount, shrines, ox, oy) {
     if (darkness <= 0.01) return;
     const dw = darkCanvas.width;
     const dh = darkCanvas.height;
@@ -438,7 +1014,6 @@ export function createRenderer(canvas, opts = {}) {
     const S = 1 / DARK_DOWN;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, dw, dh);
-    // 墨从四周往里洇：夜越深，干净的中心越小、四周越浓
     const cx = dw / 2;
     const cy = dh / 2;
     const ink = RGB.ink;
@@ -446,7 +1021,6 @@ export function createRenderer(canvas, opts = {}) {
     const midA = Math.min(0.95, 0.12 + 0.98 * darkness);
     const edgeA = Math.min(0.98, 0.3 + darkness * 0.85);
     g.save();
-    // 竖屏：单位圆映射为过四角的椭圆（边中点约 0.707）
     g.translate(cx, cy);
     g.scale((dw / 2) * 1.4142, (dh / 2) * 1.4142);
     const grd = g.createRadialGradient(0, 0, i0, 0, 0, 1);
@@ -456,7 +1030,7 @@ export function createRenderer(canvas, opts = {}) {
     g.fillStyle = grd;
     g.fillRect(-1, -1, 2, 2);
     g.restore();
-    // 不均匀的墨云：只叠在已有墨色上（source-atop），随世界缓慢漂移
+
     if (!low) {
       if (!washPattern) washPattern = g.createPattern(getWashTile(), 'repeat');
       g.save();
@@ -467,36 +1041,263 @@ export function createRenderer(canvas, opts = {}) {
       g.fillRect(0, 0, dw + 384, dh + 384);
       g.restore();
     }
-    // 灯笼光圈：挖空
+
+    // 玩家灯笼光圈挖空（随 lightRadius 与开光神兵数明显扩张）
     const flick = 1 + Math.sin(clock * 7.3) * 0.02 + Math.sin(clock * 17.1) * 0.012;
-    const R = LANTERN_R * flick * S;
+    const R = lightR * flick * S;
     const lx = lsx * S;
     const ly = lsy * S;
     g.globalCompositeOperation = 'destination-out';
-    const cut = g.createRadialGradient(lx, ly, R * 0.25, lx, ly, R * 1.25);
+    const cut = g.createRadialGradient(lx, ly, R * 0.28, lx, ly, R * 1.28);
     cut.addColorStop(0, 'rgba(0,0,0,1)');
-    cut.addColorStop(0.55, 'rgba(0,0,0,0.92)');
+    cut.addColorStop(evoCount > 0 ? 0.66 : 0.55, 'rgba(0,0,0,0.94)');
     cut.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = cut;
     g.beginPath();
     g.arc(lx, ly, R * 1.3, 0, TAU);
     g.fill();
+
+    // 视野内未使用的神龛香烛微光挖空
+    if (shrines && shrines.length) {
+      for (let i = 0; i < shrines.length; i++) {
+        const s = shrines[i];
+        if (s.used && !s.active) continue;
+        const sx = (s.x + ox) * S;
+        const sy = (s.y - 24 + oy) * S;
+        if (sx < -20 || sx > dw + 20 || sy < -20 || sy > dh + 20) continue;
+        const sr = 14;
+        const sc = g.createRadialGradient(sx, sy, 2, sx, sy, sr);
+        sc.addColorStop(0, 'rgba(0,0,0,0.85)');
+        sc.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = sc;
+        g.beginPath();
+        g.arc(sx, sy, sr, 0, TAU);
+        g.fill();
+      }
+    }
+
     g.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(darkCanvas, 0, 0, W, H);
   }
 
-  /** 灯笼暖光：唯一的暖色光 */
-  function drawLanternWarmth(lsx, lsy, darkness) {
+  /** 灯笼暖光（开光后暖光半径与亮度同步增强） */
+  function drawLanternWarmth(lsx, lsy, darkness, lightR, evoCount) {
     const flick = 1 + Math.sin(clock * 7.3) * 0.03 + Math.sin(clock * 23.7) * 0.015;
-    const R = LANTERN_R * 1.05 * flick;
-    const a = 0.07 + darkness * 0.2;
+    const R = lightR * (evoCount > 0 ? 1.14 : 1.05) * flick;
+    const boost = evoCount > 0 ? 0.045 : 0;
+    const a = 0.07 + darkness * 0.2 + boost;
     const grd = ctx.createRadialGradient(lsx, lsy, 2, lsx, lsy, R);
-    grd.addColorStop(0, lanternA(a * 1.6));
-    grd.addColorStop(0.35, lanternA(a));
+    grd.addColorStop(0, lanternA(Math.min(0.55, a * 1.65)));
+    grd.addColorStop(0.42, lanternA(a));
     grd.addColorStop(1, lanternA(0));
     ctx.fillStyle = grd;
     ctx.fillRect(lsx - R, lsy - R, R * 2, R * 2);
+  }
+
+  /** 穿透夜色的朱砂冲锋预警走廊与蓄力红眼（T1-F2-05，低画质同样必画！） */
+  function drawTelegraphsAboveDarkness(ens, pxI, pyI, vx, vy, al) {
+    for (let i = 0; i < ens.length; i++) {
+      const e = ens[i];
+      if (!isTelegraphing(e)) continue;
+      const st = interp.get(e.id);
+      const ex = st && al < 0.999 ? st.px + (st.x - st.px) * al : e.x;
+      const ey = st && al < 0.999 ? st.py + (st.y - st.py) * al : e.y;
+      const cull = e.boss ? 760 : 380;
+      if (ex < vx - cull || ex > vx + W + cull || ey < vy - cull || ey > vy + H + cull) continue;
+
+      const { ux, uy } = resolveTelegraphDir(e, ex, ey, pxI, pyI);
+      const ang = Math.atan2(uy, ux);
+      const len = e.telegraphLen > 0 ? e.telegraphLen : e.type === 'horse' ? 264 : e.type === 'youshen' ? 238 : 155;
+      const distP = Math.hypot(pxI - ex, pyI - ey);
+      const sightLen = e.boss ? Math.max(len, Math.min(520, distP + 40)) : len;
+      const width = e.telegraphWidth > 0 ? e.telegraphWidth : e.type === 'horse' ? 60 : e.type === 'youshen' ? 72 : 26;
+      const prog = e.telegraphProgress > 0 ? Math.max(0.22, Math.min(1, e.telegraphProgress)) : 0.72;
+      const hw = width / 2;
+
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(ang);
+
+      // 预警走廊底带 + 蓄力推进朱砂实心带
+      ctx.fillStyle = vermA(0.36);
+      ctx.fillRect(0, -hw, len, width);
+      ctx.fillStyle = vermA(0.68);
+      ctx.fillRect(0, -hw + 2, len * prog, Math.max(4, width - 4));
+
+      // 若夜主在竖屏侧方远距（如 spawnDist=430）起手蓄力，延伸朱砂杀气贯通警戒轨直达视野中央
+      if (sightLen > len + 8) {
+        ctx.fillStyle = vermA(0.26);
+        ctx.fillRect(len, -hw * 0.7, sightLen - len, width * 0.7);
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(len, 0);
+        ctx.lineTo(sightLen, 0);
+        ctx.moveTo(len, -hw * 0.7);
+        ctx.lineTo(sightLen, -hw * 0.7);
+        ctx.moveTo(len, hw * 0.7);
+        ctx.lineTo(sightLen, hw * 0.7);
+        for (let d = len + 28; d < sightLen - 10; d += 38) {
+          ctx.moveTo(d - 9, -12);
+          ctx.lineTo(d + 5, 0);
+          ctx.lineTo(d - 9, 12);
+        }
+        ctx.stroke();
+      }
+
+      // 两侧醒目纯朱红边界线与中心冲锋箭头阵列
+      ctx.strokeStyle = VERM;
+      ctx.lineWidth = e.boss ? 3.5 : 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, -hw);
+      ctx.lineTo(len, -hw);
+      ctx.moveTo(0, hw);
+      ctx.lineTo(len, hw);
+      const step = e.boss ? 40 : 30;
+      const chW = Math.min(hw * 0.68, 17);
+      for (let d = 22; d < len - 14; d += step) {
+        ctx.moveTo(d - 10, -chW);
+        ctx.lineTo(d + 5, 0);
+        ctx.lineTo(d - 10, chW);
+      }
+      ctx.stroke();
+
+      // 走廊尽头实心朱砂锋镝箭头
+      ctx.fillStyle = VERM;
+      ctx.beginPath();
+      ctx.moveTo(len + 14, 0);
+      ctx.lineTo(len - 8, -hw * 0.85);
+      ctx.lineTo(len - 3, 0);
+      ctx.lineTo(len - 8, hw * 0.85);
+      ctx.closePath();
+      ctx.fill();
+
+      // 蓄力起点锁定圈
+      ctx.strokeStyle = LANTERN;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, (e.r || 20) * (1.15 - 0.2 * prog), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+
+      // 黑暗中刺目的蓄力凶眼（朱砂外芒 + 琥珀瞳芯）
+      const def = enemyDef(e.type);
+      const eyes = def.eyes || [[0, -(e.r || 20) * 1.4]];
+      const s = (e.r || def.r) / def.r;
+      const flip = enemyFlip(e, pxI);
+      const feetY = ey + (e.r || def.r) * 0.72;
+      for (let k = 0; k < eyes.length; k++) {
+        const [oxEye, oyEye] = eyes[k];
+        const wx = ex + oxEye * s * flip;
+        const wy = feetY + oyEye * s;
+        ctx.fillStyle = VERM;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 3.8 * Math.max(1, s * 0.9), 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = LANTERN;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 1.7 * Math.max(1, s * 0.85), 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
+  /** 屏幕边缘奇遇方向朱砂路引标（T1-F9-05，夜色遮罩之上） */
+  function drawShrinePointers(run, ox, oy, settings) {
+    const shrines = run.shrines;
+    if (!shrines || !shrines.length) return;
+    const st = settings.safeTop || 0;
+    const sb = settings.safeBottom || 0;
+    const minX = 24;
+    const maxX = W - 24;
+    const minY = st + (run.boss ? 130 : 88);
+    const maxY = H - sb - 110;
+    const cx = W / 2;
+    const cy = H / 2;
+
+    for (let i = 0; i < shrines.length; i++) {
+      const s = shrines[i];
+      if (s.used && !s.active) continue;
+      const sx = s.x + ox;
+      const sy = s.y + oy;
+      // 已在可视区中心内则无需屏幕边缘箭头
+      if (sx >= 20 && sx <= W - 20 && sy >= st + 76 && sy <= H - sb - 76) continue;
+
+      const dx = sx - cx;
+      const dy = sy - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+
+      // 射线与安全内框求交
+      let tEdge = Infinity;
+      if (ux > 0.001) tEdge = Math.min(tEdge, (maxX - cx) / ux);
+      else if (ux < -0.001) tEdge = Math.min(tEdge, (minX - cx) / ux);
+      if (uy > 0.001) tEdge = Math.min(tEdge, (maxY - cy) / uy);
+      else if (uy < -0.001) tEdge = Math.min(tEdge, (minY - cy) / uy);
+      if (!Number.isFinite(tEdge)) continue;
+
+      const ax = Math.max(minX, Math.min(maxX, cx + ux * tEdge));
+      const ay = Math.max(minY, Math.min(maxY, cy + uy * tEdge));
+      const ang = Math.atan2(uy, ux);
+
+      // 向外探出直抵屏边 5px 的纯朱红木刻三角锋标（确保屏边采样区富含 #C23B26 像素）
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(ang);
+      ctx.fillStyle = VERM;
+      ctx.strokeStyle = PAPER;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(19, 0);
+      ctx.lineTo(1, -10);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(1, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // 内侧紧邻的朱底方印（香 / 碑 / 货）
+      const bx = ax - ux * 11;
+      const by = ay - uy * 11;
+      ctx.save();
+      ctx.fillStyle = VERM;
+      ctx.fillRect(bx - 11, by - 11, 22, 22);
+      ctx.strokeStyle = s.active ? LANTERN : PAPER;
+      ctx.lineWidth = 1.3;
+      ctx.strokeRect(bx - 9.5, by - 9.5, 19, 19);
+      ctx.font = `12px ${FONT_CN}`;
+      ctx.fillStyle = PAPER;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(SHRINE_GLYPH[s.kind] || '奇', bx, by + 0.5);
+      ctx.restore();
+    }
+  }
+
+  /** 五更氛围微粒（轻量化 <= 16 颗，零分配，低画质关闭，严格使用 6 色色板） */
+  function drawWatchAtmosphere(watch) {
+    if (low) return;
+    const w = Math.max(1, Math.min(6, watch || 1));
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      const h1 = ((i * 73 + 19) % 97) / 97;
+      const h2 = ((i * 41 + 53) % 89) / 89;
+      const speedX = w >= 4 ? -18 : -9;
+      const speedY = w === 5 ? -22 : w === 6 ? -10 : 12;
+      const sx = (((h1 * W + clock * speedX * (0.7 + (i % 3) * 0.25)) % W) + W) % W;
+      const sy = (((h2 * H + clock * speedY * (0.65 + (i % 4) * 0.2) + Math.sin(clock * 1.5 + i) * 14) % H) + H) % H;
+      if (w >= 5) {
+        const col = w === 6 || i % 2 === 0 ? 'lantern' : 'verm';
+        blit(ctx, dotSprite(2, col), sx, sy, 0.85, 0.85, 0, w === 6 ? 0.35 : 0.48);
+      } else if (w >= 3 && i % 3 === 0) {
+        blit(ctx, scrapSprite(i % 4, i % 2 === 0 ? 'verm' : 'paper'), sx, sy, 0.55, 0.55, clock * 1.6 + i, 0.36);
+      } else {
+        blit(ctx, dotSprite(1.5, 'paper'), sx, sy, 0.8, 0.8, 0, 0.28);
+      }
+    }
   }
 
   /* -------------------------------------------------------------- */
@@ -513,15 +1314,15 @@ export function createRenderer(canvas, opts = {}) {
     }
     const newStep = run.time !== lastRunTime;
     lastRunTime = run.time;
-    const al = Math.max(0, Math.min(1, alpha));
+    const al = !newStep || dt === 0 || alpha <= 0 ? 1 : Math.max(0, Math.min(1, alpha));
 
     const p = run.player;
     const ps = track('p', p.x, p.y, newStep);
     const pxI = ps.px + (ps.x - ps.px) * al;
     const pyI = ps.py + (ps.y - ps.py) * al;
 
-    // 镜头平滑跟随
-    if (!cam.init || Math.hypot(cam.x - pxI, cam.y - pyI) > 500) {
+    // 镜头平滑跟随（暂停/零 dt 或大跳变时即时对齐玩家）
+    if (!cam.init || Math.hypot(cam.x - pxI, cam.y - pyI) > 500 || (dt === 0 && Math.hypot(cam.x - pxI, cam.y - pyI) > 1)) {
       cam.x = pxI;
       cam.y = pyI;
       cam.init = true;
@@ -542,7 +1343,6 @@ export function createRenderer(canvas, opts = {}) {
     drawPaper(vx, vy);
     ground.draw(ctx, vx - 8, vy - 8, W + 16, H + 16);
     if (run.watch >= 6 && run.darkness <= 0.01) {
-      // 天亮：宣纸「亮」起来，地面墨色退淡
       ctx.fillStyle = paperA(0.32);
       ctx.fillRect(vx - 8, vy - 8, W + 16, H + 16);
     }
@@ -550,15 +1350,18 @@ export function createRenderer(canvas, opts = {}) {
 
     const evo = new Set();
     for (const w of run.weapons || []) if (w.evolved) evo.add(w.id);
+    const evoCount = evo.size;
     const ppos = { x: pxI, y: pyI };
     const M = 90;
     const inView = (x, y, m = M) => x > vx - m && x < vx + W + m && y > vy - m && y < vy + H + m * 1.6;
 
-    // 地面层弹体
+    // 地面层弹体 / 阵法
     const projs = run.projectiles || [];
     for (let i = 0; i < projs.length; i++) {
       const q = projs[i];
-      if (GROUND_KINDS.has(q.kind)) drawProjectile(q, evo, run, ppos);
+      if (!GROUND_KINDS.has(q.kind)) continue;
+      const gm = Math.max(150, (q.radius || q.maxRadius || 60) + 40);
+      if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos);
     }
 
     // 拾取物
@@ -568,7 +1371,7 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(k.x, k.y, 30)) drawPickup(k, k.x, k.y);
     }
 
-    // y 排序：物件 + 敌人 + 玩家
+    // y 排序：场景物件 + 奇遇建筑 + 敌人 + 玩家
     drawList.length = 0;
     const props = run.props || [];
     for (let i = 0; i < props.length; i++) {
@@ -576,40 +1379,54 @@ export function createRenderer(canvas, opts = {}) {
       if (o.hp !== undefined && o.hp <= 0) continue;
       if (inView(o.x, o.y, 160)) drawList.push({ t: 0, o, y: o.y, x: o.x });
     }
+    const shrines = run.shrines || [];
+    for (let i = 0; i < shrines.length; i++) {
+      const s = shrines[i];
+      if (inView(s.x, s.y, 140)) drawList.push({ t: 3, o: s, y: s.y, x: s.x });
+    }
     const ens = run.enemies || [];
+    const crowded = low || ens.length > 160;
     for (let i = 0; i < ens.length; i++) {
       const e = ens[i];
       const s = track(e.id, e.x, e.y, newStep);
       const x = s.px + (s.x - s.px) * al;
       const y = s.py + (s.y - s.py) * al;
-      if (inView(x, y, e.boss ? 200 : M)) drawList.push({ t: 1, o: e, y, x });
+      if (inView(x, y, e.boss || e.warder ? 220 : M)) drawList.push({ t: 1, o: e, y, x });
     }
     drawList.push({ t: 2, o: p, y: pyI, x: pxI });
     drawList.sort((a, b) => a.y - b.y);
+
+    const nearbyShrineId = run.nearbyShrine ? run.nearbyShrine.id : null;
     let lantern = { lx: pxI + 7, ly: pyI };
     for (let i = 0; i < drawList.length; i++) {
       const d = drawList[i];
       if (d.t === 0) blit(ctx, propSprite(d.o.kind), d.x, d.y);
-      else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1);
-      else lantern = drawPlayer(p, d.x, d.y, run, 1, settings.cosmetics);
+      else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
+      else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded);
+      else lantern = drawPlayer(p, d.x, d.y, run, 1, settings.cosmetics, evoCount);
     }
 
-    // 空中弹体
+    // 空中弹体 / 光束 / 雷柱
     for (let i = 0; i < projs.length; i++) {
       const q = projs[i];
-      if (!GROUND_KINDS.has(q.kind) && inView(q.x ?? pxI, q.y ?? pyI, 120)) drawProjectile(q, evo, run, ppos);
+      if (GROUND_KINDS.has(q.kind)) continue;
+      const am = Math.max(150, (q.radius || q.length || q.maxRadius || 0) + 56);
+      if (inView(q.x ?? pxI, q.y ?? pyI, am)) drawProjectile(q, evo, run, ppos);
     }
     fx.drawParticles(ctx);
 
-    // ---------- 夜色 ----------
+    // ---------- 夜色与动态灯笼暖光 ----------
     const darkness = Math.max(0, Math.min(1, run.darkness || 0));
+    const baseLightR = run.mods?.lightRadius || p.lightRadius || LANTERN_R;
+    const evoLightBonus = evoCount > 0 ? 28 + (evoCount - 1) * 10 : 0;
+    const lightR = baseLightR + evoLightBonus;
     const lsx = lantern.lx + ox;
     const lsy = lantern.ly + oy;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawLanternWarmth(lsx, lsy, darkness);
-    drawDarkness(darkness, lsx, lsy, cam.x, cam.y);
+    drawLanternWarmth(lsx, lsy, darkness, lightR, evoCount);
+    drawDarkness(darkness, lsx, lsy, cam.x, cam.y, lightR, evoCount, shrines, ox, oy);
 
-    // 黑暗中的眼：墨色敌人在夜色深处露出宣纸色的眼
+    // ---------- 夜色之上：黑暗中的眼 + 朱砂冲锋预警走廊 ----------
     if (darkness > 0.2 && !low) {
       ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
       ctx.fillStyle = PAPER;
@@ -620,7 +1437,7 @@ export function createRenderer(canvas, opts = {}) {
         const def = enemyDef(e.type);
         if (!def.eyes) continue;
         const dist = Math.hypot(d.x - lantern.lx, d.y - lantern.ly);
-        const kk = smooth01(LANTERN_R * 0.9, LANTERN_R * 2.2, dist) * darkness;
+        const kk = smooth01(lightR * 0.9, lightR * 2.1, dist) * darkness;
         if (kk < 0.12) continue;
         const s = (e.r || def.r) / def.r;
         const flip = enemyFlip(e, pxI);
@@ -635,18 +1452,25 @@ export function createRenderer(canvas, opts = {}) {
       ctx.globalAlpha = 1;
     }
 
+    if (ens.length > 0) {
+      ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+      drawTelegraphsAboveDarkness(ens, pxI, pyI, vx, vy, al);
+    }
+
     // 天亮的朱红日印
     if (run.watch >= 6 && darkness <= 0.01) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      withSun(ctx, W, H);
+      withSun(ctx, W);
     }
 
     // ---------- 伤害数字（世界坐标，夜色之上） ----------
     ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
     dmg.draw(ctx, clock, settings.dmgText || 'all');
 
-    // ---------- 屏幕层 ----------
+    // ---------- 屏幕层（五更浮尘 + 屏边奇遇指针 + 全屏墨晕横幅 + HUD） ----------
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWatchAtmosphere(run.watch);
+    drawShrinePointers(run, ox, oy, settings);
     fx.drawScreen(ctx, W, H);
     hud.draw(ctx, run, W, H, clock, settings);
 

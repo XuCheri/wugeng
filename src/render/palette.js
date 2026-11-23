@@ -29,6 +29,12 @@ export function vermA(a) {
 export function lanternA(a) {
   return `rgba(240,190,98,${a})`;
 }
+export function vermDarkA(a) {
+  return `rgba(142,42,27,${a})`;
+}
+export function paperShadeA(a) {
+  return `rgba(224,210,180,${a})`;
+}
 
 /** 中文字体栈（UI 工程师会以 WenKai 之名加载霞鹜文楷） */
-export const FONT_CN = '"WenKai", "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif';
+export const FONT_CN = '"WenKai", "LXGW WenKai", "Noto Serif CJK SC", "Droid Sans Fallback", "Songti SC", serif';

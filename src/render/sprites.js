@@ -1,7 +1,7 @@
 // sprites.js —— 程序绘制的角色 / 敌人 / Boss / 拾取物 / 场景物件 / 武器弹体
 // 所有精灵预渲染到离屏 Canvas（按 类型|帧|受击闪 缓存），运行时只做 drawImage + 变换。
 // 坐标约定：精灵锚点 (0,0) 在脚底中心，y 向上为负。单位 = CSS 像素。
-import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, LANTERN, inkA, paperA, vermA } from './palette.js';
+import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, LANTERN, inkA, paperA, vermA, lanternA } from './palette.js';
 import { makeCanvas, makeRng, hashStr, withMisreg, printSpeckle, brushStroke, arcPoints, blobPath, splatter } from './ink.js';
 import { setGlyphScale } from './glyphs.js';
 
@@ -720,6 +720,152 @@ function drawDrowned(g, rng, f) {
   g.fill();
 }
 
+function drawSuona(g, rng, f) {
+  // 吹鼓鬼：佝偻唢呐匠，毡帽朱缨、鼓腮吹奏黄铜唢呐、喇叭口吐出朱砂音浪
+  const step = [0, 1, 0, -1][f];
+  // 短腿
+  ink(g, 2.2);
+  g.beginPath();
+  g.moveTo(-2.6, -7);
+  g.lineTo(-3.2 + step, -0.4);
+  g.moveTo(2.4, -7);
+  g.lineTo(3.0 - step, -0.4);
+  g.stroke();
+  // 破旧丧服短褂 + 朱红斜披红绸
+  poly(g, [[-6.5, -20], [5.8, -20], [7.8, -6.5], [-7.8, -6.5]]);
+  fs(g, INK, 1.2);
+  vfill(g, () => poly(g, [[-6.2, -19.5], [-1.5, -19.5], [7.2, -7.2], [2.4, -7.2]]));
+  // 鼓腮宣纸脸 + 圆毡帽
+  circ(g, 0, -25, 5.6);
+  fs(g, PAPER, 1.2);
+  circ(g, 3.6, -23.6, 2.6);
+  fs(g, PAPER, 1);
+  vfill(g, () => circ(g, 3.8, -23.4, 1.2));
+  g.fillStyle = INK;
+  circ(g, 2.8, -25.6, 0.75);
+  g.fill();
+  // 圆顶毡帽
+  g.beginPath();
+  g.moveTo(-7.8, -27.5);
+  g.quadraticCurveTo(0, -35, 7.8, -27.5);
+  g.closePath();
+  fs(g, PAPER_SHADE, 1.2);
+  vfill(g, () => circ(g, 0, -32.4, 1.5));
+  // 双手托举唢呐（朝右斜吹）
+  line(g, 4.5, -23.4, 14.5, -26.2, 2.1, INK);
+  poly(g, [[13.5, -25.8], [19.5, -30.2], [19.8, -22.2], [13.8, -25.2]]);
+  fs(g, LANTERN, 1.2);
+  vfill(g, () => poly(g, [[12.2, -25], [14.2, -25], [13.5, -19.5], [11.5, -20]]));
+  // 唢呐口动态音波弧
+  ink(g, 1.2, VERM);
+  g.beginPath();
+  const rWave = 3.2 + (f % 2) * 2.2;
+  g.arc(20, -26.2, rWave, -0.7, 0.7);
+  g.stroke();
+}
+
+function drawPaperbride(g, rng, f) {
+  // 红衣纸新娘：凤冠霞帔、长袖朱红嫁衣、半掀红盖头下惨白纸脸
+  const sway = Math.sin((f / 4) * TAU) * 1.4;
+  // 曳地百褶纸裙底衬
+  poly(g, [[-8.5, -10], [8.5, -10], [10.5 + sway * 0.5, -0.5], [-10.5 + sway * 0.5, -0.5]]);
+  fs(g, PAPER, 1.1);
+  // 朱红宽袖与嫁衣长袍
+  vfill(g, () => poly(g, [[-6.5, -24], [6.5, -24], [11 + sway * 0.4, -4], [-11 + sway * 0.4, -4]]));
+  poly(g, [[-6.5, -24], [6.5, -24], [11 + sway * 0.4, -4], [-11 + sway * 0.4, -4]]);
+  ink(g, 1.3);
+  g.stroke();
+  // 广袖交叠于胸前（捧绣球/纸花）
+  vfill(g, () => poly(g, [[-6.5, -23], [-14.5, -13 + sway * 0.3], [-9.5, -9], [-4, -17]]));
+  poly(g, [[-6.5, -23], [-14.5, -13 + sway * 0.3], [-9.5, -9], [-4, -17]]);
+  ink(g, 1.1);
+  g.stroke();
+  vfill(g, () => poly(g, [[6.5, -23], [14.5, -13 - sway * 0.3], [9.5, -9], [4, -17]]));
+  poly(g, [[6.5, -23], [14.5, -13 - sway * 0.3], [9.5, -9], [4, -17]]);
+  ink(g, 1.1);
+  g.stroke();
+  // 墨色霞帔云肩与金带
+  poly(g, [[-7.5, -24.2], [7.5, -24.2], [5, -19.5], [0, -21.2], [-5, -19.5]]);
+  fs(g, INK, 1);
+  line(g, 0, -19, 0, -5, 1.2, LANTERN);
+  // 惨白纸脸 + 点绛唇 + 幽眼
+  circ(g, 0, -29.5, 5.4);
+  fs(g, PAPER, 1.2);
+  g.fillStyle = INK;
+  circ(g, -2.2, -29.2, 0.8);
+  g.fill();
+  circ(g, 2.2, -29.2, 0.8);
+  g.fill();
+  vfill(g, () => circ(g, 0, -26.8, 1.1));
+  // 半掩红盖头与凤冠珠翠
+  poly(g, [[-7.2, -31.5], [7.2, -31.5], [8.6, -27.2], [0, -30.4], [-8.6, -27.2]]);
+  fs(g, VERM_DARK, 1.1);
+  poly(g, [[-8.5, -33.5], [-4, -39.5], [0, -36.5], [4, -39.5], [8.5, -33.5], [6.5, -31], [-6.5, -31]]);
+  fs(g, INK, 1.1);
+  circ(g, 0, -37.2, 1.8);
+  fs(g, LANTERN, 0.9);
+  // 两侧步摇流苏
+  line(g, -7.8, -33, -8.5 + sway * 0.5, -23, 1, VERM);
+  line(g, 7.8, -33, 8.5 + sway * 0.5, -23, 1, VERM);
+}
+
+function drawCinder(g, rng, f) {
+  // 阴火骷髅：焦黑骨殖缠绕朱砂琥珀阴火，胸腔内置欲裂火核
+  const fl = (f % 2) * 1.8;
+  // 背后升腾的阴火外焰
+  vfill(g, () => {
+    g.beginPath();
+    g.moveTo(0, -35 - fl);
+    g.bezierCurveTo(9, -28, 12, -18, 8.5, -9);
+    g.quadraticCurveTo(0, -4, -8.5, -9);
+    g.bezierCurveTo(-12, -18, -9, -28, 0, -35 - fl);
+  });
+  // 焦骨腿与佝偻肋骨
+  ink(g, 2.1, INK);
+  g.beginPath();
+  g.moveTo(-3.2, -9);
+  g.lineTo(-4.4, -0.5);
+  g.moveTo(3.2, -9);
+  g.lineTo(4.4, -0.5);
+  g.stroke();
+  poly(g, [[-5.8, -19.5], [5.8, -19.5], [4.4, -9], [-4.4, -9]]);
+  fs(g, INK, 1.1);
+  // 胸腔透出的琥珀火芯与宣纸肋骨纹
+  circ(g, 0, -14.2, 2.8);
+  g.fillStyle = LANTERN;
+  g.fill();
+  ink(g, 0.9, PAPER_SHADE);
+  g.beginPath();
+  for (const ry of [-17.4, -14.6, -11.8]) {
+    g.moveTo(-4.2, ry);
+    g.lineTo(4.2, ry);
+  }
+  g.stroke();
+  // 张开的枯骨双爪
+  ink(g, 1.8, INK);
+  g.beginPath();
+  g.moveTo(-5.5, -18.5);
+  g.lineTo(-10.5, -13.5 + fl * 0.4);
+  g.moveTo(5.5, -18.5);
+  g.lineTo(10.5, -13.5 - fl * 0.4);
+  g.stroke();
+  // 惨白骷髅头 + 空洞眼窝魂火
+  circ(g, 0, -24.5, 5.8);
+  fs(g, PAPER, 1.3);
+  poly(g, [[-3.4, -20.2], [3.4, -20.2], [2.8, -17.6], [-2.8, -17.6]]);
+  fs(g, PAPER_SHADE, 1);
+  g.fillStyle = INK;
+  circ(g, -2.3, -24.6, 1.7);
+  g.fill();
+  circ(g, 2.3, -24.6, 1.7);
+  g.fill();
+  g.fillStyle = LANTERN;
+  circ(g, -2.3, -24.6, 0.75);
+  g.fill();
+  circ(g, 2.3, -24.6, 0.75);
+  g.fill();
+}
+
 /* ------------------------------------------------------------------ */
 /* Boss                                                                */
 /* ------------------------------------------------------------------ */
@@ -848,8 +994,9 @@ function drawHorse(g, rng, f) {
   fs(g, PAPER, 1.2);
 }
 
-function drawUmbrella(g, rng, f) {
-  // 无面伞女：朱红油纸伞、无面宣纸脸、墨色长裙
+function drawUmbrella(g, rng, f, stateVariant = '') {
+  // 无面伞女：支持 'shield'（垂伞结界护体）与 'open'（高举旋伞露核）双形态
+  const shielded = stateVariant === 'shield';
   const ph = (f / 4) * (TAU / 8);
   // 长发（背后）
   g.beginPath();
@@ -894,7 +1041,56 @@ function drawUmbrella(g, rng, f) {
   g.moveTo(-8.6, -45);
   g.lineTo(9.4, -45);
   g.stroke();
-  // 举伞的袖子
+  if (shielded) {
+    // 护盾态：巨伞压低拢成钟罩护住上半身 + 伞沿垂挂四道镇护符纸
+    const top = -92;
+    const rimY = -44;
+    const R = 46;
+    vfill(g, () => {
+      g.beginPath();
+      g.moveTo(-R, rimY);
+      g.quadraticCurveTo(-R * 0.9, top + 8, 0, top);
+      g.quadraticCurveTo(R * 0.9, top + 8, R, rimY);
+      g.quadraticCurveTo(0, rimY + 8, -R, rimY);
+      g.closePath();
+    }, VERM_DARK);
+    // 伞面金朱护盾环带
+    ink(g, 3, LANTERN);
+    g.beginPath();
+    g.ellipse(0, top + 20, 28, 6.5, 0, 0.08, Math.PI - 0.08);
+    g.stroke();
+    ink(g, 2.2, PAPER);
+    g.beginPath();
+    g.ellipse(0, top + 34, 40, 8, 0, 0.06, Math.PI - 0.06);
+    g.stroke();
+    // 密排铁伞骨
+    ink(g, 1.5, INK);
+    g.beginPath();
+    for (let i = -4; i <= 4; i++) {
+      const x = (i / 4) * R;
+      g.moveTo(0, top);
+      g.quadraticCurveTo(x * 0.85, top + 16, x, rimY + (1 - Math.abs(i) / 4) * 5);
+    }
+    g.stroke();
+    g.beginPath();
+    g.moveTo(-R, rimY);
+    g.quadraticCurveTo(-R * 0.9, top + 8, 0, top);
+    g.quadraticCurveTo(R * 0.9, top + 8, R, rimY);
+    g.quadraticCurveTo(0, rimY + 8, -R, rimY);
+    g.closePath();
+    ink(g, 2.2, INK);
+    g.stroke();
+    // 伞沿垂挂四张宣纸护体符
+    for (const tx of [-30, -10, 10, 30]) {
+      poly(g, [[tx - 3.2, rimY + 2], [tx + 3.2, rimY + 2], [tx + 3, rimY + 16], [tx - 3, rimY + 16]]);
+      fs(g, PAPER, 1);
+      line(g, tx, rimY + 5, tx, rimY + 13, 1.3, VERM);
+    }
+    circ(g, 0, top - 2, 3);
+    fs(g, LANTERN, 1.2);
+    return;
+  }
+  // 举伞的袖子（开伞破绽态）
   g.beginPath();
   g.moveTo(5, -54);
   g.quadraticCurveTo(12, -56, 13, -66);
@@ -902,20 +1098,23 @@ function drawUmbrella(g, rng, f) {
   g.quadraticCurveTo(8, -60, 2, -50);
   g.fillStyle = INK;
   g.fill();
-  // 无面的脸
+  // 无面的脸 + 伞下显露的朱印破绽心核
   ell(g, 0, -62, 6.4, 8);
   fs(g, PAPER, 1.4);
+  vfill(g, () => circ(g, 0, -61.5, 2.4));
   g.beginPath();
   g.arc(0, -62.6, 6.8, Math.PI * 1.05, Math.PI * 1.95);
   g.quadraticCurveTo(0, -66, -6.6, -63.6);
   g.fillStyle = INK;
   g.fill();
-  // 伞柄
-  line(g, 11.4, -66, 4, -101, 1.8);
-  // 伞面
-  const top = -106;
-  const rimY = -80;
+  // 伞柄与伞下琥珀魂火内腔
+  line(g, 11.4, -66, 4, -104, 1.8);
+  const top = -108;
+  const rimY = -82;
   const R = 44;
+  ell(g, 0, rimY + 2, R * 0.72, 6.5);
+  fs(g, LANTERN, 1);
+  // 伞面
   vfill(g, () => {
     g.beginPath();
     g.moveTo(-R, rimY);
@@ -1076,11 +1275,14 @@ const ENEMY_DEFS = {
   shade: { w: 32, h: 36, ax: 16, ay: 33, r: 10, frames: 4, draw: drawShade, eyes: [[-3.1, -22.4], [3.1, -22.4]] },
   lanternghost: { w: 34, h: 42, ax: 17, ay: 39, r: 15, frames: 4, draw: drawLanternghost, eyes: null },
   weasel: { w: 32, h: 36, ax: 16, ay: 33, r: 12, frames: 4, draw: drawWeasel, eyes: [[7, -23.6]] },
-  sedan: { w: 56, h: 58, ax: 28, ay: 54, r: 22, frames: 4, draw: drawSedan, eyes: null },
+  sedan: { w: 56, h: 58, ax: 28, ay: 54, r: 20, frames: 4, draw: drawSedan, eyes: [[-2.4, -28], [2.4, -28]] },
   drowned: { w: 36, h: 40, ax: 17, ay: 36, r: 13, frames: 4, draw: drawDrowned, eyes: [[4.6, -22.6]] },
-  horse: { w: 112, h: 124, ax: 50, ay: 118, r: 34, frames: 4, draw: drawHorse, eyes: null, lw: 2 },
-  umbrella: { w: 100, h: 116, ax: 50, ay: 110, r: 30, frames: 4, draw: drawUmbrella, eyes: null },
-  youshen: { w: 104, h: 160, ax: 50, ay: 154, r: 44, frames: 4, draw: drawYoushen, eyes: [[-4, -104], [4.8, -104]] },
+  suona: { w: 42, h: 42, ax: 18, ay: 38, r: 14, frames: 4, draw: drawSuona, eyes: [[2.8, -25.6]] },
+  paperbride: { w: 38, h: 48, ax: 19, ay: 44, r: 13, frames: 4, draw: drawPaperbride, eyes: [[-2.2, -29.2], [2.2, -29.2]] },
+  cinder: { w: 34, h: 42, ax: 17, ay: 38, r: 12, frames: 4, draw: drawCinder, eyes: [[-2.3, -24.6], [2.3, -24.6]] },
+  horse: { w: 112, h: 124, ax: 50, ay: 118, r: 30, frames: 4, draw: drawHorse, eyes: [[37.6, -64.6], [-2.1, -78.6], [2.1, -78.6]], lw: 2 },
+  umbrella: { w: 100, h: 116, ax: 50, ay: 110, r: 28, frames: 4, draw: drawUmbrella, eyes: null },
+  youshen: { w: 104, h: 160, ax: 50, ay: 154, r: 40, frames: 4, draw: drawYoushen, eyes: [[-4, -104], [4.8, -104]] },
 };
 
 export const ENEMY_TYPES = Object.keys(ENEMY_DEFS);
@@ -1088,10 +1290,11 @@ export function enemyDef(type) {
   return ENEMY_DEFS[type] || ENEMY_DEFS.paperkid;
 }
 
-export function enemySprite(type, frame = 0, flash = false) {
+export function enemySprite(type, frame = 0, flash = false, stateVariant = '') {
   const d = enemyDef(type);
   const fr = frame % d.frames;
-  return bake(`en_${type}|${fr}|${flash ? 1 : 0}`, d.w, d.h, d.ax, d.ay, (g, r) => d.draw(g, r, fr), {
+  const sv = type === 'umbrella' && stateVariant ? '|' + stateVariant : '';
+  return bake(`en_${type}|${fr}|${flash ? 1 : 0}${sv}`, d.w, d.h, d.ax, d.ay, (g, r) => d.draw(g, r, fr, stateVariant), {
     flash,
     speckle: 0.006,
   });
@@ -1292,6 +1495,130 @@ const PROP_DEFS = {
 export function propSprite(kind, flash = false) {
   const d = PROP_DEFS[kind] || PROP_DEFS.lanternpost;
   return bake(`prop_${kind}|0|${flash ? 1 : 0}`, d.w, d.h, d.ax, d.ay, (g, r) => d.draw(g, r), { flash, speckle: 0.004 });
+}
+
+/* ------------------------------------------------------------------ */
+/* 奇遇建筑 / 神龛试炼货郎（F9）                                       */
+/* ------------------------------------------------------------------ */
+
+function drawAltarShrine(g, used) {
+  // 土地香案：青石小庙龛 + 朱红桌围供案 + 三炷香烛
+  poly(g, [[-24, -6], [24, -6], [27, 0], [-27, 0]]);
+  fs(g, PAPER_SHADE, 1.4);
+  // 土地神龛背壁与飞檐顶
+  poly(g, [[-17, -46], [17, -46], [17, -18], [-17, -18]]);
+  fs(g, PAPER_SHADE, 1.4);
+  poly(g, [[-24, -44], [0, -56], [24, -44], [19, -41], [-19, -41]]);
+  fs(g, INK, 1.4);
+  // 龛内朱红神位牌与两侧对联
+  poly(g, [[-6, -40], [6, -40], [6, -24], [-6, -24]]);
+  fs(g, used ? PAPER_SHADE : VERM, 1);
+  // 供桌 + 朱红桌围
+  poly(g, [[-22, -20], [22, -20], [20, -6], [-20, -6]]);
+  fs(g, INK, 1.3);
+  if (!used) {
+    vfill(g, () => poly(g, [[-14, -19], [14, -19], [13, -8], [-13, -8]]));
+  }
+  // 香炉与红烛
+  ell(g, 0, -22, 6, 3.5);
+  fs(g, PAPER_SHADE, 1.1);
+  if (!used) {
+    for (const dx of [-2.4, 0, 2.4]) {
+      line(g, dx, -23, dx * 1.2, -33, 0.9, INK);
+      circ(g, dx * 1.2, -34, 1.3);
+      g.fillStyle = LANTERN;
+      g.fill();
+    }
+    for (const cx of [-15, 15]) {
+      g.fillStyle = VERM;
+      g.fillRect(cx - 1.6, -28, 3.2, 8);
+      circ(g, cx, -30, 2.1);
+      g.fillStyle = LANTERN;
+      g.fill();
+    }
+  }
+}
+
+function drawTrialShrine(g, used, active) {
+  // 镇邪试炼碑：赑屃莲座 + 嶙峋镇邪古碑 + 朱砂捆仙绳与封魔符
+  poly(g, [[-22, -8], [22, -8], [25, 0], [-25, 0]]);
+  fs(g, PAPER_SHADE, 1.5);
+  poly(g, [[-18, -13], [18, -13], [21, -7], [-21, -7]]);
+  fs(g, INK, 1.2);
+  // 石碑碑身（顶部崩裂古意）
+  poly(g, [[-13, -12], [-14, -52], [-5, -62], [4, -60], [14, -50], [13, -12]]);
+  fs(g, used && !active ? PAPER_SHADE : INK, 1.5);
+  // 碑心镇邪刻纹
+  const runeCol = active ? LANTERN : used ? inkA(0.45) : VERM;
+  ink(g, 2, runeCol);
+  g.beginPath();
+  g.moveTo(0, -52);
+  g.lineTo(0, -20);
+  g.moveTo(-7, -42);
+  g.lineTo(7, -42);
+  g.moveTo(-6, -30);
+  g.lineTo(6, -30);
+  g.stroke();
+  if (!used || active) {
+    // 交叉朱砂封绳 + 符纸
+    ink(g, 1.8, VERM);
+    g.beginPath();
+    g.moveTo(-14, -46);
+    g.lineTo(14, -26);
+    g.moveTo(14, -46);
+    g.lineTo(-14, -26);
+    g.stroke();
+    poly(g, [[-4, -40], [4, -40], [4, -26], [-4, -26]]);
+    fs(g, active ? LANTERN : PAPER, 1);
+  }
+  if (active) {
+    // 试炼激活：碑顶燃起双股镇邪真火
+    for (const fx of [-16, 16]) {
+      vfill(g, () => poly(g, [[fx, -32], [fx + 4, -20], [fx - 4, -20]]));
+      circ(g, fx, -23, 2.2);
+      g.fillStyle = LANTERN;
+      g.fill();
+    }
+  }
+}
+
+function drawPeddlerShrine(g, used) {
+  // 鬼市货郎：扁担双竹货架 + 斗笠货郎剪影 + 暖光招幌灯笼
+  // 左右双竹箱货担
+  for (const bx of [-18, 16]) {
+    poly(g, [[bx - 9, -24], [bx + 9, -24], [bx + 10, -2], [bx - 10, -2]]);
+    fs(g, PAPER_SHADE, 1.3);
+    line(g, bx - 9, -13, bx + 9, -13, 1.1, INK);
+  }
+  // 货郎剪影（居中偏后）
+  poly(g, [[-7, -34], [7, -34], [9, -6], [-9, -6]]);
+  fs(g, INK, 1.2);
+  circ(g, 0, -38, 4.2);
+  fs(g, PAPER, 1.1);
+  poly(g, [[-12, -39], [0, -47], [12, -39]]);
+  fs(g, PAPER_SHADE, 1.3);
+  // 扁担横挑 + 招幌小旗与灯笼
+  line(g, -28, -26, 28, -26, 2.2, INK);
+  line(g, -22, -24, -22, -50, 1.6, INK);
+  if (!used) {
+    vfill(g, () => poly(g, [[-22, -50], [-8, -46], [-22, -38]]));
+    line(g, 24, -26, 24, -42, 1.4, INK);
+    ell(g, 24, -35, 4.8, 5.4);
+    fs(g, LANTERN, 1.1);
+  }
+}
+
+export const SHRINE_TYPES = ['altar', 'trial', 'peddler'];
+export function shrineSprite(kind, used = false, active = false) {
+  const u = used ? 1 : 0;
+  const a = active ? 1 : 0;
+  if (kind === 'trial') {
+    return bake(`shrine_trial|${u}|${a}`, 60, 74, 30, 68, (g) => drawTrialShrine(g, used, active), { speckle: 0.005 });
+  }
+  if (kind === 'peddler') {
+    return bake(`shrine_peddler|${u}|${a}`, 68, 62, 34, 56, (g) => drawPeddlerShrine(g, used), { speckle: 0.005 });
+  }
+  return bake(`shrine_altar|${u}|${a}`, 62, 66, 31, 60, (g) => drawAltarShrine(g, used), { speckle: 0.005 });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1646,21 +1973,137 @@ function drawInkBullet(g) {
   g.fill();
 }
 
+function drawPapermanRole(g, f, role) {
+  const s = f ? 1 : -1;
+  if (role === 'guard') {
+    // 纸甲护卫：手持宣纸镇邪方盾的披甲纸兵
+    poly(g, [[-5, -14], [5, -14], [6.5, -2], [-6.5, -2]]);
+    fs(g, INK, 1.1);
+    circ(g, 0, -17.5, 3.8);
+    fs(g, PAPER, 1);
+    poly(g, [[-5, -19.5], [0, -23], [5, -19.5]]);
+    fs(g, VERM, 0.9);
+    // 前置大盾
+    poly(g, [[1, -15], [9.5, -15], [9.5, -2.5], [1, -2.5]]);
+    fs(g, PAPER, 1.2);
+    vfill(g, () => poly(g, [[3.2, -12.5], [7.3, -12.5], [7.3, -5], [3.2, -5]]));
+    return;
+  }
+  if (role === 'cavalry') {
+    // 纸扎骑兵：跨乘迷你白纸马、手持朱缨长矛冲锋
+    poly(g, [[-10, -4], [-5, -11], [5, -11], [9, -17], [13, -14], [9, -8], [11, -3], [-10, -3]]);
+    fs(g, PAPER, 1.1);
+    line(g, -7, -3, -8 + s, 0, 1.6, INK);
+    line(g, 6, -3, 7 - s, 0, 1.6, INK);
+    vfill(g, () => poly(g, [[-3.5, -18], [3, -18], [4, -9], [-4, -9]]));
+    circ(g, 0, -21, 3.2);
+    fs(g, PAPER, 0.9);
+    line(g, -6, -13, 15, -15, 1.5, INK);
+    poly(g, [[13, -16.5], [17.5, -15], [13, -13.5]]);
+    fs(g, VERM, 0.8);
+    return;
+  }
+  // 'imp'：纸扎爆裂小鬼（背负火药引信）
+  vfill(g, () => poly(g, [[-4.5, -12], [4.5, -12], [5.5, -3], [-5.5, -3]]));
+  circ(g, 0, -15.5, 3.8);
+  fs(g, LANTERN, 1);
+  circ(g, 4.5, -12, 3.2);
+  fs(g, INK, 0.9);
+  circ(g, 6.2, -15.5 + s * 0.6, 1.6);
+  g.fillStyle = LANTERN;
+  g.fill();
+}
+
+function drawPaperHorseProj(g, evolved) {
+  // 水平朝右飞驰的纸马镖 / 百鬼夜行铁骑
+  poly(g, [[-15, 4], [-9, -5], [4, -5], [10, -13], [17, -9], [12, -2], [16, 4], [7, 5], [4, 12], [0, 12], [1, 5], [-8, 5], [-12, 12], [-15, 11]]);
+  fs(g, evolved ? VERM : PAPER, 1.3);
+  vfill(g, () => poly(g, [[-6, -4.5], [4, -4.5], [5, 4], [-7, 4]]), evolved ? LANTERN : VERM);
+  if (evolved) {
+    // 铁骑背靠旗与金焰鬃毛
+    poly(g, [[-4, -5], [-13, -14], [-6, -12]]);
+    fs(g, LANTERN, 0.9);
+  }
+  circ(g, 12, -9.5, 1.2);
+  g.fillStyle = evolved ? PAPER : INK;
+  g.fill();
+}
+
+function drawCompassProj(g) {
+  circ(g, 0, 0, 10);
+  fs(g, PAPER_SHADE, 1.3);
+  circ(g, 0, 0, 6);
+  fs(g, PAPER, 0.9);
+  vfill(g, () => poly(g, [[6, -6], [1.5, 1.5], [-1.5, -1.5]]));
+}
+
+function drawBronzeMirrorProj(g) {
+  circ(g, 0, 0, 9.5);
+  fs(g, PAPER_SHADE, 1.4);
+  circ(g, 0, 0, 6.5);
+  fs(g, LANTERN, 1);
+  vfill(g, () => poly(g, [[-9.5, -2], [-14, -4.5], [-14, 4.5], [-9.5, 2]]));
+}
+
+function drawCinderCoreProj(g) {
+  vfill(g, () => circ(g, 0, 0, 8.5));
+  circ(g, 0, 0, 5.5);
+  fs(g, INK, 1.1);
+  circ(g, 0, 0, 2.8);
+  g.fillStyle = LANTERN;
+  g.fill();
+}
+
+function drawSoulFireBullet(g) {
+  vfill(g, () => {
+    g.beginPath();
+    g.moveTo(-7, 0);
+    g.quadraticCurveTo(0, -6.5, 6.5, 0);
+    g.quadraticCurveTo(0, 6.5, -7, 0);
+  });
+  circ(g, 1.5, 0, 3.6);
+  fs(g, LANTERN, 1);
+  circ(g, 2, 0, 1.4);
+  g.fillStyle = PAPER;
+  g.fill();
+}
+
 const PROJ_DEFS = {
   talisman: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, false) },
   talismanEvo: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, true) },
   coinsword: { w: 42, h: 12, ax: 21, ay: 6, draw: (g) => drawCoinsword(g, false) },
   coinswordEvo: { w: 42, h: 12, ax: 21, ay: 6, draw: (g) => drawCoinsword(g, true) },
   lantern: { w: 24, h: 26, ax: 12, ay: 14, draw: (g) => drawOrbLantern(g, false) },
+  lanternEvo: { w: 26, h: 28, ax: 13, ay: 15, draw: (g) => {
+    circ(g, 0, 0, 9.5);
+    g.fillStyle = lanternA(0.45);
+    g.fill();
+    drawOrbLantern(g, true);
+    circ(g, 0, 0, 2.4);
+    g.fillStyle = LANTERN;
+    g.fill();
+  } },
   flame: { w: 12, h: 14, ax: 6, ay: 10, draw: (g) => drawFlameTongue(g) },
   paperman0: { w: 26, h: 26, ax: 13, ay: 22, draw: (g) => drawPaperman(g, 0, false) },
   paperman1: { w: 26, h: 26, ax: 13, ay: 22, draw: (g) => drawPaperman(g, 1, false) },
   papermanEvo0: { w: 26, h: 28, ax: 13, ay: 24, draw: (g) => drawPaperman(g, 0, true) },
   papermanEvo1: { w: 26, h: 28, ax: 13, ay: 24, draw: (g) => drawPaperman(g, 1, true) },
+  papermanGuard0: { w: 26, h: 28, ax: 13, ay: 24, draw: (g) => drawPapermanRole(g, 0, 'guard') },
+  papermanGuard1: { w: 26, h: 28, ax: 13, ay: 24, draw: (g) => drawPapermanRole(g, 1, 'guard') },
+  papermanCavalry0: { w: 36, h: 28, ax: 18, ay: 24, draw: (g) => drawPapermanRole(g, 0, 'cavalry') },
+  papermanCavalry1: { w: 36, h: 28, ax: 18, ay: 24, draw: (g) => drawPapermanRole(g, 1, 'cavalry') },
+  papermanImp0: { w: 24, h: 24, ax: 12, ay: 20, draw: (g) => drawPapermanRole(g, 0, 'imp') },
+  papermanImp1: { w: 24, h: 24, ax: 12, ay: 20, draw: (g) => drawPapermanRole(g, 1, 'imp') },
+  paperHorse: { w: 36, h: 30, ax: 18, ay: 15, draw: (g) => drawPaperHorseProj(g, false) },
+  paperHorseEvo: { w: 40, h: 34, ax: 20, ay: 17, draw: (g) => drawPaperHorseProj(g, true) },
+  compass: { w: 24, h: 24, ax: 12, ay: 12, draw: (g) => drawCompassProj(g) },
+  bronzeMirror: { w: 30, h: 24, ax: 15, ay: 12, draw: (g) => drawBronzeMirrorProj(g) },
+  cinderCore: { w: 22, h: 22, ax: 11, ay: 11, draw: (g) => drawCinderCoreProj(g) },
   firecracker: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawFirecracker(g) },
   bell: { w: 14, h: 16, ax: 7, ay: 8, draw: (g) => drawBell(g) },
   paperMoney: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawPaperMoney(g) },
   inkBullet: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawInkBullet(g) },
+  soulFireBullet: { w: 18, h: 16, ax: 9, ay: 8, draw: (g) => drawSoulFireBullet(g) },
 };
 
 export function projSprite(name) {
@@ -1803,11 +2246,142 @@ export function burstSprite(seed = 0) {
   }, { speckle: false });
 }
 
+/** 烘焙八卦法阵 / 罗盘风场 / 开光脚底法环（零运行时几何开销） */
+export function baguaArraySprite(variant = 'awakened') {
+  if (variant === 'awakened') {
+    const R = 44;
+    return bake('bagua_awakened|0', R * 2 + 12, R * 2 + 12, R + 6, R + 6, (g) => {
+      // 外八角朱砂双法环 + 八卦爻画 + 琥珀星珠
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + Math.PI / 8;
+        const x = Math.cos(a) * R;
+        const y = Math.sin(a) * R;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.closePath();
+      ink(g, 2.8, VERM);
+      g.stroke();
+      circ(g, 0, 0, R * 0.78);
+      ink(g, 2.2, VERM);
+      g.stroke();
+      circ(g, 0, 0, R * 0.52);
+      ink(g, 1.8, LANTERN);
+      g.stroke();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        g.save();
+        g.rotate(a);
+        g.fillStyle = VERM;
+        g.fillRect(-5, -R * 0.72, 10, 2.4);
+        if (i % 2 === 0) g.fillRect(-5, -R * 0.63, 10, 2.2);
+        else {
+          g.fillRect(-5, -R * 0.63, 4, 2.2);
+          g.fillRect(1, -R * 0.63, 4, 2.2);
+        }
+        circ(g, 0, -R * 0.9, 2.8);
+        g.fillStyle = i % 2 === 0 ? LANTERN : VERM;
+        g.fill();
+        g.restore();
+      }
+    }, { speckle: false });
+  }
+  const R = 100;
+  return bake(`bagua_${variant}|0`, R * 2 + 24, R * 2 + 24, R + 12, R + 12, (g) => {
+    const isTalisman = variant === 'talisman';
+    const evo = variant === 'compassEvo' || isTalisman;
+    const mainCol = isTalisman ? VERM : evo ? VERM : INK;
+    brushStroke(g, arcPoints(0, 0, R, 0, TAU * 0.99, 0.06), 6, { color: mainCol, seed: 301, dry: 0.45 });
+    circ(g, 0, 0, R * 0.74);
+    ink(g, 2.4, evo ? LANTERN : inkA(0.55));
+    g.stroke();
+    // 八方卦位 / 符纸
+    for (let i = 0; i < 8; i++) {
+      g.save();
+      g.rotate((i / 8) * TAU);
+      if (isTalisman) {
+        poly(g, [[-5, -R - 2], [5, -R - 2], [5, -R + 16], [-5, -R + 16]]);
+        fs(g, i % 2 === 0 ? VERM : PAPER, 1.2);
+        line(g, 0, -R + 2, 0, -R + 12, 1.4, i % 2 === 0 ? LANTERN : VERM);
+      } else {
+        line(g, 0, -R * 0.76, 0, -R * 0.94, 2.6, i % 2 === 0 ? VERM : INK);
+        brushStroke(g, arcPoints(0, 0, R * 0.52, -0.25, 0.35, 0.08), 4.2, { color: evo ? VERM : inkA(0.5), seed: 310 + i, dry: 0.55 });
+      }
+      g.restore();
+    }
+    if (isTalisman || evo) {
+      // 内六芒星阵线
+      ink(g, 1.8, isTalisman ? VERM : LANTERN);
+      for (let t = 0; t < 2; t++) {
+        g.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const a = (k / 3) * TAU + t * (Math.PI / 3);
+          const x = Math.cos(a) * R * 0.68;
+          const y = Math.sin(a) * R * 0.68;
+          k ? g.lineTo(x, y) : g.moveTo(x, y);
+        }
+        g.closePath();
+        g.stroke();
+      }
+    }
+  }, { speckle: false });
+}
+
+/** 泼墨山河穿透飞白气刃（朝右 angle=0 烘焙，基准半径 26） */
+export function inkWaveSprite(evolved = true) {
+  return bake(`inkwave|${evolved ? 1 : 0}`, 64, 68, 30, 34, (g) => {
+    brushStroke(g, arcPoints(-8, 0, 24, -1.18, 1.18, 0.06), 11, {
+      color: INK,
+      seed: 501,
+      dry: 0.55,
+      taperIn: 0.25,
+      taperOut: 0.25,
+      startWidth: 0.2,
+      endWidth: 0.2,
+    });
+    if (evolved) {
+      brushStroke(g, arcPoints(-5, 0, 26, -0.95, 0.95, 0.07), 4.5, {
+        color: VERM,
+        seed: 507,
+        dry: 0.4,
+        taperIn: 0.3,
+        taperOut: 0.3,
+      });
+    }
+    brushStroke(g, arcPoints(-11, 0, 20, -0.8, 0.8, 0.08), 3, {
+      color: PAPER,
+      seed: 511,
+      dry: 0.3,
+    });
+  }, { speckle: false });
+}
+
+/** 满堂红地面余烬池（基准半径 50） */
+export function emberPoolSprite(seed = 0) {
+  const R = 50;
+  return bake(`emberpool|${seed % 3}`, R * 3, R * 3, R * 1.5, R * 1.5, (g) => {
+    const r = makeRng(seed * 29 + 13);
+    g.fillStyle = inkA(0.38);
+    blobPath(g, 0, 0, R * 0.88, r, 0.35, 12, 0.72);
+    g.fill();
+    g.fillStyle = vermA(0.45);
+    blobPath(g, 0, 0, R * 0.66, r, 0.4, 10, 0.75);
+    g.fill();
+    for (let i = 0; i < 12; i++) {
+      const a = r() * TAU;
+      const d = R * (0.15 + r() * 0.65);
+      circ(g, Math.cos(a) * d, Math.sin(a) * d * 0.75, 1.4 + r() * 2.4);
+      g.fillStyle = i % 2 === 0 ? LANTERN : VERM;
+      g.fill();
+    }
+  }, { speckle: false });
+}
+
 /** 墨点（粒子），按半径桶缓存 */
 export function dotSprite(rq, color = 'ink') {
   const q = Math.max(1, Math.min(8, Math.round(rq)));
-  return bake(`dot_${color}|${q}`, q * 2 + 4, q * 2 + 4, q + 2, q + 2, (g, rng) => {
-    g.fillStyle = color === 'verm' ? VERM : color === 'paper' ? PAPER : INK;
+  return bake(`dot_${color}|${q}`, q * 2 + 4, q * 2 + 4, q + 2, q + 2, (g) => {
+    g.fillStyle = color === 'verm' ? VERM : color === 'lantern' ? LANTERN : color === 'paper' ? PAPER : INK;
     blobPath(g, 0, 0, q, makeRng(q * 7 + color.length), 0.3, 8);
     g.fill();
   }, { speckle: false });
@@ -1848,43 +2422,43 @@ export function scrapSprite(i, color = 'paper') {
     if (color === 'verm') {
       g.fillStyle = VERM;
       g.fill();
+    } else if (color === 'lantern') {
+      g.fillStyle = LANTERN;
+      g.fill();
     } else fs(g, PAPER, 0.8);
   }, { speckle: false });
 }
 
-import { drawIcon as _drawIcon, iconDataURL as _baseIconDataURL } from './icons.js';
+import {
+  WEAPON_ICONS,
+  EVO_WEAPON_ICONS,
+  RELIC_ICONS,
+  HERO_ICONS,
+  MISC_ICONS,
+  drawIcon as _drawIcon,
+  iconDataURL as _baseIconDataURL,
+} from './icons.js';
 
+export { WEAPON_ICONS, EVO_WEAPON_ICONS, RELIC_ICONS, HERO_ICONS, MISC_ICONS };
 export const drawIcon = _drawIcon;
 
 const extraUrlCache = new Map();
 
-/** 支持 kind = 'enemy'（邪祟/夜主实机版画立绘）与 'evo'（朱印框开光神兵），其余走 icons.js */
+/** 支持 kind = 'enemy'（12种邪祟/夜主实机版画立绘）与 'evo'（12种专属神兵法相），其余走 icons.js */
 export function iconDataURL(kind, id, size = 64) {
-  if (kind !== 'enemy' && kind !== 'evo') return _baseIconDataURL(kind, id, size);
+  if (kind !== 'enemy') return _baseIconDataURL(kind, id, size);
   const key = `${kind}|${id}|${size}`;
   if (extraUrlCache.has(key)) return extraUrlCache.get(key);
   const s = 2;
   const c = makeCanvas(size * s, size * s);
   const g = c.getContext('2d');
   g.scale(s, s);
-  if (kind === 'enemy') {
-    const spr = enemySprite(id, 0, false);
-    const pad = size * 0.88;
-    const k = Math.min(pad / Math.max(1, spr.w), pad / Math.max(1, spr.h));
-    const dw = spr.w * k;
-    const dh = spr.h * k;
-    g.drawImage(spr.canvas, (size - dw) / 2, (size - dh) / 2, dw, dh);
-  } else if (kind === 'evo') {
-    withMisreg(g, () => {
-      g.strokeStyle = VERM;
-      g.lineWidth = 2.2;
-      g.strokeRect(3, 3, size - 6, size - 6);
-      g.lineWidth = 0.9;
-      g.strokeRect(6, 6, size - 12, size - 12);
-    });
-    _drawIcon(g, 'weapon', id, size / 2, size / 2, size * 0.74);
-    printSpeckle(g, size, size, makeRng(hashStr(key)), 0.01, 0.6);
-  }
+  const spr = enemySprite(id, 0, false);
+  const pad = size * 0.88;
+  const k = Math.min(pad / Math.max(1, spr.w), pad / Math.max(1, spr.h));
+  const dw = spr.w * k;
+  const dh = spr.h * k;
+  g.drawImage(spr.canvas, (size - dw) / 2, (size - dh) / 2, dw, dh);
   const url = c.toDataURL('image/png');
   extraUrlCache.set(key, url);
   return url;
