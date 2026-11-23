@@ -181,7 +181,7 @@ export function buildShrineOptions(run, s) {
       {
         id: 'peddler_upgrade',
         label: '锻器精炼',
-        desc: '随机将 1 件已拥有器物提升 1 级（全满则赐溢出签）',
+        desc: '随机将 1 件已拥有器物提升 1 级（全满则赐满阶增伤）',
         costText: `${C.upgrade} 铜钱`,
         disabled: run.stats.coins < C.upgrade,
       },
@@ -297,17 +297,25 @@ function toOptionIndex(index) {
 }
 
 export function interactShrineImpl(run, shrineId = null) {
-  if (!run || run.status !== 'playing') return false;
+  const refreshingOpen = shrineId != null && run?.status === 'shrine';
+  if (!run || (run.status !== 'playing' && !refreshingOpen)) return false;
   let s = null;
   if (shrineId != null) {
     const sid = typeof shrineId === 'string' && shrineId.trim() !== '' ? Number(shrineId) : shrineId;
     if (typeof sid !== 'number' || !Number.isInteger(sid)) return false;
+    if (refreshingOpen && run.activeShrine && run.activeShrine.id !== sid) return false;
     s = run.shrines.find((x) => x.id === sid && !x.used && !x.active) || run._shrineMap?.[sid] || null;
     if (s && (s.used || s.active)) s = null;
   } else if (run.nearbyShrine && !run.nearbyShrine.used && !run.nearbyShrine.active) {
     s = run.nearbyShrine;
   }
-  if (!s) return false;
+  if (!s) {
+    if (refreshingOpen) {
+      run.activeShrine = null;
+      run.status = 'playing';
+    }
+    return false;
+  }
   run.activeShrine = buildShrineOptions(run, s);
   run.status = 'shrine';
   return true;

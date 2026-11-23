@@ -6,7 +6,7 @@ import {
   metaBonusesFromLevels, enemyHpScale, enemySpeedScale, spawnRate, nightModifiers, ENDLESS, SPAWN,
   SCHOOL_TAGS, SCHOOL_TAG_IDS, SCHOOL_NAMES, WEAPONS, WEAPON_IDS, RELICS, RELIC_IDS,
   ENEMIES, ENEMY_IDS, REGULAR_ENEMY_IDS, ELITE_AFFIXES, ELITE_AFFIX_IDS, MINI_WARDERS,
-  BOSS_AI, ENEMY_AI, ULT, SHRINE_KINDS,
+  BOSS_AI, ENEMY_AI, ULT, SHRINE_KINDS, PLAYER_BASE,
 } from '../../src/sim/balance.js';
 import { totalXpToLevel } from '../../src/sim/xp.js';
 import { createRun } from '../../src/sim/run.js';
@@ -118,6 +118,10 @@ test('12 敌人、5 精英词缀、小头目、大招与公平移速上限（F2 
   near(ENEMY_AI.drowned.playerSlow, 0.80);
   near(ENEMY_AI.knockbackDecay, 0.008);
   near(BOSS_AI.youshen.enrageSpeedMul, 1.60);
+  assert.equal(ENEMIES.youshen.speed, 58);
+  assert.ok(ENEMIES.youshen.speed * BOSS_AI.youshen.enrageSpeedMul <= 98);
+  assert.ok(ENEMIES.youshen.speed * nightModifiers(10).enemySpeedMul * BOSS_AI.youshen.enrageSpeedMul < PLAYER_BASE.speed);
+  assert.ok(BOSS_AI.youshen.lungeSpeed >= 420);
 });
 
 test('更房价格 60/181/347/553/794，单项合计 1,935', () => {

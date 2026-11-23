@@ -198,10 +198,11 @@ export function createFx(opts = {}) {
 
     /** 处理一条 sim 事件（注意：hit 为对象池复用，严禁保留 e 引用！） */
     onEvent(e) {
+      if (!e || typeof e !== 'object') return;
       switch (e.type) {
         case 'hit': {
-          const hx = e.x || 0;
-          const hy = e.y || 0;
+          const hx = Number.isFinite(e.x) ? e.x : 0;
+          const hy = Number.isFinite(e.y) ? e.y : 0;
           const crit = !!e.crit;
           const n = low ? 2 : crit ? 8 : 3;
           drops(hx, hy - 8, n, crit ? 185 : 115, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink');
@@ -213,16 +214,18 @@ export function createFx(opts = {}) {
           break;
         }
         case 'kill': {
+          const kx = Number.isFinite(e.x) ? e.x : 0;
+          const ky = Number.isFinite(e.y) ? e.y : 0;
           const isPaper = PAPER_TYPES.has(e.enemyType);
           const big = e.boss ? 3 : e.elite ? 1.8 : 1;
           if (isPaper) {
-            scraps(e.x, e.y, Math.round((low ? 3 : 7) * big), e.enemyType === 'paperbride' ? 'verm' : 'paper');
-            drops(e.x, e.y - 8, Math.round((low ? 2 : 4) * big), 125);
+            scraps(kx, ky, Math.round((low ? 3 : 7) * big), e.enemyType === 'paperbride' ? 'verm' : 'paper');
+            drops(kx, ky - 8, Math.round((low ? 2 : 4) * big), 125);
           } else {
-            smoke(e.x, e.y, Math.round((low ? 2 : 4) * big), 12 * big);
-            drops(e.x, e.y - 8, Math.round((low ? 3 : 7) * big), 150, e.enemyType === 'cinder' ? 'verm' : 'ink');
+            smoke(kx, ky, Math.round((low ? 2 : 4) * big), 12 * big);
+            drops(kx, ky - 8, Math.round((low ? 3 : 7) * big), 150, e.enemyType === 'cinder' ? 'verm' : 'ink');
           }
-          if (!low || e.elite || e.boss) decal(e.x, e.y + 4, 9 * big, isPaper ? 0.12 : 0.2);
+          if (!low || e.elite || e.boss) decal(kx, ky + 4, 9 * big, isPaper ? 0.12 : 0.2);
           if (e.boss) {
             this.addHitstop(0.06);
             this.addShake(0.8);
@@ -233,9 +236,10 @@ export function createFx(opts = {}) {
           break;
         }
         case 'explosion': {
-          const ex = e.x || 0;
-          const ey = e.y || 0;
-          const rad = Math.max(24, Math.min(180, e.radius || 60));
+          const ex = Number.isFinite(e.x) ? e.x : 0;
+          const ey = Number.isFinite(e.y) ? e.y : 0;
+          const rawRad = Number.isFinite(e.radius) && e.radius > 0 ? e.radius : 60;
+          const rad = Math.max(24, Math.min(180, rawRad));
           const scaleK = Math.min(1.5, rad / 65);
           if (!low) {
             scraps(ex, ey, Math.round((e.evolved ? 7 : 4) * scaleK), 'verm');
@@ -246,11 +250,14 @@ export function createFx(opts = {}) {
           this.addShake((e.evolved ? 0.34 : 0.22) * scaleK);
           break;
         }
-        case 'propBreak':
-          scraps(e.x, e.y - 20, low ? 4 : 10, 'paper');
-          drops(e.x, e.y - 20, 6, 120, 'verm');
+        case 'propBreak': {
+          const px = Number.isFinite(e.x) ? e.x : 0;
+          const py = Number.isFinite(e.y) ? e.y : 0;
+          scraps(px, py - 20, low ? 4 : 10, 'paper');
+          drops(px, py - 20, 6, 120, 'verm');
           this.addShake(0.16);
           break;
+        }
         case 'playerHurt':
           this.addShake(0.32);
           screen.push({ k: 'hurt', t: 0, life: 0.36 });
@@ -289,13 +296,18 @@ export function createFx(opts = {}) {
           this.addShake(0.3);
           banner(e.name || '巡夜头目', '夜巡拦路', VERM, 1.85);
           break;
+        case 'watch':
         case 'watchChange':
-          if (e.watch >= 1 && e.watch <= 5) banner(CN_NUM[e.watch] + '更', e.watch === 5 ? '天将破晓' : '夜色渐浓', INK);
+          if (Number.isFinite(e.watch) && e.watch >= 1 && e.watch <= 5) {
+            const wIdx = Math.floor(e.watch);
+            if (CN_NUM[wIdx]) banner(CN_NUM[wIdx] + '更', wIdx === 5 ? '天将破晓' : '夜色渐浓', INK);
+          }
           break;
         case 'bossSpawn':
           this.addShake(0.45);
           banner(BOSS_NAMES[e.bossType] || '夜主', '夜主现身', VERM, 2.4);
           break;
+        case 'bossKill':
         case 'bossDefeated':
           this.addHitstop(0.06);
           this.addShake(0.65);

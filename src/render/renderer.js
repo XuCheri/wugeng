@@ -200,6 +200,7 @@ export function createRenderer(canvas, opts = {}) {
     if (!events) return;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
+      if (!e || typeof e !== 'object') continue;
       if (e.type === 'hit') dmg.add(e, clock);
       fx.onEvent(e);
     }

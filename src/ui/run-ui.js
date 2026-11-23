@@ -545,9 +545,7 @@ export function createRunUI(root, deps) {
     const renderOptions = (modal) => {
       clear(optList);
       (modal?.options || []).forEach((opt, idx) => {
-        const uiDesc = opt.id === 'peddler_upgrade'
-          ? '随机将 1 件已拥有器物提升 1 级（全满则强化总伤）'
-          : opt.desc;
+        const uiDesc = opt.desc;
         optList.appendChild(h('button', {
           type: 'button',
           class: `shrine-opt${opt.disabled ? ' is-disabled' : ''}`,
@@ -600,8 +598,11 @@ export function createRunUI(root, deps) {
         lastHp = hp;
         lastMaxHp = maxHp;
         lastCoins = coins;
-        sim.dismissShrine?.(curRun);
         sim.interactShrine?.(curRun, shrineId);
+        if (!curRun.activeShrine) {
+          proceed();
+          return;
+        }
         if (subEl) subEl.textContent = `气血 ${hp}/${maxHp} · 局内铜钱 ${coins}`;
         renderOptions(curRun.activeShrine);
       };

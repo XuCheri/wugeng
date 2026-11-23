@@ -153,8 +153,9 @@ export function createAudio() {
   }
 
   function env(g, t, a, peak, d) {
+    const safePeak = Number.isFinite(peak) && peak > 0.0002 ? peak : 0.0002;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(Math.max(0.0002, peak), t + a);
+    g.gain.linearRampToValueAtTime(safePeak, t + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
   }
   function osc(type, freq, t, dur, peak, out, { a = 0.004, bend = 0 } = {}) {
@@ -192,16 +193,18 @@ export function createAudio() {
   // ───────── 音色库 ─────────
   const voices = {
     gong(t, v, out, f0 = 98) {
+      const baseF = Number.isFinite(f0) && f0 > 20 ? f0 : 98;
       const partials = [[1, 1], [1.48, 0.55], [2.0, 0.4], [2.76, 0.28], [3.42, 0.18], [4.1, 0.1]];
-      for (const [r, a] of partials) osc('sine', f0 * r, t, 2.8 / Math.sqrt(r), v * a * 0.5, out, { a: 0.008, bend: 0.985 });
+      for (const [r, a] of partials) osc('sine', baseF * r, t, 2.8 / Math.sqrt(r), v * a * 0.5, out, { a: 0.008, bend: 0.985 });
       noise(t, 0.18, v * 0.35, out, { freq: 420, q: 1.2, sweepTo: 180 });
       return 3;
     },
     gongSmall(t, v, out) { return voices.gong(t, v, out, 196); },
     woodblock(t, v, out, f = 880) {
-      osc('square', f, t, 0.06, v * 0.25, out, { a: 0.001, bend: 0.9 });
-      noise(t, 0.04, v * 0.5, out, { freq: f * 1.1, q: 9 });
-      osc('sine', f * 0.5, t, 0.08, v * 0.3, out, { a: 0.001 });
+      const baseF = Number.isFinite(f) && f > 20 ? f : 880;
+      osc('square', baseF, t, 0.06, v * 0.25, out, { a: 0.001, bend: 0.9 });
+      noise(t, 0.04, v * 0.5, out, { freq: baseF * 1.1, q: 9 });
+      osc('sine', baseF * 0.5, t, 0.08, v * 0.3, out, { a: 0.001 });
       return 0.12;
     },
     paper(t, v, out) {
@@ -255,7 +258,7 @@ export function createAudio() {
     },
     click(t, v, out) { return voices.woodblock(t, v * 0.7, out, 1100); },
     watch(t, v, out, n = 1) {
-      const k = Math.max(1, Math.min(5, n));
+      const k = Number.isFinite(n) ? Math.max(1, Math.min(5, Math.floor(n))) : 1;
       for (let i = 0; i < k; i++) voices.woodblock(t + i * 0.32, v, out, 760);
       voices.gong(t + k * 0.32 + 0.1, v * 0.7, out, 110);
       return k * 0.32 + 3;
@@ -402,17 +405,20 @@ export function createAudio() {
 
   function play(name, opts = {}) {
     if (!enabled.sfx || !canPlay()) return false;
+    if (typeof name !== 'string' || !Object.hasOwn(SFX, name) || !Object.hasOwn(voices, name)) return false;
+    const volMul = opts?.volume ?? 1;
+    if (typeof volMul !== 'number' || !Number.isFinite(volMul) || volMul <= 0) return false;
     const spec = SFX[name];
     const fn = voices[name];
-    if (!spec || !fn) return false;
     pruneVoices();
     const now = ctx.currentTime;
     const last = lastPlay.get(name) ?? -Infinity;
     if (now - last < spec.gap) return false;
     if (activeVoices >= MAX_VOICES && name !== 'boss' && name !== 'dawn' && name !== 'gong') return false;
     lastPlay.set(name, now);
-    const v = spec.vol * (opts.volume ?? 1);
-    const dur = fn(now + 0.005, v, sfxBus, opts.arg) || 0.2;
+    const v = Math.min(4, spec.vol * volMul);
+    const rawDur = fn(now + 0.005, v, sfxBus, opts?.arg);
+    const dur = typeof rawDur === 'number' && Number.isFinite(rawDur) && rawDur > 0 ? rawDur : 0.2;
     voiceStart(dur);
     return true;
   }
@@ -422,6 +428,7 @@ export function createAudio() {
     if (!events || !events.length || !enabled.sfx || !canPlay()) return;
     let hits = 0, crits = 0, kills = 0, xp = 0;
     for (const e of events) {
+      if (!e || typeof e !== 'object') continue;
       switch (e.type) {
         case 'hit': if (e.crit) crits++; else hits++; break;
         case 'kill': kills++; if (e.elite || e.boss) play('woodblock'); break;
@@ -431,9 +438,9 @@ export function createAudio() {
           else play('levelup', { volume: 0.5 });
           break;
         case 'fire': {
-          const wid = e.weaponId || 'gong';
+          const wid = typeof e.weaponId === 'string' && e.weaponId ? e.weaponId : 'gong';
           const key = 'fire_' + wid;
-          if (SFX[key]) play(key, { arg: !!e.evolved });
+          if (Object.hasOwn(SFX, key)) play(key, { arg: !!e.evolved });
           else play('gongSmall');
           break;
         }
@@ -466,8 +473,15 @@ export function createAudio() {
           break;
         case 'ult': play('gong', { volume: 1 }); break;
         case 'levelup': play('levelup'); break;
-        case 'watchChange': setWatch(e.watch); if (e.watch >= 2 && e.watch <= 5) play('watch', { arg: e.watch }); break;
+        case 'watch':
+        case 'watchChange':
+          if (Number.isFinite(e.watch)) {
+            setWatch(e.watch);
+            if (e.watch >= 2 && e.watch <= 5) play('watch', { arg: e.watch });
+          }
+          break;
         case 'bossSpawn': play('boss'); break;
+        case 'bossKill':
         case 'bossDefeated': play('gong'); break;
         case 'evolve': play('evolve'); break;
         case 'propBreak': play('paper', { volume: 1.3 }); break;

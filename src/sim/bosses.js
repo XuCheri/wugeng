@@ -285,6 +285,8 @@ export function onBossKilled(run, e) {
   }
   if (e.final && run.mode === 'main') {
     run.status = 'cleared';
+    run._cleared = true;
+    if (run.player.hp <= 0) run.player.hp = 1;
     run.watch = 6;
     run.darkness = DARKNESS.dawn;
     run.events.push({ type: 'dawn' });

@@ -280,7 +280,11 @@ export function stepRun(run, input = {}, dt = DT) {
 function outside(run, fn) {
   const start = run.events.length;
   const res = fn();
-  if (run.events.length > start) run._outbox.push(...run.events.splice(start));
+  if (run.events.length > start) {
+    for (const e of run.events.splice(start)) {
+      run._outbox.push(e && e.type === 'hit' ? { ...e } : e);
+    }
+  }
   return res;
 }
 
@@ -361,7 +365,9 @@ export function openChest(run, preferredWeaponId = null) {
 }
 
 export function interactShrine(run, shrineId = null) {
-  return interactShrineImpl(run, shrineId);
+  const ok = interactShrineImpl(run, shrineId);
+  if (!ok && run?.status === 'playing') settleStatus(run);
+  return ok;
 }
 
 export function resolveShrine(run, optionIndex) {
@@ -411,7 +417,7 @@ export function revive(run) {
     compactEnemies(run);
     run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet');
     run.events.push({ type: 'revive' });
-    run.status = 'playing';
+    if (run.status !== 'cleared') run.status = 'playing';
     settleStatus(run);
     return true;
   });
@@ -424,6 +430,7 @@ export function enterEndless(run) {
   run._endlessStart = run.time;
   run._endlessBossT = ENDLESS.bossEvery;
   run.darkness = DARKNESS.endless;
+  if (run.player.hp <= 0) run.player.hp = 1;
   run.status = 'playing';
   settleStatus(run);
   return true;

@@ -107,7 +107,7 @@ export const ENEMIES = {
   cinder: { name: '阴火骷髅', hp: 32, speed: 64, dmg: 9, r: 12, xp: 1 },
   horse: { name: '纸马将军', hp: 3050, speed: 60, dmg: 18, r: 30, xp: 40, boss: true },
   umbrella: { name: '无面伞女', hp: 31000, speed: 52, dmg: 26, r: 28, xp: 80, boss: true },
-  youshen: { name: '夜游神', hp: 96000, speed: 80.5, dmg: 65, r: 40, xp: 0, boss: true },
+  youshen: { name: '夜游神', hp: 96000, speed: 58, dmg: 65, r: 40, xp: 0, boss: true },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES);
 export const REGULAR_ENEMY_IDS = ENEMY_IDS.filter((k) => !ENEMIES[k].boss);

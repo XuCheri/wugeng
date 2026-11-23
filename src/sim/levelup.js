@@ -137,11 +137,22 @@ export function generateChoices(run) {
     if (idx >= 0) {
       const matched = pool.splice(idx, 1)[0];
       picked.push(strip(matched, lk));
-    } else if (lk.kind === 'overflow' && allMaxed(run)) {
+    } else if (lk.kind === 'coin' || lk.kind === 'bun') {
+      picked.push({
+        kind: lk.kind,
+        id: lk.kind,
+        level: 0,
+        isNew: false,
+        evolvable: false,
+        evolveTargetId: null,
+        tags: [],
+        locked: true,
+      });
+    } else if (lk.kind === 'overflow' && (allMaxed(run) || pool.length === 0)) {
       picked.push({
         kind: 'overflow',
         id: 'overflow',
-        level: run.mods.overflowStacks + 1,
+        level: (run.mods?.overflowStacks || 0) + 1,
         isNew: false,
         evolvable: false,
         evolveTargetId: null,
