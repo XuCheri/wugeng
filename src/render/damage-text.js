@@ -37,14 +37,18 @@ export function formatCN(n) {
  * @returns 被更新或新建的条目
  */
 export function mergeHit(list, hit, now, window = MERGE_WINDOW) {
+  if (!hit || typeof hit !== 'object') return null;
+  const hx = Number.isFinite(hit.x) ? hit.x : 0;
+  const hy = Number.isFinite(hit.y) ? hit.y : 0;
+  const amt = Number.isFinite(hit.amount) ? hit.amount : 0;
   const crit = !!hit.crit;
   if (hit.enemyId != null) {
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];
       if (e.enemyId === hit.enemyId && e.crit === crit && now - e.born < window) {
-        e.amount += hit.amount;
-        e.x = hit.x;
-        e.y = hit.y;
+        e.amount += amt;
+        e.x = hx;
+        e.y = hy;
         e.last = now;
         e.hits++;
         return e;
@@ -53,14 +57,14 @@ export function mergeHit(list, hit, now, window = MERGE_WINDOW) {
   }
   const e = {
     enemyId: hit.enemyId ?? null,
-    x: hit.x,
-    y: hit.y,
-    amount: hit.amount,
+    x: hx,
+    y: hy,
+    amount: amt,
     crit,
     born: now,
     last: now,
     hits: 1,
-    seed: ((hit.enemyId ?? 0) * 7919 + Math.floor(now * 1000)) % 997,
+    seed: ((Number.isFinite(hit.enemyId) ? hit.enemyId : 0) * 7919 + Math.floor((Number.isFinite(now) ? now : 0) * 1000)) % 997,
   };
   list.push(e);
   if (list.length > MAX_TEXTS) list.splice(0, list.length - MAX_TEXTS);
@@ -91,7 +95,7 @@ export function createDamageTexts() {
   return {
     list,
     add(hit, now) {
-      if (!(hit.amount > 0)) return;
+      if (!hit || !(hit.amount > 0) || !Number.isFinite(hit.amount)) return;
       mergeHit(list, hit, now);
     },
     clear() {

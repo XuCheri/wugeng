@@ -1,0 +1,3 @@
+{
+  "install": "npm ci --no-audit --no-fund && if ! command -v ffmpeg >/dev/null 2>&1; then sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg; fi && if [ ! -x /usr/bin/chromium ] && [ -x /usr/bin/google-chrome ]; then sed -i '/case \\$- in/,/esac/d' ~/.bashrc 2>/dev/null || true; grep -qxF 'export CHROME_PATH=/usr/bin/google-chrome' ~/.bashrc 2>/dev/null || echo 'export CHROME_PATH=/usr/bin/google-chrome' >> ~/.bashrc; fi && if ! (.venv/bin/python3 -c 'import fontTools, brotli' >/dev/null 2>&1 && [ -x .venv/bin/pyftsubset ]); then python3 -m venv --clear .venv && .venv/bin/pip install --no-input fonttools brotli; fi"
+}

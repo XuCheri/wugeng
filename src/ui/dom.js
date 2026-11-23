@@ -20,7 +20,9 @@ export function h(tag, attrs = {}, ...children) {
 function append(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
-    el.appendChild(c instanceof Node ? c : document.createTextNode(String(c)));
+    const isDom = (typeof Node !== 'undefined' && c instanceof Node)
+      || (typeof c === 'object' && typeof c.nodeType === 'number');
+    el.appendChild(isDom ? c : document.createTextNode(String(c)));
   }
 }
 
@@ -43,7 +45,7 @@ function guardTap(onClick) {
   };
 }
 
-/** 朱红印章按钮。opts: { kind: 'seal'|'ghost'|'small', disabled, badge, cls, label } */
+/** 朱红印章按钮。opts: { kind: 'seal'|'ghost'|'small'|'square', disabled, badge, cls, label, dataset } */
 export function sealButton(text, onClick, opts = {}) {
   const kind = opts.kind || 'seal';
   const btn = h('button', {
@@ -51,6 +53,7 @@ export function sealButton(text, onClick, opts = {}) {
     class: `btn btn--${kind}${opts.cls ? ' ' + opts.cls : ''}`,
     disabled: opts.disabled,
     'aria-label': opts.label,
+    dataset: opts.dataset,
   }, h('span', { class: 'btn__text' }, text));
   if (opts.badge !== undefined && opts.badge !== null) {
     btn.appendChild(h('span', { class: 'btn__badge' }, String(opts.badge)));
@@ -72,8 +75,8 @@ export function adButton(text, onClick, opts = {}) {
 }
 
 /** 宣纸装裱面板。 */
-export function scroll({ title, sub, body = [], footer = [], cls = '' } = {}) {
-  return h('section', { class: `scroll ${cls}` },
+export function scroll({ title, sub, body = [], footer = [], cls = '', attrs = {} } = {}) {
+  return h('section', { ...attrs, class: `scroll ${cls}`.trim() },
     h('i', { class: 'scroll__rod scroll__rod--top', 'aria-hidden': 'true' }),
     title ? h('header', { class: 'scroll__head' },
       h('h2', { class: 'scroll__title' }, title),
@@ -85,8 +88,8 @@ export function scroll({ title, sub, body = [], footer = [], cls = '' } = {}) {
 }
 
 /** 遮罩层（淡墨）。返回 { el, close }。 */
-export function veil(root, content, { cls = '', onBackdrop } = {}) {
-  const el = h('div', { class: `veil ${cls}`, role: 'dialog', 'aria-modal': 'true' }, content);
+export function veil(root, content, { cls = '', attrs = {}, onBackdrop } = {}) {
+  const el = h('div', { ...attrs, class: `veil ${cls}`.trim(), role: 'dialog', 'aria-modal': 'true' }, content);
   if (onBackdrop) {
     el.addEventListener('click', (e) => { if (e.target === el) onBackdrop(); });
   }

@@ -2,12 +2,16 @@
 // 这里只做「读存档 → 换算加成」和「扣铜钱 → 升一级」。
 // 用命名空间导入，balance.js 字段缺失时也不会在模块链接期报错，而是退回 PLAN §4.6 的默认值。
 import * as balance from '../sim/balance.js';
-import { SHOP_IDS, SHOP_MAX_LEVEL } from './save.js';
+import {
+  SHOP_IDS, SHOP_MAX_LEVEL, isPlainObj, toFiniteNumber, canMutateObj, canWriteProp,
+} from './save.js';
 
 /** PLAN §4.6 价目表（与 balance.js 的 META_COSTS 一致），ℓ 为要升到的等级（1..5）。 */
 const FALLBACK_COSTS = [60, 181, 347, 553, 794];
 export function defaultCost(level) {
-  return FALLBACK_COSTS[level - 1] ?? Infinity;
+  const n = toFiniteNumber(level);
+  if (!Number.isFinite(n)) return Infinity;
+  return FALLBACK_COSTS[Math.floor(n) - 1] ?? Infinity;
 }
 
 function fallbackBonuses(levels = {}) {
@@ -54,16 +58,24 @@ export function getShopItems() {
 
 /** 某项在 level 级时的累计效果文案（balance.describeMeta 优先）。 */
 export function describeLevel(id, level) {
-  if (typeof balance.describeMeta === 'function') return balance.describeMeta(id, level);
+  if (typeof id !== 'string' || !SHOP_BY_ID.has(id)) return '';
+  const n = toFiniteNumber(level);
+  const lv = Number.isFinite(n) && n > 0 ? Math.min(SHOP_MAX_LEVEL, Math.floor(n)) : 0;
+  if (typeof balance.describeMeta === 'function') return balance.describeMeta(id, lv);
   return '';
 }
 
 export function getLevel(save, id) {
-  return Math.max(0, Math.floor(save?.shop?.[id] || 0));
+  if (typeof id !== 'string' || !SHOP_BY_ID.has(id)) return 0;
+  if (!isPlainObj(save) || !isPlainObj(save.shop)) return 0;
+  const it = SHOP_BY_ID.get(id);
+  const n = toFiniteNumber(save.shop[id]);
+  return Number.isFinite(n) && n > 0 ? Math.min(it.maxLevel, Math.floor(n)) : 0;
 }
 
 /** 升到下一级的价格；已满级返回 null。 */
 export function nextCost(save, id) {
+  if (typeof id !== 'string') return null;
   const it = SHOP_BY_ID.get(id);
   if (!it) return null;
   const lv = getLevel(save, id);
@@ -72,7 +84,8 @@ export function nextCost(save, id) {
 }
 
 export function getMetaBonuses(save) {
-  const levels = { ...(save?.shop || {}) };
+  const levels = {};
+  for (const id of SHOP_IDS) levels[id] = getLevel(save, id);
   const fn = typeof balance.metaBonusesFromLevels === 'function' ? balance.metaBonusesFromLevels : fallbackBonuses;
   const out = { ...fallbackBonuses({}), ...fn(levels) };
   return out;
@@ -80,16 +93,28 @@ export function getMetaBonuses(save) {
 
 /**
  * 买一级：成功时扣铜钱并写入 save（调用方负责 saveSave）。
- * 返回 { ok, reason?: 'unknown'|'max'|'coins', cost, level }
+ * 返回 { ok, reason?: 'unknown'|'invalid'|'max'|'coins', cost, level }
  */
 export function buyLevel(save, id) {
-  const it = SHOP_BY_ID.get(id);
+  const it = typeof id === 'string' ? SHOP_BY_ID.get(id) : null;
   if (!it) return { ok: false, reason: 'unknown', cost: null, level: 0 };
   const lv = getLevel(save, id);
+  if (!canMutateObj(save) || !canWriteProp(save, 'coins')) {
+    return { ok: false, reason: 'invalid', cost: null, level: lv };
+  }
+  const shopOk = save.shop === undefined || save.shop === null
+    ? canWriteProp(save, 'shop')
+    : (isPlainObj(save.shop) && canMutateObj(save.shop) && canWriteProp(save.shop, id));
+  if (!shopOk) {
+    return { ok: false, reason: 'invalid', cost: null, level: lv };
+  }
   if (lv >= it.maxLevel) return { ok: false, reason: 'max', cost: null, level: lv };
   const cost = it.costFn(lv + 1);
-  if (!(save.coins >= cost)) return { ok: false, reason: 'coins', cost, level: lv };
-  save.coins -= cost;
+  const rawCoins = toFiniteNumber(save.coins);
+  const coins = Number.isFinite(rawCoins) && rawCoins >= 0 ? Math.min(1e12, Math.floor(rawCoins)) : -1;
+  if (coins < cost) return { ok: false, reason: 'coins', cost, level: lv };
+  if (!isPlainObj(save.shop)) save.shop = {};
+  save.coins = coins - cost;
   save.shop[id] = lv + 1;
   return { ok: true, cost, level: lv + 1 };
 }

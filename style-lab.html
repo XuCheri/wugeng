@@ -8,7 +8,7 @@
   html, body { margin: 0; height: 100%; background: #1C1A17; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
   #sheet { display: none; }
-  #fps { position: fixed; right: 4px; bottom: 2px; font: 10px monospace; color: #8E2A1B; opacity: .6; pointer-events: none; }
+  #fps { position: fixed; right: 4px; bottom: 2px; font: 10px "WenKai", "Noto Serif CJK SC", serif; color: #8E2A1B; opacity: .6; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -31,17 +31,20 @@ const settings = {
 const low = q.get('low') === '1';
 const showFps = q.get('fps') === '1';
 
-// 尝试加载 UI 工程师放进 assets/fonts/ 的霞鹜文楷（名为 WenKai）；拿不到就用系统宋体
+// 尝试加载 UI 工程师放进 assets/fonts/ 的霞鹜文楷（名为 WenKai）；拿不到就用系统衬线字体
 async function loadFont() {
-  const candidates = [];
+  const candidates = ['assets/fonts/wenkai-subset.woff2'];
   try {
     const r = await fetch('assets/fonts/');
     if (r.ok) {
       const html = await r.text();
-      for (const m of html.matchAll(/href="([^"]+\.(?:woff2|woff|ttf|otf))"/gi)) candidates.push('assets/fonts/' + m[1]);
+      for (const m of html.matchAll(/href="([^"]+\.(?:woff2|woff|ttf|otf))"/gi)) {
+        const p = 'assets/fonts/' + m[1];
+        if (!candidates.includes(p)) candidates.push(p);
+      }
     }
   } catch {}
-  for (const url of candidates.sort((a, b) => (/wenkai/i.test(b) ? 1 : 0) - (/wenkai/i.test(a) ? 1 : 0))) {
+  for (const url of candidates) {
     try {
       const f = new FontFace('WenKai', `url(${url})`);
       await f.load();
@@ -61,7 +64,13 @@ if (scene === 'sheet') {
   window.__ready = true;
 } else {
   const renderer = createRenderer(canvas, { lowQuality: low });
-  const run = createMockRun({ watch, scene, hero: q.get('hero') || 'zhou', boss: q.get('boss') || undefined });
+  const run = createMockRun({
+    watch,
+    scene,
+    hero: q.get('hero') || 'zhou',
+    boss: q.get('boss') || undefined,
+    awakened: q.get('awakened') === '1',
+  });
   window.__run = run;
   window.__renderer = renderer;
   const fit = () => renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);

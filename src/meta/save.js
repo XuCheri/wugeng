@@ -7,12 +7,24 @@ export const SAVE_VERSION = 1;
 export const HERO_IDS = ['zhou', 'mian', 'daotong'];
 export const HERO_START_WEAPON = { zhou: 'gong', mian: 'paperman', daotong: 'talisman' };
 export const SHOP_IDS = ['tizhi', 'lidao', 'jiaoli', 'yanli', 'wuxing', 'caiyun', 'jiyuan', 'huchi'];
-export const WEAPON_IDS = ['gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell'];
-export const RELIC_IDS = ['clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring'];
-export const ENEMY_IDS = ['paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned', 'horse', 'umbrella', 'youshen'];
+export const WEAPON_IDS = [
+  'gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell',
+  'compass', 'soulbanner', 'bronze_mirror', 'paperhorse',
+];
+export const RELIC_IDS = [
+  'clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring',
+  'strawshoes', 'glutinous', 'fivecoins', 'soulwick',
+];
+export const ENEMY_IDS = [
+  'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',
+  'suona', 'paperbride', 'cinder',
+  'horse', 'umbrella', 'youshen',
+];
 export const NIGHT_MAX = 10;
 export const SHOP_MAX_LEVEL = 5;
 export const DMG_TEXT_MODES = ['all', 'crit', 'off'];
+
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function defaultSettings() {
   return { sfx: true, music: true, shake: true, dmgText: 'all', lowQuality: false };
@@ -53,18 +65,64 @@ export function defaultSave() {
   };
 }
 
-const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const int = (v, def, min = -Infinity, max = Infinity) => {
-  const n = Number(v);
+export function isPlainObj(v) {
+  if (v === null || typeof v !== 'object') return false;
+  try {
+    const proto = Object.getPrototypeOf(v);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    return false;
+  }
+}
+
+export function canMutateObj(v) {
+  return isPlainObj(v) && !Object.isFrozen(v);
+}
+
+export function canWriteProp(obj, key) {
+  if (!isPlainObj(obj) || Object.isFrozen(obj)) return false;
+  const d = Object.getOwnPropertyDescriptor(obj, key);
+  return !d ? Object.isExtensible(obj) : (d.writable === true || typeof d.set === 'function');
+}
+
+export function canMutateArray(a) {
+  if (!Array.isArray(a) || Object.isFrozen(a) || !Object.isExtensible(a)) return false;
+  const lenDesc = Object.getOwnPropertyDescriptor(a, 'length');
+  return !lenDesc || lenDesc.writable === true;
+}
+
+const isObj = isPlainObj;
+
+export function toFiniteNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (typeof v === 'string') {
+    if (v.trim() === '') return NaN;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  return NaN;
+}
+
+const int = (v, def, min = -Infinity, max = 9e15) => {
+  const n = toFiniteNumber(v);
   if (!Number.isFinite(n)) return def;
   return Math.min(max, Math.max(min, Math.floor(n)));
 };
-const num = (v, def, min = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(min, n) : def;
+const num = (v, def, min = 0, max = 1e15) => {
+  const n = toFiniteNumber(v);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, n));
 };
 const bool = (v, def) => (typeof v === 'boolean' ? v : def);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isValidDateStr(s) {
+  if (typeof s !== 'string' || !DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  if (y < 1970 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
 
 /**
  * 把任意来源（旧版本、手改、半截损坏）的数据修补成当前版本的合法存档。
@@ -109,8 +167,11 @@ export function migrateSave(raw) {
 
   if (isObj(src.achievements)) {
     for (const [k, v] of Object.entries(src.achievements)) {
-      if (typeof k === 'string' && k.length < 40 && (typeof v === 'number' || v === true)) {
-        out.achievements[k] = v === true ? 1 : v;
+      if (typeof k !== 'string' || !k || k.length >= 40 || FORBIDDEN_KEYS.has(k)) continue;
+      if (v === true) {
+        out.achievements[k] = 1;
+      } else if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+        out.achievements[k] = Math.min(9e15, Math.max(1, Math.floor(v)));
       }
     }
   }
@@ -127,15 +188,14 @@ export function migrateSave(raw) {
   if (isObj(src.checkin)) {
     const c = src.checkin;
     out.checkin.cycleDay = int(c.cycleDay, 0, 0, 6);
-    out.checkin.lastClaimDate = typeof c.lastClaimDate === 'string' && DATE_RE.test(c.lastClaimDate)
-      ? c.lastClaimDate : null;
-    out.checkin.cycles = int(c.cycles, 0, 0);
-    out.checkin.totalClaims = int(c.totalClaims, 0, 0);
+    out.checkin.lastClaimDate = isValidDateStr(c.lastClaimDate) ? c.lastClaimDate : null;
+    out.checkin.cycles = int(c.cycles, 0, 0, 1e9);
+    out.checkin.totalClaims = int(c.totalClaims, 0, 0, 1e9);
   }
 
   if (isObj(src.cosmetics)) {
     const owned = Array.isArray(src.cosmetics.owned)
-      ? [...new Set(src.cosmetics.owned.filter((x) => typeof x === 'string' && x.length < 40))]
+      ? [...new Set(src.cosmetics.owned.filter((x) => typeof x === 'string' && x.length > 0 && x.length < 40 && !FORBIDDEN_KEYS.has(x)))]
       : [];
     out.cosmetics.owned = owned;
     const eq = isObj(src.cosmetics.equipped) ? src.cosmetics.equipped : {};
@@ -154,15 +214,15 @@ export function migrateSave(raw) {
 
   if (isObj(src.stats)) {
     const s = src.stats;
-    out.stats.runs = int(s.runs, 0, 0);
-    out.stats.clears = int(s.clears, 0, 0);
+    out.stats.runs = int(s.runs, 0, 0, 1e9);
+    out.stats.clears = int(s.clears, 0, 0, 1e9);
     out.stats.firstRunDone = bool(s.firstRunDone, out.stats.runs > 0);
-    out.stats.totalPlaySec = num(s.totalPlaySec, 0);
-    out.stats.bestTimeSec = num(s.bestTimeSec, 0);
-    out.stats.bestKills = int(s.bestKills, 0, 0);
-    out.stats.bestHit = num(s.bestHit, 0);
-    out.stats.totalKills = int(s.totalKills, 0, 0);
-    out.stats.totalCoins = int(s.totalCoins, 0, 0);
+    out.stats.totalPlaySec = num(s.totalPlaySec, 0, 0, 1e12);
+    out.stats.bestTimeSec = num(s.bestTimeSec, 0, 0, 1e12);
+    out.stats.bestKills = int(s.bestKills, 0, 0, 1e12);
+    out.stats.bestHit = num(s.bestHit, 0, 0, 1e15);
+    out.stats.totalKills = int(s.totalKills, 0, 0, 1e12);
+    out.stats.totalCoins = int(s.totalCoins, 0, 0, 1e12);
   }
 
   // 图鉴数据清洗 + 根据已解锁英雄与已有护身符自动回填
@@ -215,11 +275,24 @@ function shopSpent(shop) {
 
 export function isFreshSave(s) {
   if (!isObj(s)) return true;
-  return (s.stats?.runs || 0) === 0
-    && (s.coins || 0) === 0
+  const weapons = Array.isArray(s.codex?.weapons) ? s.codex.weapons : [];
+  const onlyDefaultWeapon = weapons.length === 0 || (weapons.length === 1 && weapons[0] === 'gong');
+  const heroes = Array.isArray(s.unlockedHeroes) ? s.unlockedHeroes : [];
+  const onlyDefaultHero = heroes.length === 0 || (heroes.length === 1 && heroes[0] === 'zhou');
+  return int(s.stats?.runs, 0, 0, 1e9) === 0
+    && int(s.coins, 0, 0, 1e12) === 0
     && shopSpent(s.shop) === 0
-    && (s.checkin?.totalClaims || 0) === 0
-    && (s.unlockedHeroes?.length || 1) <= 1;
+    && int(s.checkin?.totalClaims, 0, 0, 1e9) === 0
+    && onlyDefaultHero
+    && (Array.isArray(s.charms) ? s.charms.length : 0) === 0
+    && int(s.nightUnlocked, 0, 0, NIGHT_MAX) === 0
+    && int(s.nightCleared, -1, -1, NIGHT_MAX) < 0
+    && (isObj(s.achievements) ? Object.keys(s.achievements).length : 0) === 0
+    && (Array.isArray(s.cosmetics?.owned) ? s.cosmetics.owned.length : 0) === 0
+    && onlyDefaultWeapon
+    && (Array.isArray(s.codex?.evolutions) ? s.codex.evolutions.length : 0) === 0
+    && (Array.isArray(s.codex?.relics) ? s.codex.relics.length : 0) === 0
+    && (isObj(s.codex?.enemies) ? Object.keys(s.codex.enemies).length : 0) === 0;
 }
 
 function saveProgressScore(s) {
@@ -266,7 +339,8 @@ export function mergeSaves(localRaw, remoteRaw) {
 
   // 成就（保留最早达成时间）
   for (const [k, v] of Object.entries(secondary.achievements)) {
-    if (!merged.achievements[k] || (v > 0 && v < merged.achievements[k])) merged.achievements[k] = v;
+    if (FORBIDDEN_KEYS.has(k) || !(v > 0)) continue;
+    if (!merged.achievements[k] || v < merged.achievements[k]) merged.achievements[k] = v;
   }
 
   // 外观并集
@@ -277,10 +351,11 @@ export function mergeSaves(localRaw, remoteRaw) {
   }
 
   // 图鉴并集
-  const wSet = new Set([...a.codex.weapons, ...b.codex.weapons]);
-  for (const h of merged.unlockedHeroes) if (HERO_START_WEAPON[h]) wSet.add(HERO_START_WEAPON[h]);
   const eSet = new Set([...a.codex.evolutions, ...b.codex.evolutions]);
+  const wSet = new Set([...a.codex.weapons, ...b.codex.weapons, ...eSet]);
+  for (const h of merged.unlockedHeroes) if (HERO_START_WEAPON[h]) wSet.add(HERO_START_WEAPON[h]);
   const rSet = new Set([...a.codex.relics, ...b.codex.relics]);
+  for (const c of merged.charms) if (RELIC_IDS.includes(c.relicId)) rSet.add(c.relicId);
   const enemies = {};
   for (const k of ENEMY_IDS) {
     const cnt = Math.max(a.codex.enemies[k] || 0, b.codex.enemies[k] || 0);
@@ -333,14 +408,19 @@ export function loadSave(storage) {
 
 /** 写档：返回是否成功（存储满或被禁用时为 false，游戏照常进行）。 */
 export function saveSave(save, storage, now = Date.now()) {
-  if (isObj(save)) {
-    const ts = int(now, 0, 0, 9e15);
-    if (ts > 0) save.updatedAt = Math.max(save.updatedAt || 0, ts);
-  }
-  const st = getStorage(storage);
-  if (!st) return false;
+  if (!isPlainObj(save)) return false;
   try {
-    st.setItem(SAVE_KEY, JSON.stringify({ ...save, version: SAVE_VERSION }));
+    const prevTs = int(save.updatedAt, 0, 0, 9e15);
+    const nowTs = int(now, 0, 0, 9e15);
+    const nextTs = Math.max(prevTs, nowTs);
+    if (canWriteProp(save, 'updatedAt')) {
+      try { save.updatedAt = nextTs; } catch {}
+    }
+    const st = getStorage(storage);
+    if (!st || typeof st.setItem !== 'function') return false;
+    const clean = migrateSave(save);
+    clean.updatedAt = nextTs;
+    st.setItem(SAVE_KEY, JSON.stringify({ ...clean, version: SAVE_VERSION }));
     return true;
   } catch {
     return false;
@@ -349,7 +429,20 @@ export function saveSave(save, storage, now = Date.now()) {
 
 /** 记一次成就（只记首次时间）。返回是否为新达成。 */
 export function markAchievement(save, id, ts = 1) {
-  if (save.achievements[id]) return false;
-  save.achievements[id] = ts;
-  return true;
+  if (!canMutateObj(save) || typeof id !== 'string' || !id || id.length >= 40 || FORBIDDEN_KEYS.has(id)) return false;
+  if (isPlainObj(save.achievements)) {
+    if (save.achievements[id]) return false;
+    if (!canWriteProp(save.achievements, id)) return false;
+  } else {
+    if (!canWriteProp(save, 'achievements')) return false;
+    save.achievements = {};
+  }
+  const n = toFiniteNumber(ts);
+  const stamp = Number.isFinite(n) && n > 0 ? Math.min(9e15, Math.max(1, Math.floor(n))) : 1;
+  try {
+    save.achievements[id] = stamp;
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -7,6 +7,7 @@
 import { createRequire } from 'node:module';
 import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,9 +16,9 @@ const require = createRequire(path.join(ROOT, 'package.json'));
 const { chromium } = require('playwright-core');
 
 const PORT = 8794;
-const CHROME = process.env.CHROME_PATH || '/usr/bin/chromium';
+const CHROME = process.env.CHROME_PATH || (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : '/usr/bin/chromium');
 const STORE_DIR = path.join(ROOT, 'store');
-const FRAMES_DIR = '/tmp/wugeng_demo_frames';
+const FRAMES_DIR = process.env.FRAMES_DIR || path.join(os.homedir(), '.cache', 'wugeng_demo_frames');
 
 fs.mkdirSync(STORE_DIR, { recursive: true });
 fs.rmSync(FRAMES_DIR, { recursive: true, force: true });
@@ -152,7 +153,16 @@ try {
         overlayHold++;
         if (overlayHold >= 20) {
           await page.mouse.up();
-          await page.click('.veil .btn--seal');
+          await page.click('[data-action="confirm-chest"], .veil .btn--seal');
+          await page.mouse.move(180, 510);
+          await page.mouse.down();
+          overlayHold = 0;
+        }
+      } else if (ov === 'shrine') {
+        overlayHold++;
+        if (overlayHold >= 20) {
+          await page.mouse.up();
+          await page.click('[data-action="dismiss-shrine"], .veil .btn--ghost');
           await page.mouse.move(180, 510);
           await page.mouse.down();
           overlayHold = 0;

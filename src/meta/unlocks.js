@@ -2,40 +2,129 @@
 // - 阿绵：单局打败 ≥ 800 只敌人
 // - 小道童：一个包子都不吃，守到五更（撑到 8:00 = 480 秒）
 // - 夜色 N+1：通关夜色 N
-import { NIGHT_MAX, markAchievement } from './save.js';
-import { recordCodexSummary } from './codex.js';
+import {
+  HERO_IDS, NIGHT_MAX, markAchievement, toFiniteNumber,
+  isPlainObj, canMutateObj, canWriteProp, canMutateArray,
+} from './save.js';
+import { recordCodexSummary, canMutateCodex } from './codex.js';
 
 export const MIAN_KILLS = 800;
 export const DAOTONG_TIME = 480;
+
+const STAT_KEYS = [
+  'runs', 'clears', 'firstRunDone', 'totalPlaySec',
+  'bestTimeSec', 'bestKills', 'bestHit', 'totalKills', 'totalCoins',
+];
+const ACH_KEYS = ['firstClear', 'kills800', 'noBun480', 'endless10', 'hit10k', 'hit100m', 'night10'];
+
+const safeNum = (v, max = 1e15) => {
+  const n = toFiniteNumber(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(max, n) : 0;
+};
+const safeInt = (v, max = 1e12) => Math.floor(safeNum(v, max));
+
+function canMutateUnlockSave(save) {
+  if (!canMutateObj(save)) return false;
+  if (
+    !canWriteProp(save, 'coins')
+    || !canWriteProp(save, 'nightCleared')
+    || !canWriteProp(save, 'nightUnlocked')
+    || !canWriteProp(save, 'unlockedHeroes')
+  ) {
+    return false;
+  }
+  if (Array.isArray(save.unlockedHeroes) && !canMutateArray(save.unlockedHeroes)) return false;
+
+  if (isPlainObj(save.stats)) {
+    if (!canMutateObj(save.stats)) return false;
+    for (const k of STAT_KEYS) {
+      if (!canWriteProp(save.stats, k)) return false;
+    }
+  } else if (!canWriteProp(save, 'stats')) {
+    return false;
+  }
+
+  if (isPlainObj(save.achievements)) {
+    if (!canMutateObj(save.achievements)) return false;
+    for (const k of ACH_KEYS) {
+      if (!save.achievements[k] && !canWriteProp(save.achievements, k)) return false;
+    }
+  } else if (!canWriteProp(save, 'achievements')) {
+    return false;
+  }
+
+  if (!canMutateCodex(save)) return false;
+  return true;
+}
+
+function ensureUnlockSave(save) {
+  const c = toFiniteNumber(save.coins);
+  save.coins = Number.isFinite(c) && c >= 0 ? Math.min(1e12, Math.floor(c)) : 0;
+
+  if (!Array.isArray(save.unlockedHeroes)) {
+    save.unlockedHeroes = ['zhou'];
+  } else {
+    save.unlockedHeroes = save.unlockedHeroes.filter((h) => HERO_IDS.includes(h));
+    if (!save.unlockedHeroes.includes('zhou')) save.unlockedHeroes.unshift('zhou');
+  }
+
+  const nc = toFiniteNumber(save.nightCleared);
+  save.nightCleared = Number.isFinite(nc) ? Math.max(-1, Math.min(NIGHT_MAX, Math.floor(nc))) : -1;
+
+  const nu = toFiniteNumber(save.nightUnlocked);
+  save.nightUnlocked = Math.max(
+    Number.isFinite(nu) ? Math.max(0, Math.min(NIGHT_MAX, Math.floor(nu))) : 0,
+    Math.min(NIGHT_MAX, save.nightCleared + 1),
+  );
+
+  if (!isPlainObj(save.stats)) save.stats = {};
+  const st = save.stats;
+  st.runs = safeInt(st.runs, 1e9);
+  st.clears = safeInt(st.clears, 1e9);
+  st.firstRunDone = typeof st.firstRunDone === 'boolean' ? st.firstRunDone : st.runs > 0;
+  st.totalPlaySec = safeNum(st.totalPlaySec, 1e12);
+  st.bestTimeSec = safeNum(st.bestTimeSec, 1e12);
+  st.bestKills = safeInt(st.bestKills, 1e12);
+  st.bestHit = safeNum(st.bestHit, 1e15);
+  st.totalKills = safeInt(st.totalKills, 1e12);
+  st.totalCoins = safeInt(st.totalCoins, 1e12);
+
+  if (!isPlainObj(save.achievements)) save.achievements = {};
+}
 
 /**
  * 小道童条件：撑到 480 秒，且 480 秒前没吃过包子。
  * 优先看 summary.firstBunTime（null = 一个没吃）；字段缺失时回退 bunsEaten === 0。
  */
 export function isNoBunDawn(summary) {
-  if (!summary || (summary.timeSec || 0) < DAOTONG_TIME) return false;
-  if ('firstBunTime' in summary && summary.firstBunTime !== undefined) {
+  if (!isPlainObj(summary) || safeNum(summary.timeSec) < DAOTONG_TIME) return false;
+  if (Object.prototype.hasOwnProperty.call(summary, 'firstBunTime') && summary.firstBunTime !== undefined) {
     const t = summary.firstBunTime;
-    return t === null || (Number.isFinite(t) && t >= DAOTONG_TIME);
+    if (t === null) return true;
+    const tn = toFiniteNumber(t);
+    return Number.isFinite(tn) && tn >= DAOTONG_TIME;
   }
-  return (summary.bunsEaten || 0) === 0;
+  const buns = summary.bunsEaten === undefined ? 0 : toFiniteNumber(summary.bunsEaten);
+  return Number.isFinite(buns) && buns >= 0 && Math.floor(buns) === 0;
 }
 
 /** 判定并写入 save，返回本次新解锁的列表 [{ kind: 'hero'|'night', id }]。 */
 export function evaluateUnlocks(save, summary) {
   const out = [];
-  if (!summary) return out;
+  if (!canMutateUnlockSave(save) || !isPlainObj(summary)) return out;
+  ensureUnlockSave(save);
   const unlockHero = (id) => {
     if (!save.unlockedHeroes.includes(id)) {
       save.unlockedHeroes.push(id);
       out.push({ kind: 'hero', id });
     }
   };
-  if ((summary.kills || 0) >= MIAN_KILLS) unlockHero('mian');
+  if (safeInt(summary.kills) >= MIAN_KILLS) unlockHero('mian');
   if (isNoBunDawn(summary)) unlockHero('daotong');
 
   if (summary.cleared) {
-    const n = Math.max(0, Math.min(NIGHT_MAX, Math.floor(summary.nightLevel || 0)));
+    const rawNight = toFiniteNumber(summary.nightLevel);
+    const n = Number.isFinite(rawNight) ? Math.max(0, Math.min(NIGHT_MAX, Math.floor(rawNight))) : 0;
     if (n > save.nightCleared) save.nightCleared = n;
     const next = Math.min(NIGHT_MAX, n + 1);
     if (next > save.nightUnlocked) {
@@ -48,8 +137,8 @@ export function evaluateUnlocks(save, summary) {
 
 /** 解锁条件说明（英雄选择界面给未解锁英雄看）。 */
 export function heroUnlockProgress(save, heroId) {
-  const s = save.stats || {};
-  if (heroId === 'mian') return { have: Math.min(MIAN_KILLS, s.bestKills || 0), need: MIAN_KILLS };
+  const s = isPlainObj(save) && isPlainObj(save.stats) ? save.stats : {};
+  if (heroId === 'mian') return { have: Math.min(MIAN_KILLS, safeInt(s.bestKills, MIAN_KILLS)), need: MIAN_KILLS };
   if (heroId === 'daotong') return null;
   return null;
 }
@@ -59,38 +148,46 @@ export function heroUnlockProgress(save, heroId) {
  * 返回 { coins, unlocks, achievements: [id] }
  */
 export function recordRun(save, summary, now = Date.now()) {
-  const coins = Math.max(0, Math.floor(summary?.coins || 0));
-  save.coins += coins;
+  if (!canMutateUnlockSave(save)) return { coins: 0, unlocks: [], achievements: [] };
+  ensureUnlockSave(save);
+  const sum = isPlainObj(summary) ? summary : {};
+  const coins = safeInt(sum.coins, 1e12);
+  const timeSec = safeNum(sum.timeSec, 1e12);
+  const kills = safeInt(sum.kills, 1e12);
+  const maxHit = safeNum(sum.maxHit, 1e15);
+  save.coins = Math.min(1e12, save.coins + coins);
   const st = save.stats;
-  st.runs += 1;
+  st.runs = Math.min(1e9, st.runs + 1);
   st.firstRunDone = true;
-  st.totalPlaySec += Math.max(0, summary?.timeSec || 0);
-  st.totalKills += Math.max(0, summary?.kills || 0);
-  st.totalCoins += coins;
-  st.bestTimeSec = Math.max(st.bestTimeSec, summary?.timeSec || 0);
-  st.bestKills = Math.max(st.bestKills, summary?.kills || 0);
-  st.bestHit = Math.max(st.bestHit, summary?.maxHit || 0);
-  if (summary?.cleared) st.clears += 1;
+  st.totalPlaySec = Math.min(1e12, st.totalPlaySec + timeSec);
+  st.totalKills = Math.min(1e12, st.totalKills + kills);
+  st.totalCoins = Math.min(1e12, st.totalCoins + coins);
+  st.bestTimeSec = Math.max(st.bestTimeSec, timeSec);
+  st.bestKills = Math.max(st.bestKills, kills);
+  st.bestHit = Math.max(st.bestHit, maxHit);
+  if (sum.cleared) st.clears = Math.min(1e9, st.clears + 1);
 
-  const unlocks = evaluateUnlocks(save, summary);
-  recordCodexSummary(save, summary);
+  const unlocks = evaluateUnlocks(save, sum);
+  recordCodexSummary(save, sum);
 
   const achievements = [];
   const ach = (id, cond) => { if (cond && markAchievement(save, id, now)) achievements.push(id); };
-  ach('firstClear', summary?.cleared);
-  ach('kills800', (summary?.kills || 0) >= MIAN_KILLS);
-  ach('noBun480', isNoBunDawn(summary));
-  ach('endless10', summary?.mode === 'endless' && (summary?.timeSec || 0) >= 1200);
-  ach('hit10k', (summary?.maxHit || 0) >= 1e4);
-  ach('hit100m', (summary?.maxHit || 0) >= 1e8);
-  ach('night10', summary?.cleared && (summary?.nightLevel || 0) >= NIGHT_MAX);
+  ach('firstClear', Boolean(sum.cleared));
+  ach('kills800', kills >= MIAN_KILLS);
+  ach('noBun480', isNoBunDawn(sum));
+  ach('endless10', sum.mode === 'endless' && timeSec >= 1200);
+  ach('hit10k', maxHit >= 1e4);
+  ach('hit100m', maxHit >= 1e8);
+  ach('night10', Boolean(sum.cleared) && safeInt(sum.nightLevel, NIGHT_MAX) >= NIGHT_MAX);
   return { coins, unlocks, achievements };
 }
 
 /** 结算页「广告 · 铜钱翻倍」：再给一份本局铜钱。 */
 export function grantDoubleCoins(save, amount) {
-  const add = Math.max(0, Math.floor(amount || 0));
-  save.coins += add;
-  save.stats.totalCoins += add;
+  if (!canMutateUnlockSave(save)) return 0;
+  ensureUnlockSave(save);
+  const add = safeInt(amount, 1e12);
+  save.coins = Math.min(1e12, save.coins + add);
+  save.stats.totalCoins = Math.min(1e12, save.stats.totalCoins + add);
   return add;
 }

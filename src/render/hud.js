@@ -1,11 +1,14 @@
-// hud.js —— Canvas HUD：笔触经验条 + 等级印、印章计时器「三更 · 05:12」、朱印血量、更锣大招按钮、Boss 血条横幅
-import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, FONT_CN, inkA, paperA, vermA } from './palette.js';
+// hud.js —— Canvas HUD：笔触经验条 + 等级印、印章计时器、局内紧凑神兵法器与流派羁绊栏、朱印血量、更锣大招、Boss 血条横幅
+import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, LANTERN, FONT_CN, inkA, vermA, lanternA } from './palette.js';
 import { makeCanvas, makeRng, brushStroke, roughRectPath, arcPoints, withMisreg, printSpeckle, softBlob } from './ink.js';
 import { drawSeal, drawStamp, measureSeal } from './glyphs.js';
+import { drawIcon } from './icons.js';
 import { BOSS_NAMES } from './fx.js';
 
 const TAU = Math.PI * 2;
 const WATCH_CN = ['', '一更', '二更', '三更', '四更', '五更', '天亮'];
+const SCHOOL_SHORT = { zhenhun: '镇', daofa: '道', zhizha: '纸', yangyan: '阳' };
+const TIER_CN = { 2: '二', 4: '四', 6: '六' };
 
 export function formatClock(sec) {
   const s = Math.max(0, Math.floor(sec));
@@ -35,7 +38,7 @@ export function createHud() {
     g.scale(scale, scale);
     fn(g);
     cache.set(key, c);
-    if (cache.size > 220) cache.delete(cache.keys().next().value);
+    if (cache.size > 320) cache.delete(cache.keys().next().value);
     return c;
   }
 
@@ -51,7 +54,6 @@ export function createHud() {
       for (let x = W; x >= 0; x -= 6) g.lineTo(x, h + (rng() - 0.3) * 4.5);
       g.closePath();
       g.fill();
-      // 撕边下的淡墨阴影
       g.strokeStyle = inkA(0.28);
       g.lineWidth = 1;
       g.beginPath();
@@ -66,7 +68,6 @@ export function createHud() {
   function xpStroke(len, frac) {
     const q = Math.round(frac * 120);
     return cached(`xp|${len}|${q}`, len + 20, 26, (g) => {
-      // 底：淡墨细线
       brushStroke(g, [[6, 13], [len * 0.5, 12.4], [len + 6, 13.2]], 3.2, { color: inkA(0.28), seed: 3, dry: 0.5, taperIn: 0.05, taperOut: 0.1, startWidth: 0.9 });
       if (q > 0) {
         const L = (len * q) / 120;
@@ -117,7 +118,6 @@ export function createHud() {
       g.strokeStyle = inkA(0.5);
       g.lineWidth = 1;
       g.stroke();
-      // 天地杆（装裱）
       g.fillStyle = INK;
       g.fillRect(2, 5, 4, 31);
       g.fillRect(w + 4, 5, 4, 31);
@@ -140,7 +140,6 @@ export function createHud() {
     return cached(`gong|${r}`, r * 2 + 16, r * 2 + 24, (g) => {
       const cx = r + 8;
       const cy = r + 16;
-      // 锣边挂的朱红短穗
       withMisreg(g, () => {
         g.strokeStyle = VERM;
         g.lineWidth = 1.6;
@@ -164,6 +163,178 @@ export function createHud() {
       g.stroke();
       printSpeckle(g, r * 2 + 16, r * 2 + 24, makeRng(r), 0.004, 0.6);
     });
+  }
+
+  /** 局内紧凑装备格缓存（位于顶栏计时印两侧 y=38..75，零遮挡中央世界视野） */
+  function weaponSlotTile(w) {
+    const lv = Math.max(1, Math.min(5, w.level || 1));
+    const evo = !!w.evolved;
+    return cached(`hudw|${w.id}|${lv}|${evo ? 1 : 0}`, 20, 20, (g) => {
+      g.fillStyle = PAPER;
+      g.fillRect(1, 1, 18, 18);
+      if (evo) {
+        g.fillStyle = lanternA(0.34);
+        g.fillRect(2, 2, 16, 16);
+        g.strokeStyle = VERM;
+        g.lineWidth = 1.6;
+        g.strokeRect(1.4, 1.4, 17.2, 17.2);
+        g.fillStyle = VERM;
+        g.beginPath();
+        g.moveTo(13, 1);
+        g.lineTo(19, 1);
+        g.lineTo(19, 7);
+        g.closePath();
+        g.fill();
+      } else {
+        g.strokeStyle = INK;
+        g.lineWidth = 1.15;
+        g.strokeRect(1.4, 1.4, 17.2, 17.2);
+      }
+      drawIcon(g, evo ? 'evo' : 'weapon', w.id, 10, 8.8, 13.8);
+      const dotCol = evo ? VERM : INK;
+      for (let i = 0; i < 5; i++) {
+        g.fillStyle = i < lv ? dotCol : inkA(0.2);
+        g.fillRect(3 + i * 2.9, 16.3, 2.1, 1.8);
+      }
+    });
+  }
+
+  function relicSlotTile(r) {
+    const lv = Math.max(1, Math.min(5, r.level || 1));
+    return cached(`hudr|${r.id}|${lv}`, 18, 18, (g) => {
+      g.fillStyle = PAPER_SHADE;
+      g.fillRect(1, 1, 16, 16);
+      g.strokeStyle = INK;
+      g.lineWidth = 1.05;
+      g.strokeRect(1.4, 1.4, 15.2, 15.2);
+      drawIcon(g, 'relic', r.id, 9, 8, 12.2);
+      for (let i = 0; i < 5; i++) {
+        g.fillStyle = i < lv ? VERM : inkA(0.2);
+        g.fillRect(2.8 + i * 2.6, 14.6, 1.8, 1.6);
+      }
+    });
+  }
+
+  function synergyBadgeTile(tag, tier) {
+    const sName = SCHOOL_SHORT[tag] || '印';
+    const tName = TIER_CN[tier] || String(tier);
+    const label = `${sName}${tName}`;
+    return cached(`hudsyn|${tag}|${tier}`, 30, 16, (g) => {
+      if (tier >= 4) {
+        g.fillStyle = VERM;
+        g.fillRect(1, 1, 28, 14);
+        g.strokeStyle = tier >= 6 ? LANTERN : PAPER;
+        g.lineWidth = tier >= 6 ? 1.3 : 0.8;
+        g.strokeRect(2.2, 2.2, 25.6, 11.6);
+        g.fillStyle = PAPER;
+      } else {
+        g.fillStyle = PAPER;
+        g.fillRect(1, 1, 28, 14);
+        g.strokeStyle = VERM;
+        g.lineWidth = 1.3;
+        g.strokeRect(1.5, 1.5, 27, 13);
+        g.fillStyle = VERM;
+      }
+      g.font = `10px ${FONT_CN}`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(label, 15, 8.5);
+    });
+  }
+
+  function drawLoadoutAndSynergies(ctx, run, W, st, timerLeft, timerRight) {
+    const stripX = 8;
+    const row1Y = st + 38;
+    const row2Y = st + 58;
+    const weapons = run.weapons || [];
+    const relics = run.relics || [];
+
+    // 计时器左侧第一行：4 武器槽 (18×18, 2px 间距 -> x=8..86)
+    for (let i = 0; i < 4; i++) {
+      const wx = stripX + i * 20;
+      const w = weapons[i];
+      if (w && w.id) {
+        ctx.drawImage(weaponSlotTile(w), wx - 1, row1Y - 1, 20, 20);
+      } else {
+        ctx.strokeStyle = inkA(0.16);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(wx + 0.5, row1Y + 0.5, 17, 17);
+      }
+    }
+
+    // 计时器左侧第二行：4 法器槽 (16×16, 2px 间距 -> x=8..78)
+    for (let i = 0; i < 4; i++) {
+      const rx = stripX + i * 18;
+      const r = relics[i];
+      if (r && r.id) {
+        ctx.drawImage(relicSlotTile(r), rx - 1, row2Y - 1, 18, 18);
+      } else {
+        ctx.strokeStyle = inkA(0.14);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rx + 0.5, row2Y + 0.5, 15, 15);
+      }
+    }
+
+    // 流派羁绊印章 + 命签/魂障简标（优先排在计时器与暂停钮之间的顶栏空隙，不侵入下方世界画面）
+    const activeSyns = run.synergies?.active || [];
+    const blessingCount = run.blessings?.length || 0;
+    const barrier = run.player?.soulBarrier || 0;
+    if (!activeSyns.length && !blessingCount && !barrier) return;
+
+    const badges = [];
+    for (let i = 0; i < activeSyns.length; i++) {
+      badges.push(synergyBadgeTile(activeSyns[i].tag, activeSyns[i].tier));
+    }
+    if (blessingCount > 0) {
+      badges.push(
+        cached(`hudbl|${blessingCount}`, 30, 16, (g) => {
+          g.fillStyle = INK;
+          g.fillRect(1, 1, 28, 14);
+          g.strokeStyle = LANTERN;
+          g.lineWidth = 1;
+          g.strokeRect(2, 2, 26, 12);
+          g.font = `9.5px ${FONT_CN}`;
+          g.fillStyle = LANTERN;
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillText(`签${blessingCount}`, 15, 8.5);
+        })
+      );
+    }
+    if (barrier > 0) {
+      badges.push(
+        cached(`hudsb|${barrier}`, 30, 16, (g) => {
+          g.fillStyle = PAPER;
+          g.fillRect(1, 1, 28, 14);
+          g.strokeStyle = INK;
+          g.lineWidth = 1.1;
+          g.strokeRect(1.5, 1.5, 27, 13);
+          g.font = `9.5px ${FONT_CN}`;
+          g.fillStyle = INK;
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillText(`障${barrier}`, 15, 8.5);
+        })
+      );
+    }
+
+    // 槽位：计时印右侧与暂停键之间的两行，以及左侧空余角位
+    const rxStart = timerRight + (run.mode === 'endless' ? 24 : 5);
+    const maxRight = W - 56;
+    const slots = [];
+    if (rxStart + 28 <= maxRight) {
+      slots.push([rxStart, row1Y], [rxStart, row2Y]);
+      if (rxStart + 59 <= maxRight) {
+        slots.push([rxStart + 31, row1Y], [rxStart + 31, row2Y]);
+      }
+    }
+    if (stripX + 82 + 28 <= timerLeft) {
+      slots.push([stripX + 80, row1Y], [stripX + 74, row2Y]);
+    }
+    for (let i = 0; i < badges.length && i < slots.length; i++) {
+      const [bx, by] = slots[i];
+      ctx.drawImage(badges[i], bx - 1, by - 1, 30, 16);
+    }
   }
 
   return {
@@ -229,9 +400,11 @@ export function createHud() {
       ctx.fill();
       drawSeal(ctx, clock, lx + labelW + 16, ty + th / 2, dSize, INK, 'left');
       if (run.mode === 'endless') {
-        // 无尽模式：计时印右侧加一枚小朱印
         drawStamp(ctx, String(Math.max(1, Math.floor((run.time - 600) / 60) + 1)), tx + tw + 14, ty + th / 2, 10, { seed: 5, rot: 0.08 });
       }
+
+      /* ---------- 顶栏两侧紧凑装备与流派羁绊栏（T1-F11-03） ---------- */
+      drawLoadoutAndSynergies(ctx, run, W, st, tx - 3, tx + tw + 3);
 
       /* ---------- Boss 血条横幅 ---------- */
       if (run.boss) {
@@ -239,13 +412,12 @@ export function createHud() {
         const bx = 18;
         const by = ty + th + 10;
         ctx.drawImage(bossBanner(bw), bx - 5, by, bw + 10, 40);
-        const name = BOSS_NAMES[run.boss.type] || BOSS_NAMES[run.boss.id] || '夜主';
+        const name = run.boss.name || BOSS_NAMES[run.boss.type] || BOSS_NAMES[run.boss.id] || '夜主';
         ctx.font = `15px ${FONT_CN}`;
         const nameW = ctx.measureText(name).width;
         const hpx = bx + nameW + 22;
-        const hpLen = bw - nameW - 34;
+        const hpLen = Math.max(40, bw - nameW - 34);
         const bf = run.boss.maxHp > 0 ? Math.max(0, Math.min(1, run.boss.hp / run.boss.maxHp)) : 0;
-        // 底：淡朱
         ctx.save();
         ctx.globalAlpha = 0.25;
         ctx.fillStyle = VERM;
@@ -261,7 +433,6 @@ export function createHud() {
         ctx.fillStyle = INK;
         ctx.textAlign = 'left';
         ctx.fillText(name, bx + 10, by + 21);
-        // 阶段刻度
         const phase = run.boss.phase || 1;
         if (run.boss.type === 'youshen') {
           for (let i = 1; i <= 3; i++) {
@@ -279,7 +450,6 @@ export function createHud() {
       if (p.hurtT > 0) hx += Math.sin(t * 90) * 2.5 * Math.min(1, p.hurtT * 4);
       const low = hpFrac < 0.3;
       const fillCol = p.hurtT > 0 ? VERM_DARK : VERM;
-      // 宣纸底，保证在夜色里可读
       ctx.fillStyle = PAPER;
       ctx.fillRect(hx + 2, hy + 2, hs - 4, hs - 4);
       const fillH = Math.round((hs - 6) * hpFrac);
@@ -291,7 +461,6 @@ export function createHud() {
       const hpStr = String(Math.max(0, Math.ceil(p.hp)));
       const hpSize = hpStr.length >= 4 ? 13 : 17;
       const cy = hy + hs / 2 + 3;
-      // 字：上半（空）为朱字，下半（满）为留白字
       const cutY = hy + 3 + (hs - 6 - fillH);
       ctx.save();
       ctx.beginPath();
@@ -326,7 +495,6 @@ export function createHud() {
       ctx.save();
       ctx.translate(gx, gy - r * 0.2);
       if (full) {
-        // 墨光：淡墨晕呼吸
         const pulse = 0.5 + 0.5 * Math.sin(t * 5);
         const img = softBlob(128, 'ink');
         const R = r * (1.75 + pulse * 0.25);
@@ -338,7 +506,6 @@ export function createHud() {
       ctx.translate(0, r * 0.2);
       const face = gongFace(r);
       ctx.drawImage(face, -r - 8, -r - 16, r * 2 + 16, r * 2 + 24);
-      // 墨从锣底涨起（攒气）
       if (uf > 0) {
         ctx.save();
         ctx.beginPath();
@@ -356,7 +523,6 @@ export function createHud() {
         ctx.fill();
         ctx.restore();
       }
-      // 锣心
       ctx.fillStyle = full ? VERM : PAPER_SHADE;
       ctx.beginPath();
       ctx.arc(0, 0, r * 0.26, 0, TAU);
@@ -371,7 +537,6 @@ export function createHud() {
       ctx.fillText('敲', 0, 1);
       ctx.restore();
       if (full) {
-        // 锣槌
         brushStroke(ctx, [[gx + r + 4, gy - r - 8], [gx + r * 0.6, gy - r * 0.4]], 4, { seed: 31, dry: 0.2, taperIn: 0.05, taperOut: 0.1 });
         ctx.fillStyle = VERM;
         ctx.beginPath();

@@ -1,7 +1,6 @@
-// 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷 Boss。
-// 水鬼优先从附近的古井爬出；同屏上限 260。
+// 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷巡更小头目与 Boss。
 
-import { SPAWN, ROSTER, BOSS_TIMELINE, ENDLESS, ENEMY_AI, WAVES, spawnRate } from './balance.js';
+import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, spawnRate } from './balance.js';
 import { spawnEnemy, ringPoint } from './enemies.js';
 import { spawnBoss } from './bosses.js';
 import { findWell } from './props.js';
@@ -22,6 +21,8 @@ export function spawnMinutes(run) {
 export function rosterFor(run) {
   if (run.mode === 'endless') return ROSTER_LISTS[5];
   if (run.watch === 1 && run.time >= SPAWN.watch1LateAt && ROSTER_LISTS['1b']) return ROSTER_LISTS['1b'];
+  if (run.watch === 2 && run.time >= SPAWN.watch2LateAt && ROSTER_LISTS['2b']) return ROSTER_LISTS['2b'];
+  if (run.watch === 3 && run.time >= SPAWN.watch3LateAt && ROSTER_LISTS['3b']) return ROSTER_LISTS['3b'];
   return ROSTER_LISTS[Math.min(5, run.watch)];
 }
 
@@ -58,16 +59,13 @@ function ambientSpawnPoint(run) {
   let a;
   let d;
   if (roll < 0.54) {
-    // 巷口涌入：沿两条不对称街巷方向呈疏密簇状飘来
     const base = rng.chance(0.58) ? flow.a1 : flow.a2;
     a = base + tri(rng, 0.62);
     d = rng.range(SPAWN.ringMin - 20, SPAWN.ringMax + 65);
   } else if (roll < 0.80 && p.moving) {
-    // 前路斜截：偏向玩家行进前方与侧翼，但留有错落景深
     a = Math.atan2(p.facingY, p.facingX) + tri(rng, 1.18);
     d = rng.range(SPAWN.ringMin - 10, SPAWN.ringMax + 55);
   } else {
-    // 暗角孤祟：零散从侧后暗处摸近
     a = rng.range(0, Math.PI * 2);
     d = rng.range(SPAWN.ringMin - 15, SPAWN.ringMax + 75);
   }
@@ -80,7 +78,8 @@ function ambientSpawnPoint(run) {
 function spawnOne(run) {
   const def = run.rng.weighted(rosterFor(run));
   const type = def.type;
-  const elite = run.rng.chance(run.night.eliteChance);
+  const eliteChance = Math.min(0.45, run.night.eliteChance * (run.mods?.eliteChanceMul || 1));
+  const elite = run.rng.chance(eliteChance);
   let pos = null;
   if (type === 'drowned') {
     const well = findWell(run, ENEMY_AI.drowned.wellMin, ENEMY_AI.drowned.wellMax);
@@ -93,8 +92,36 @@ function spawnOne(run) {
 export function updateSpawner(run, dt) {
   ensureAlleyFlow(run, dt);
 
-  // Boss 时间轴（主线）
+  // 主线：巡更小头目（150s / 360s 必落供盒）与 Boss 时间轴
   if (run.mode === 'main') {
+    if (!run._warderSpawned) run._warderSpawned = {};
+    for (const mw of MINI_WARDERS) {
+      if (!run._warderSpawned[mw.id] && run.time >= mw.time) {
+        run._warderSpawned[mw.id] = true;
+        // 若被测试脚本大跨度跳转时间（超过 30 秒），跳过过时小头目
+        if (run.time - mw.time <= 30) {
+          const pt = ringPoint(run, 340, 410, true);
+          spawnEnemy(run, mw.type, pt.x, pt.y, {
+            elite: true,
+            affix: mw.affix,
+            hpMul: mw.hpMul,
+            rMul: mw.rMul,
+            warder: true,
+            warderName: mw.name,
+            chest: mw.chest,
+          });
+          run.events.push({
+            type: 'warderSpawn',
+            warderId: mw.id,
+            enemyType: mw.type,
+            name: mw.name,
+            x: pt.x,
+            y: pt.y,
+          });
+        }
+      }
+    }
+
     for (const b of BOSS_TIMELINE) {
       if (!run._bossSpawned[b.type] && run.time >= b.time) {
         run._bossSpawned[b.type] = true;
@@ -113,13 +140,13 @@ export function updateSpawner(run, dt) {
 
   updateWaves(run);
 
-  let rate = spawnRate(spawnMinutes(run)) * run.night.spawnMul;
+  let rate = spawnRate(spawnMinutes(run)) * run.night.spawnMul * (run.mods?.spawnRateMul || 1);
   if (run.boss) rate *= run.boss.type === 'youshen' ? SPAWN.youshenSpawnMul : SPAWN.bossSpawnMul;
   run._spawnAcc += rate * dt;
   while (run._spawnAcc >= 1) {
     run._spawnAcc -= 1;
     if (run.enemies.length >= SPAWN.cap) {
-      run._spawnAcc = 0; // 满员时丢弃积压，避免上限解除后瞬间刷一大片
+      run._spawnAcc = 0;
       break;
     }
     spawnOne(run);
@@ -148,7 +175,6 @@ function updateWaves(run) {
   let pattern = 'alley';
 
   if (styleRoll < 0.45) {
-    // 阵势一：巷口群涌（2–3 个不对称街口纵深涌入，留出天然突围缺口）
     pattern = 'alley';
     const three = n >= 24 && rng.chance(0.45);
     const a0 = heading + rng.range(-0.85, 0.85);
@@ -171,7 +197,6 @@ function updateWaves(run) {
       }
     }
   } else if (styleRoll < 0.76) {
-    // 阵势二：斜街夹击（两侧错落弯弧包抄，带子簇聚拢与景深差，绝非圆环）
     pattern = 'flank';
     const axis = heading + rng.range(-0.7, 0.7);
     const flanks = [axis + rng.range(-0.45, 0.35), axis + rng.range(2.35, 3.25)];
@@ -185,7 +210,6 @@ function updateWaves(run) {
       spawnEnemy(run, pickWaveType(), x, y);
     }
   } else {
-    // 阵势三：夜雾散祟（3–5 小股游荡鬼群从不同远近摸出）
     pattern = 'packs';
     const packs = n >= 28 ? rng.int(4, 5) : rng.int(3, 4);
     const anchors = [];

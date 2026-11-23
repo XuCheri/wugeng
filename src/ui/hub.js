@@ -1,4 +1,4 @@
-// 更房：打更人歇脚的地方。起更（选英雄 / 夜色 / 护身符）、加点、更簿、设置。
+// 更房：打更人歇脚的地方。起更（选英雄 / 夜色 / 护身符）、加点、百物谱、更簿、设置。
 import { h, clear, scroll, sealButton, adButton, veil, toast, cnNum, formatCoins } from './dom.js';
 import { heroInfo, weaponName, nightLabel, nightDesc, SHOP_COPY, CHARM_LABEL, relicName } from './copy.js';
 import { icon } from './icons.js';
@@ -80,7 +80,7 @@ export function renderHub(root, ctx) {
     const heroCard = h('div', { class: 'hero-card' },
       h('p', { class: 'hero-card__name' }, hero.name),
       h('p', { class: 'hero-card__flavor' }, hero.flavor),
-      h('p', { class: 'hero-card__meta' }, `起手 ${weaponName(hero.weapon)} · ${hero.trait}`));
+      h('p', { class: 'hero-card__meta' }, `起手 ${weaponName(hero.weapon)} · 绝技「${hero.ultName}」· ${hero.trait}`));
 
     // 未解锁英雄的条件
     const locks = HERO_IDS.filter((id) => !save.unlockedHeroes.includes(id)).map((id) => {
@@ -141,13 +141,13 @@ export function renderHub(root, ctx) {
     const cc = getCodexCounts(save);
     navBox.append(
       navSeal('加点', '长本事', () => openShop()),
-      navSeal('图鉴', `${cc.have}/${cc.total}`, () => openCodex(root, save)),
+      navSeal('图鉴', `${cc.have}/${cc.total}`, () => openCodex(root, save), false, '百物谱图鉴'),
       navSeal('更簿', st.canClaim ? '可画押' : '签到', () => openCheckin(), st.canClaim),
       navSeal('设置', '杂项', () => openSettings()));
   }
-  function navSeal(text, sub, onClick, dot = false) {
+  function navSeal(text, sub, onClick, dot = false, label = undefined) {
     return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), h('small', {}, sub)), onClick, {
-      kind: 'square', cls: dot ? 'has-dot' : '',
+      kind: 'square', cls: dot ? 'has-dot' : '', label,
     });
   }
 
