@@ -1,4 +1,4 @@
-// 应用外壳：屏幕流转（标题 → 更房 → 局内 → 结算 → 更房）、存档、广告、音频串联。
+// 应用外壳：屏幕流转（标题 → 更房 → 局内 → 结算 → 更房）、存档 v3、云存档、鬼市外观、守夜功绩、广告、音频串联。
 // main.js 只做 startApp()。
 import { createGame } from './game.js';
 import * as Run from './sim/run.js';
@@ -7,9 +7,18 @@ import { createCloudSave } from './meta/cloud-save.js';
 import { syncCodexFromRun } from './meta/codex.js';
 import { getMetaBonuses } from './meta/shop.js';
 import { recordRun, grantDoubleCoins } from './meta/unlocks.js';
+import {
+  ACHIEVEMENTS,
+  ACHIEVEMENTS_BY_ID,
+  claimAchievement,
+  getAchievementStates,
+  reconcileAchievements,
+} from './meta/achievements.js';
+import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 import { adsEnabled, watchAd } from './ads/ads.js';
 import { adResultMessage } from './ads/ad-policy.js';
 import { createAudio } from './audio/synth.js';
+import { createMenuScene } from './render/menu-scene.js';
 import { h, toast, setClickSound } from './ui/dom.js';
 import { preloadIcons } from './ui/icons.js';
 import { renderTitle } from './ui/title.js';
@@ -17,7 +26,6 @@ import { renderHub } from './ui/hub.js';
 import { renderResult } from './ui/result.js';
 import { createRunUI } from './ui/run-ui.js';
 import { runBootIntro } from './ui/boot-intro.js';
-import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 
 export async function startApp(bootOpts = {}) {
   const root = document.getElementById('ui');
@@ -25,6 +33,7 @@ export async function startApp(bootOpts = {}) {
   if (!root || !canvas) throw new Error('缺少 #ui 或 #game-canvas');
 
   const save = loadSave();
+  reconcileAchievements(save);
   const cloud = createCloudSave();
   const persist = (syncCloud = false) => {
     saveSave(save);
@@ -38,15 +47,51 @@ export async function startApp(bootOpts = {}) {
   let finished = true;        // 本局是否已结算（防重复入账）
   let hub = null;
   let runUI = null;
+  let menuScene = null;
+  let achBannerEl = null;
+  let achBannerTimer = 0;
+
+  function showAchBanner(achId) {
+    const def = ACHIEVEMENTS_BY_ID[achId];
+    if (!def) return;
+    achBannerEl?.remove();
+    achBannerEl = h('div', { class: 'ach-banner', role: 'status', 'aria-live': 'polite' },
+      h('i', { class: 'stamp stamp--xs' }, '功'),
+      h('span', {}, `守夜功绩达成 · ${def.name}`));
+    root.appendChild(achBannerEl);
+    clearTimeout(achBannerTimer);
+    achBannerTimer = setTimeout(() => {
+      achBannerEl?.remove();
+      achBannerEl = null;
+    }, 2400);
+  }
+
+  function checkMidRunAchievements(run) {
+    if (!run || !run.stats) return;
+    if (!save.achievements?.kills800 && run.stats.kills >= 800) {
+      save.achievements.kills800 = Date.now();
+      persist(false);
+      showAchBanner('kills800');
+    }
+    if (!save.achievements?.hit10k && run.stats.maxHit >= 10_000) {
+      save.achievements.hit10k = Date.now();
+      persist(false);
+      showAchBanner('hit10k');
+    }
+  }
 
   const game = createGame({
     canvas,
     onStatusChange: (run) => runUI?.handleStatus(run),
     onSummary: (summary) => finishRun(summary),
-    onEvents: (events) => audio.onEvents(events),
+    onEvents: (events, run) => {
+      audio.onEvents(events);
+      if (run && events && events.length) checkMidRunAchievements(run);
+    },
     onAutoPause: () => runUI?.showPause(),
     onHudSync: (run) => runUI?.syncHud(run),
     onStart: (run) => {
+      menuScene?.stop();
       finished = false;
       if (screen) setScreen(null);
       runUI?.closeCurrent();
@@ -58,6 +103,8 @@ export async function startApp(bootOpts = {}) {
       runUI?.teardown();
     },
   });
+
+  menuScene = createMenuScene(canvas, { isBlocked: () => Boolean(game.run) });
 
   function buildCosmeticsSnapshot() {
     const eq = save.cosmetics?.equipped || {};
@@ -102,6 +149,7 @@ export async function startApp(bootOpts = {}) {
     }
     if (r.hasRemote && r.merged) {
       Object.assign(save, r.merged);
+      reconcileAchievements(save);
       saveSave(save);
       applySettings(save.settings);
       if (hub && screen === hub.el) hub.refresh();
@@ -113,7 +161,24 @@ export async function startApp(bootOpts = {}) {
     return r;
   }
 
-  /** 看广告：暂停 + 静音；结束后恢复声音，非 completed 时提示。界面上的遮罩负责之后是否继续游戏。 */
+  async function handleQuickCloud() {
+    saveSave(save);
+    if (!cloud.isAvailable()) {
+      toast('本机存档已妥善保存（TapTap 内打开可跨端云同步）');
+      return { ok: false, reason: 'unavailable' };
+    }
+    const pulled = await handleCloudPull(false);
+    if (pulled?.ok && pulled.hasRemote) {
+      cloud.scheduleSync(save);
+      return pulled;
+    }
+    if (pulled?.ok && !pulled.hasRemote) {
+      return handleCloudUpload();
+    }
+    return pulled;
+  }
+
+  /** 看广告：暂停 + 静音；结束后恢复声音，非 completed 时提示。 */
   async function runAd(placement) {
     game.pause();
     audio.suspend('ad');
@@ -157,13 +222,16 @@ export async function startApp(bootOpts = {}) {
   });
 
   function setScreen(el) {
+    if (hub && screen === hub.el && el !== hub.el) {
+      hub.teardown?.();
+    }
     screen?.remove();
-    // 收起残留弹窗（局内覆盖层由 runUI 管）
     root.querySelectorAll('.veil').forEach((v) => v.remove());
     screen = el;
   }
 
   function showTitle() {
+    game.clear();
     runUI.teardown();
     const el = renderTitle(root, {
       onStart: () => {
@@ -173,6 +241,7 @@ export async function startApp(bootOpts = {}) {
       },
     });
     setScreen(el);
+    menuScene.start();
   }
 
   function showHub() {
@@ -180,6 +249,7 @@ export async function startApp(bootOpts = {}) {
     runUI.teardown();
     applySettings(save.settings);
     audio.setMusicMode('menu');
+    hub?.teardown?.();
     hub = renderHub(root, {
       save,
       adsOn: () => adsEnabled(),
@@ -188,11 +258,15 @@ export async function startApp(bootOpts = {}) {
       now: () => new Date(),
       onStart: (opts) => startRun(opts),
       onSettings,
+      onCosmeticChange: () => applySettings(save.settings),
       cloudState: () => cloud.getState(),
       onCloudUpload: () => handleCloudUpload(),
       onCloudPull: () => handleCloudPull(false),
+      onQuickCloud: () => handleQuickCloud(),
+      onCloudFlush: () => cloud.flushDirty(),
     });
     setScreen(hub.el);
+    menuScene.start();
   }
 
   function startRun({
@@ -205,6 +279,7 @@ export async function startApp(bootOpts = {}) {
     coop = null,
   } = {}) {
     audio.unlock();
+    menuScene.stop();
     if (charm) {
       const i = save.charms.findIndex((c) => c.relicId === charm.relicId);
       if (i >= 0) save.charms.splice(i, 1); else charm = null;
@@ -242,7 +317,7 @@ export async function startApp(bootOpts = {}) {
 
   function endCurrentRun() {
     if (finished) return;
-    const summary = game.finish();          // 内部会触发 onSummary → finishRun
+    const summary = game.finish();
     if (summary && !finished) finishRun(summary);
   }
 
@@ -263,6 +338,7 @@ export async function startApp(bootOpts = {}) {
       onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
     setScreen(el);
+    menuScene.start();
   }
 
   function replayIntro(opts = {}) {
@@ -274,16 +350,38 @@ export async function startApp(bootOpts = {}) {
     if (document.hidden) { saveSave(save); cloud.flushDirty(); }
   });
 
-  // 调试 / e2e 钩子（不影响正式流程）
+  // 调试 / 黑盒 E2E 统一契约钩子
   window.__wugeng = {
-    get save() { return save; }, game, audio, cloud,
-    showHub, startRun, persist, replayIntro,
+    get save() { return save; },
+    game,
+    audio,
+    cloud,
+    achievements: {
+      ACHIEVEMENTS,
+      list: ACHIEVEMENTS,
+      getAll: () => ACHIEVEMENTS,
+      getStates: (cat = 'all') => getAchievementStates(save, cat),
+      claim: (id) => {
+        const res = claimAchievement(save, id);
+        if (res.ok) {
+          applySettings(save.settings);
+          persist(true);
+          hub?.refresh?.();
+        }
+        return res;
+      },
+    },
+    showHub,
+    startRun,
+    persist,
+    replayIntro,
     get hub() { return hub; },
     get screen() { return screen?.className || null; },
     get overlay() { return runUI.overlay; },
+    get inspectorOpen() { return runUI.inspectorOpen; },
   };
 
-  preloadIcons();   // 兼容旧调用；静态导入已同步可用
+  preloadIcons();
   bootOpts?.onIntroMounted?.();
   if (!bootOpts?.skipBootIntro) {
     await runBootIntro({ audio });

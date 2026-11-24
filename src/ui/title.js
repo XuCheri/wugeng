@@ -1,4 +1,4 @@
-// 标题页：竖排大字《五更天》、朱印、开始守夜、适龄 12+、隐私。
+// 标题页：暗夜青石街巷守夜灯火衬底、宣纸牌匾竖排《五更天》、朱印、开始守夜、适龄 12+、隐私。
 import { h, sealButton } from './dom.js';
 import { ageBadge, showAgeDialog, showPrivacyDialog } from './dialogs.js';
 
@@ -8,11 +8,13 @@ const ROOFTOPS = `<svg viewBox="0 0 400 90" preserveAspectRatio="none" aria-hidd
 
 export function renderTitle(root, { onStart, version = '' }) {
   const el = h('div', { class: 'screen screen--title' },
+    h('div', { class: 'title-top-tag' }, '剑清酱工作室 · 民俗守夜动作志异'),
     h('div', { class: 'title-art' },
-      h('h1', { class: 'title-name', 'aria-label': '五更天' }, '五更天'),
-      h('div', { class: 'title-side' },
-        h('span', { class: 'title-seal', 'aria-hidden': 'true' }, '守夜'),
-        h('p', { class: 'title-verse' }, '一更起，五更止，鸡鸣天亮'))),
+      h('div', { class: 'title-plaque' },
+        h('h1', { class: 'title-name', 'aria-label': '五更天' }, '五更天'),
+        h('div', { class: 'title-side' },
+          h('span', { class: 'title-seal', 'aria-hidden': 'true' }, '守夜'),
+          h('p', { class: 'title-verse' }, '一更起，五更止，鸡鸣天亮')))),
     h('div', { class: 'title-roofs', html: ROOFTOPS }),
     h('div', { class: 'title-actions' },
       sealButton('开始守夜', onStart, { cls: 'btn--wide btn--big' })),

@@ -1,11 +1,11 @@
-// 结算页：铜钱、打散数、守了多久、最狠一击（万/亿）、本局开光神兵、新解锁、「广告 · 铜钱翻倍」一次。
+// 结算页：守夜积分、铜钱、打散数、守了多久、最狠一击（万/亿）、本局开光神兵、新解锁与功绩、「广告 · 铜钱翻倍」一次。
 import { h, clear, scroll, sealButton, adButton, formatBig, formatTime, formatCoins } from './dom.js';
 import { heroInfo, weaponName, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
 import { canShowResultDouble } from '../ads/ad-policy.js';
 
 /**
  * opts: { summary, recorded: { coins, unlocks, achievements }, adsOn(), runAd(placement),
- *         onDouble(amount) → 实际加的铜钱, onHub(), onAgain() }
+ *         onDouble(amount) → 实际加的铜钱, onHub(), onAgain(), onLeaderboard?() }
  */
 export function renderResult(root, opts) {
   const { summary: s, recorded } = opts;
@@ -15,6 +15,13 @@ export function renderResult(root, opts) {
 
   const title = cleared && !endless ? '鸡鸣天亮' : endless ? '残夜守尽' : '灯灭了';
   const sub = `${heroInfo(s.heroId).short} · ${nightLabel(s.nightLevel || 0)} · ${endless ? '守进无尽' : cleared ? '守满五更' : `撑到${watchName(s.reachedWatch || 1)}`}`;
+
+  const scoreBox = Number.isFinite(s.score)
+    ? h('div', { class: 'result-score' },
+      h('span', {}, '守夜总分'),
+      h('b', {}, formatCoins(s.score)),
+      s.signatureStart ? h('em', { class: 'result-score__sig' }, '本命专精') : null)
+    : null;
 
   const coinVal = h('b', { class: 'result-coins__val' }, formatCoins(recorded.coins));
   const coinBox = h('div', { class: 'result-coins' }, h('span', {}, '铜钱'), coinVal);
@@ -33,7 +40,7 @@ export function renderResult(root, opts) {
   const unlocks = [
     ...(recorded.unlocks || []).map((u) => (u.kind === 'hero'
       ? `新打更人：${heroInfo(u.id).name}` : `${nightLabel(u.id)} 可选了`)),
-    ...(recorded.achievements || []).map((a) => ACHIEVEMENT_NAMES[a]).filter(Boolean),
+    ...(recorded.achievements || []).slice(0, 4).map((a) => `达成功绩「${ACHIEVEMENT_NAMES[a] || a}」`).filter(Boolean),
   ];
   for (const t of unlocks) unlockBox.appendChild(h('p', { class: 'result-unlock' }, h('i', { class: 'stamp stamp--sm' }, '得'), t));
 
@@ -61,7 +68,7 @@ export function renderResult(root, opts) {
     scroll({
       title, sub,
       cls: 'scroll--result',
-      body: [coinBox, rows, evoLine, unlocks.length ? unlockBox : null],
+      body: [scoreBox, coinBox, rows, evoLine, unlocks.length ? unlockBox : null],
       footer: [actions],
     }));
   root.appendChild(el);

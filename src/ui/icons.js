@@ -22,68 +22,22 @@ function hashId(s) {
   return v >>> 0;
 }
 
-/**
- * 检测渲染层在并行开发期是否将尚未注册的新 ID 退回到了默认铜钱/纸童模板；
- * 一旦 M2 实装专属图标，像素差异远超阈值，自动 100% 透传 M2 原生版画 PNG。
- */
-function isSilentPlaceholder(kind, id) {
-  if (kind === 'coin' || kind === 'bun' || kind === 'overflow' || kind === 'hero') return false;
-  if (kind === 'enemy' && id === 'paperkid') return false;
-  const checkKey = `${kind}:${id}`;
-  if (placeholderCheckCache.has(checkKey)) return placeholderCheckCache.get(checkKey);
+const KNOWN_ENEMY_SPRITES = new Set([
+  'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',
+  'suona', 'paperbride', 'cinder', 'horse', 'umbrella', 'youshen',
+]);
 
-  let isFallback = false;
-  try {
-    if (typeof document !== 'undefined' && typeof Sprites.drawIcon === 'function') {
-      if (kind === 'weapon' || kind === 'relic') {
-        const c1 = document.createElement('canvas');
-        const c2 = document.createElement('canvas');
-        c1.width = c2.width = 32;
-        c1.height = c2.height = 32;
-        const g1 = c1.getContext('2d');
-        const g2 = c2.getContext('2d');
-        Sprites.drawIcon(g1, kind, id, 16, 16, 28);
-        Sprites.drawIcon(g2, kind, '__m3_probe_missing__', 16, 16, 28);
-        const d1 = g1.getImageData(0, 0, 32, 32).data;
-        const d2 = g2.getImageData(0, 0, 32, 32).data;
-        let diff = 0;
-        for (let i = 0; i < d1.length; i += 4) {
-          if (Math.abs(d1[i] - d2[i]) > 6 || Math.abs(d1[i + 3] - d2[i + 3]) > 6) {
-            diff++;
-            break;
-          }
-        }
-        isFallback = diff === 0;
-      } else if (kind === 'evo' && typeof Sprites.iconDataURL === 'function') {
-        // 若开光图标尚未独立绘制且底层 weapon 仍是占位，也生成专属木刻神兵印
-        if (isSilentPlaceholder('weapon', id)) {
-          const u1 = Sprites.iconDataURL('evo', id, 32);
-          const u2 = Sprites.iconDataURL('evo', '__m3_probe_missing__', 32);
-          isFallback = typeof u1 === 'string' && typeof u2 === 'string' && u1.length === u2.length;
-        }
-      } else if (kind === 'enemy' && typeof Sprites.enemySprite === 'function') {
-        const s1 = Sprites.enemySprite(id, 0, false);
-        const s2 = Sprites.enemySprite('__m3_probe_missing__', 0, false);
-        if (s1?.canvas && s2?.canvas && s1.w === s2.w && s1.h === s2.h) {
-          const d1 = s1.canvas.getContext('2d').getImageData(0, 0, s1.canvas.width, s1.canvas.height).data;
-          const d2 = s2.canvas.getContext('2d').getImageData(0, 0, s2.canvas.width, s2.canvas.height).data;
-          let diffPx = 0;
-          const totalPx = Math.max(1, d1.length / 4);
-          for (let i = 0; i < d1.length; i += 4) {
-            if (Math.abs(d1[i] - d2[i]) > 12 || Math.abs(d1[i + 3] - d2[i + 3]) > 12) diffPx++;
-          }
-          isFallback = diffPx / totalPx < 0.03;
-        }
-      }
-    }
-  } catch {
-    isFallback = false;
-  }
-  placeholderCheckCache.set(checkKey, isFallback);
-  return isFallback;
+function isSilentPlaceholder(kind, id) {
+  if (kind === 'coin' || kind === 'bun' || kind === 'overflow') return false;
+  if (kind === 'weapon') return !Object.hasOwn(Sprites.WEAPON_ICONS || {}, id);
+  if (kind === 'evo') return !Object.hasOwn(Sprites.EVO_WEAPON_ICONS || {}, id) && !Object.hasOwn(Sprites.WEAPON_ICONS || {}, id);
+  if (kind === 'relic') return !Object.hasOwn(Sprites.RELIC_ICONS || {}, id);
+  if (kind === 'hero') return !Object.hasOwn(Sprites.HERO_ICONS || {}, id);
+  if (kind === 'enemy') return !KNOWN_ENEMY_SPRITES.has(id);
+  return false;
 }
 
-/** 严格使用 6 色民俗木刻色板绘制独立几何纹章 PNG（仅在 M2 未落地某新条目时兜底）。 */
+/** 严格使用 6 色民俗木刻色板绘制独立几何纹章 PNG（仅在未知条目时兜底）。 */
 function bakeWoodblockFallbackURL(kind, id, size, glyph) {
   if (typeof document === 'undefined') return null;
   const s = 2;
@@ -146,7 +100,10 @@ function bakeWoodblockFallbackURL(kind, id, size, glyph) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(glyph || '印', cx, cy + 1);
-  return c.toDataURL('image/png');
+  const url = c.toDataURL('image/png');
+  c.width = 0;
+  c.height = 0;
+  return url;
 }
 
 function urlFor(kind, id, size, glyph) {

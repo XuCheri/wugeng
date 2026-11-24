@@ -27,7 +27,10 @@ test('默认存档字段齐全', () => {
   assert.deepEqual(s.settings, { sfx: true, music: true, shake: true, dmgText: 'all', lowQuality: false });
   assert.deepEqual(s.checkin.cycleDay, 0);
   assert.equal(s.checkin.lastClaimDate, null);
-  assert.deepEqual(s.cosmetics, { owned: [], equipped: { lantern: null, outfit: null } });
+  assert.deepEqual(s.cosmetics, {
+    owned: [],
+    equipped: { lantern: null, outfit: null, attackVfx: 'default', heroSkins: {} },
+  });
   assert.deepEqual(s.charms, []);
   assert.equal(s.stats.runs, 0);
   assert.equal(s.stats.firstRunDone, false);
@@ -81,7 +84,7 @@ test('越界与脏数据被修补', () => {
   assert.equal(s.checkin.cycleDay, 6);
   assert.equal(s.checkin.lastClaimDate, null);
   assert.deepEqual(s.cosmetics.owned, ['lantern_plain']);
-  assert.deepEqual(s.cosmetics.equipped, { lantern: 'lantern_plain', outfit: null });
+  assert.deepEqual(s.cosmetics.equipped, { lantern: 'lantern_plain', outfit: null, attackVfx: 'default', heroSkins: {} });
   assert.deepEqual(s.charms, [{ relicId: 'cinnabar' }, { relicId: 'redstring' }]);
   assert.equal(s.stats.runs, 3);
   assert.equal(s.stats.firstRunDone, true);

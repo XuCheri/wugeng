@@ -1,4 +1,5 @@
-// 局内覆盖层：暂停按钮、奇遇交互印、三选一（常规签/守夜命签 + 留签/弃签）、供盒敕封开光、街角奇遇、暂停行囊（羁绊/命签）、复活、鸡鸣通关。
+// 局内覆盖层：暂停按钮、奇遇交互印、三选一（常规签/守夜命签 + 留签/弃签 + 已携6+6缩略栏 + 查看行囊检视抽屉）、
+// 供盒敕封开光、街角奇遇、暂停行囊（羁绊/命签）、复活、鸡鸣通关。
 // 所有对 run 的改动都通过 sim 函数完成，然后由这里决定 resume 还是弹下一个界面。
 import { h, clear, scroll, sealButton, adButton, veil, toast, cnNum } from './dom.js';
 import {
@@ -76,8 +77,200 @@ export function createRunUI(root, deps) {
   let lastShrineId = null;
   let current = null;      // { type, close, el, sync? }
   let hintEl = null;
+  let inspectorEl = null;
+  let inspectorPeeking = false;
 
   const run = () => game.run;
+
+  function onInspectorKeydown(e) {
+    if (!inspectorEl || !inspectorEl.isConnected) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeInspector();
+    }
+  }
+
+  function setInspectorPeek(peeking) {
+    inspectorPeeking = Boolean(peeking);
+    if (inspectorEl) {
+      inspectorEl.classList.toggle('is-peeking', inspectorPeeking);
+      inspectorEl.dataset.peeking = inspectorPeeking ? '1' : '0';
+    }
+    if (current?.el) {
+      current.el.classList.toggle('is-inspector-peeking', inspectorPeeking);
+    }
+  }
+
+  function closeInspector() {
+    setInspectorPeek(false);
+    if (inspectorEl) {
+      inspectorEl.remove();
+      inspectorEl = null;
+    }
+    window.removeEventListener('keydown', onInspectorKeydown, true);
+  }
+
+  function openInspector() {
+    const r = run();
+    if (!r || !current) return;
+    if (inspectorEl && inspectorEl.isConnected) {
+      setInspectorPeek(false);
+      return;
+    }
+    closeInspector();
+    game.pause();
+    deps.onCodexSync?.(r);
+
+    let pointerHeld = false;
+    const peekBtn = h('button', {
+      type: 'button',
+      class: 'btn btn--ghost btn--small inspector-peek-btn',
+      dataset: { action: 'peek-battlefield' },
+      onPointerdown: (e) => {
+        e.stopPropagation();
+        pointerHeld = true;
+        setInspectorPeek(true);
+      },
+      onPointerup: (e) => {
+        e.stopPropagation();
+        if (pointerHeld) {
+          pointerHeld = false;
+          setInspectorPeek(false);
+        }
+      },
+      onPointercancel: () => {
+        if (pointerHeld) {
+          pointerHeld = false;
+          setInspectorPeek(false);
+        }
+      },
+      onMouseleave: () => {
+        if (pointerHeld) {
+          pointerHeld = false;
+          setInspectorPeek(false);
+        }
+      },
+      onClick: (e) => {
+        e.stopPropagation();
+        if (e.detail === 0) {
+          setInspectorPeek(!inspectorPeeking);
+        }
+      },
+    }, '按住透视战场');
+
+    const topCloseBtn = h('button', {
+      type: 'button',
+      class: 'btn btn--seal btn--small',
+      dataset: { action: 'close-inspector' },
+      onClick: (e) => {
+        e.stopPropagation();
+        deps.audio?.play('paper');
+        closeInspector();
+      },
+    }, '返回选签');
+
+    const headTools = h('div', { class: 'inspector-tools' }, peekBtn, topCloseBtn);
+    const panel = scroll({
+      title: '行囊检视',
+      sub: `${watchName(r.watch)} · 已携兵刃 ${(r.weapons || []).length}/${MAX_WEAPONS} · 法器 ${(r.relics || []).length}/${MAX_RELICS}`,
+      cls: 'scroll--dialog scroll--tall inspector-panel',
+      body: h('div', { class: 'inspector-body' }, headTools, buildPauseLoadout(r)),
+      footer: [
+        sealButton('合卷返回选签', () => {
+          deps.audio?.play('paper');
+          closeInspector();
+        }, { cls: 'btn--wide', dataset: { action: 'close-inspector' } }),
+      ],
+    });
+
+    const wrap = h('div', {
+      class: 'veil veil--inspector',
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '行囊器物与流派羁绊检视',
+      onClick: (e) => {
+        e.stopPropagation();
+        if (e.target === wrap) {
+          closeInspector();
+        }
+      },
+    }, panel);
+
+    inspectorEl = wrap;
+    setInspectorPeek(false);
+    root.appendChild(wrap);
+    window.addEventListener('keydown', onInspectorKeydown, true);
+  }
+
+  /** 紧凑型已携 6 兵刃 + 6 法器缩略栏 + 「查看行囊」入口（F10） */
+  function buildSelectionOwnedBar(r) {
+    const weapons = Array.isArray(r?.weapons) ? r.weapons : [];
+    const relics = Array.isArray(r?.relics) ? r.relics : [];
+    const synCounts = r?.synergies?.counts || {};
+
+    const activeSynBadges = SCHOOL_TAG_IDS
+      .filter((t) => (synCounts[t] || 0) >= 2)
+      .map((t) => h('span', { class: `owned-syn school-pill school-pill--${t}` }, `${schoolName(t)}${synCounts[t]}`));
+
+    const wRow = h('div', { class: 'selection-owned-row' });
+    for (let i = 0; i < MAX_WEAPONS; i++) {
+      const w = weapons[i];
+      if (w) {
+        const nm = weaponName(w.id, !!w.evolved);
+        wRow.appendChild(h('div', {
+          class: `owned-slot${w.evolved ? ' is-evo' : ' is-filled'}`,
+          dataset: { slotKind: 'weapon', slotIndex: String(i), itemId: w.id },
+          title: `${nm} ${w.evolved ? '已开光' : w.level + '级'}`,
+        },
+        icon(w.evolved ? 'evo' : 'weapon', w.id, 22, nm[0] || '刃'),
+        h('span', { class: 'owned-slot__lv' }, w.evolved ? '开' : String(w.level || 1))));
+      } else {
+        wRow.appendChild(h('div', {
+          class: 'owned-slot is-empty',
+          dataset: { slotKind: 'weapon', slotIndex: String(i) },
+        }, h('span', { class: 'owned-slot__empty' }, '刃')));
+      }
+    }
+
+    const rRow = h('div', { class: 'selection-owned-row' });
+    for (let i = 0; i < MAX_RELICS; i++) {
+      const rel = relics[i];
+      if (rel) {
+        const nm = relicName(rel.id);
+        rRow.appendChild(h('div', {
+          class: 'owned-slot is-filled',
+          dataset: { slotKind: 'relic', slotIndex: String(i), itemId: rel.id },
+          title: `${nm} ${rel.level}级`,
+        },
+        icon('relic', rel.id, 22, nm[0] || '器'),
+        h('span', { class: 'owned-slot__lv' }, String(rel.level || 1))));
+      } else {
+        rRow.appendChild(h('div', {
+          class: 'owned-slot is-empty',
+          dataset: { slotKind: 'relic', slotIndex: String(i) },
+        }, h('span', { class: 'owned-slot__empty' }, '器')));
+      }
+    }
+
+    return h('div', { class: 'selection-owned-bar' },
+      h('div', { class: 'selection-owned-bar__head' },
+        h('div', { class: 'selection-owned-bar__meta' },
+          h('span', { class: 'selection-owned-bar__label' }, `已携 刃${weapons.length}/${MAX_WEAPONS} · 器${relics.length}/${MAX_RELICS}`),
+          ...activeSynBadges),
+        h('button', {
+          type: 'button',
+          class: 'owned-inspect-btn',
+          dataset: { action: 'inspect-loadout' },
+          onClick: (e) => {
+            e.stopPropagation();
+            deps.audio?.play('paper');
+            openInspector();
+          },
+        }, '查看行囊')),
+      wRow,
+      rRow);
+  }
 
   function mountHud() {
     unmountHud();
@@ -160,6 +353,7 @@ export function createRunUI(root, deps) {
   }
 
   function closeCurrent() {
+    closeInspector();
     current?.close();
     current = null;
     if (hud) hud.hidden = false;
@@ -196,27 +390,29 @@ export function createRunUI(root, deps) {
     }
   }
 
-  // ───────── 三选一（常规升级签 & 守夜命签）─────────
+  // ───────── 三选一（常规升级签 & 守夜命签 + 已携6+6栏 + 查看行囊）─────────
   function showLevelUp() {
     const initRun = run();
     const initMode = initRun?.choiceMode === 'blessing' ? 'blessing' : 'normal';
     const titleEl = h('h2', { class: 'levelup-title' }, initMode === 'blessing' ? '守夜命签' : '抽一支签');
     const sub = h('p', { class: 'levelup-sub' });
+    const ownedHolder = h('div', { class: 'levelup-owned-holder' });
     const cards = h('div', { class: 'qian-row' });
     const actions = h('div', { class: 'levelup-actions' });
-    const wrapEl = h('div', { class: 'levelup', dataset: { choiceMode: initMode } }, titleEl, sub, cards, actions);
+    const wrapEl = h('div', { class: 'levelup', dataset: { choiceMode: initMode } },
+      titleEl, sub, ownedHolder, cards, actions);
 
     const v = open('levelup', wrapEl, '', { dataset: { choiceMode: initMode } });
 
     let picked = false;
     const pick = (i) => {
-      if (picked) return;
+      if (picked || inspectorEl) return;
       picked = true;
       sim.chooseUpgrade(run(), i);
       deps.onCodexSync?.(run());
       deps.audio?.play('woodblock');
       picked = false;
-      if (run()?.status === 'levelup') { render(); return; }   // 连升或命签转升级：原地刷新签面与模式
+      if (run()?.status === 'levelup') { render(); return; }
       proceed();
     };
 
@@ -236,6 +432,8 @@ export function createRunUI(root, deps) {
         const banishCnt = rr.banishesLeft || 0;
         sub.textContent = `升到${cnNum(rr.player?.level ?? 1)}级 · 挑一支${banishCnt > 0 ? ` · 弃签余${banishCnt}` : ''}`;
       }
+
+      clear(ownedHolder).appendChild(buildSelectionOwnedBar(rr));
 
       clear(cards);
       (rr.choices || []).forEach((c, i) => {
@@ -320,8 +518,8 @@ export function createRunUI(root, deps) {
             : null;
 
         const cardIcon = isBlessing
-          ? icon('blessing', d.id, 42, isCursed ? '凶' : '吉', { tone: isCursed ? 'cursed' : 'auspicious' })
-          : icon(d.kind, d.id, 44, glyph);
+          ? icon('blessing', d.id, 40, isCursed ? '凶' : '吉', { tone: isCursed ? 'cursed' : 'auspicious' })
+          : icon(d.kind, d.id, 42, glyph);
 
         const card = h('div', {
           role: 'button',
@@ -379,7 +577,7 @@ export function createRunUI(root, deps) {
     render();
   }
 
-  // ───────── 供盒（自选开光卷轴仪式 & 常规强化）─────────
+  // ───────── 供盒（自选开光卷轴仪式 & 常规强化 + 已携6+6栏 + 查看行囊）─────────
   function buildEvoChoiceCard(c, selected, interactive, onSelect) {
     const recipeText = RECIPE_LABELS[c.recipe] || '神兵敕封';
     const tags = weaponTags(c.id);
@@ -419,7 +617,7 @@ export function createRunUI(root, deps) {
     const r = run();
     const choices = Array.isArray(r?.chestChoices) ? r.chestChoices.map((x) => ({ ...x })) : [];
 
-    // 分支 1：2 把及以上满阶兵刃满足开光条件 → 展示自选开光敕封卷轴，点确认时执行 openChest(run, selectedId)
+    // 分支 1：2 把及以上满阶兵刃满足开光条件 → 自选开光敕封卷轴
     if (choices.length >= 2) {
       let selectedId = choices[0].id;
       const listBox = h('div', { class: 'chest-choices', role: 'radiogroup', 'aria-label': '选择开光神兵' });
@@ -443,7 +641,7 @@ export function createRunUI(root, deps) {
         title: '供盒敕封',
         sub: '多器齐备 · 择一兵刃开光',
         cls: 'scroll--dialog chest chest--ceremony',
-        body: h('div', { class: 'chest-body' }, ceremonyBanner, listBox),
+        body: h('div', { class: 'chest-body' }, buildSelectionOwnedBar(r), ceremonyBanner, listBox),
         footer: [
           sealButton('敕封开光', () => {
             const res = sim.openChest(run(), selectedId) || { evolved: null };
@@ -456,7 +654,7 @@ export function createRunUI(root, deps) {
       return;
     }
 
-    // 分支 2：恰好 1 把兵刃满足开光条件 → 打开供盒即完成敕封（兼容旧烟测），展示赤金开光卷轴
+    // 分支 2：恰好 1 把兵刃满足开光条件 → 打开供盒即完成敕封（兼容旧烟测）
     if (choices.length === 1) {
       const snap = choices[0];
       const res = sim.openChest(r, snap.id) || { evolved: snap.id, recipe: snap.recipe, upgrades: [] };
@@ -477,7 +675,7 @@ export function createRunUI(root, deps) {
         title: '供盒敕封',
         sub: '夜主供奉 · 神兵开光',
         cls: 'scroll--dialog chest chest--ceremony',
-        body: h('div', { class: 'chest-body' }, ceremonyBanner, card),
+        body: h('div', { class: 'chest-body' }, buildSelectionOwnedBar(run()), ceremonyBanner, card),
         footer: [
           sealButton('收下神兵', () => proceed(), { cls: 'btn--wide', dataset: { action: 'confirm-chest' } }),
         ],
@@ -485,7 +683,7 @@ export function createRunUI(root, deps) {
       return;
     }
 
-    // 分支 3：无开光兵刃 → 保持 run.status === 'chest' 直至玩家点击确认收下时结算强化/铜钱
+    // 分支 3：无开光兵刃 → 点击收下时结算强化/铜钱
     const unmaxedCount = (r?.weapons || []).filter((w) => w.level < MAX_WEAPON_LEVEL).length
       + (r?.relics || []).filter((rel) => rel.level < 5).length;
     const previewItems = [
@@ -499,6 +697,7 @@ export function createRunUI(root, deps) {
       sub: '夜主与试炼留下的供奉',
       cls: 'scroll--dialog chest',
       body: h('div', { class: 'chest-body' },
+        buildSelectionOwnedBar(r),
         h('div', { class: 'chest-box', 'aria-hidden': 'true' }, h('i'), h('b')),
         h('ul', { class: 'chest-list' }, previewItems)),
       footer: [
@@ -522,7 +721,7 @@ export function createRunUI(root, deps) {
     }));
   }
 
-  // ───────── 街角奇遇（土地香案 / 镇邪试炼碑 / 鬼市货郎）─────────
+  // ───────── 街角奇遇（土地香案 / 镇邪试炼碑 / 鬼市货郎 + 已携6+6栏 + 查看行囊）─────────
   function showShrine() {
     const r = run();
     const s = r?.activeShrine;
@@ -536,6 +735,7 @@ export function createRunUI(root, deps) {
     let lastMaxHp = r.player?.maxHp ?? 100;
     let lastCoins = r.stats?.coins ?? 0;
 
+    const ownedHolder = h('div', { class: 'shrine-owned-holder' }, buildSelectionOwnedBar(r));
     const intro = h('div', { class: 'shrine-intro' },
       icon('shrine', shrineKind, 42, SHRINE_GLYPH[shrineKind] || '奇', { tone: 'shrine' }),
       h('p', { class: 'shrine-intro__text' }, SHRINE_FLAVOR[shrineKind] || '街角微光摇曳，似有机缘。'));
@@ -576,7 +776,7 @@ export function createRunUI(root, deps) {
       title: s.title || '街角奇遇',
       sub: `气血 ${lastHp}/${lastMaxHp} · 局内铜钱 ${lastCoins}`,
       cls: `scroll--dialog shrine-scroll shrine-scroll--${shrineKind}`,
-      body: h('div', { class: 'shrine-body' }, intro, optList),
+      body: h('div', { class: 'shrine-body' }, ownedHolder, intro, optList),
       footer: [
         sealButton('暂且离开', () => {
           sim.dismissShrine?.(run());
@@ -604,12 +804,13 @@ export function createRunUI(root, deps) {
           return;
         }
         if (subEl) subEl.textContent = `气血 ${hp}/${maxHp} · 局内铜钱 ${coins}`;
+        clear(ownedHolder).appendChild(buildSelectionOwnedBar(curRun));
         renderOptions(curRun.activeShrine);
       };
     }
   }
 
-  // ───────── 暂停（行囊加成 + 四门流派羁绊 + 守夜命签 + 设置）─────────
+  // ───────── 暂停与行囊检视详情（6兵刃 + 6法器 + 四门羁绊 + 守夜命签 + 当前属性）─────────
   function buildPauseLoadout(r) {
     const p = r.player || {};
     const mods = r.mods || {};
@@ -664,7 +865,7 @@ export function createRunUI(root, deps) {
           h('p', { class: 'pause-slot__sub' }, relicTotalDesc(rel.id, rel.level)))));
     }
 
-    // 四门流派羁绊（常驻挂载 .pause-synergies）
+    // 四门流派羁绊
     const synCounts = r.synergies?.counts || {};
     const synActive = r.synergies?.active || [];
     const synCountBar = h('div', { class: 'synergy-counts' },
@@ -689,7 +890,7 @@ export function createRunUI(root, deps) {
       : [h('p', { class: 'pause-empty muted' }, '凑齐同门 2 / 4 / 6 件器物激活流派羁绊')];
     const synergiesBox = h('div', { class: 'pause-synergies' }, synCountBar, ...synList);
 
-    // 守夜命签（常驻挂载 .pause-blessings）
+    // 守夜命签
     const blessingEntries = r.blessings || [];
     const blessingRows = blessingEntries.length
       ? blessingEntries.map((entry) => {
@@ -861,6 +1062,7 @@ export function createRunUI(root, deps) {
   }
 
   function teardown() {
+    closeInspector();
     closeCurrent();
     unmountHud();
     hintEl?.remove();
@@ -868,7 +1070,17 @@ export function createRunUI(root, deps) {
   }
 
   return {
-    mountHud, unmountHud, syncHud, handleStatus, showPause, showFirstRunHint, teardown, closeCurrent,
+    mountHud,
+    unmountHud,
+    syncHud,
+    handleStatus,
+    showPause,
+    showFirstRunHint,
+    openInspector,
+    closeInspector,
+    teardown,
+    closeCurrent,
     get overlay() { return current?.type || null; },
+    get inspectorOpen() { return Boolean(inspectorEl && inspectorEl.isConnected); },
   };
 }

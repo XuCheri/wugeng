@@ -21,8 +21,11 @@ const clampTs = (v) => {
 export function parseMockCloud(search) {
   if (typeof search !== 'string' || !search) return false;
   try {
-    const v = new URLSearchParams(search).get('mockCloud');
-    return v !== null && v !== '0' && v !== 'off';
+    const params = new URLSearchParams(search);
+    const v = params.get('mockCloud');
+    if (v !== null && v !== '0' && v !== 'off') return true;
+    const tap = params.get('mockTap');
+    return tap !== null && tap !== '0' && tap !== 'off';
   } catch {
     return false;
   }
@@ -195,7 +198,14 @@ export function createCloudSave(opts = {}) {
   function getArchiveList(cloud) {
     return new Promise((resolve, reject) => {
       cloud.getArchiveList({
-        success: (res) => resolve(Array.isArray(res?.saves) ? res.saves : []),
+        success: (res) => {
+          const list = Array.isArray(res?.saves)
+            ? res.saves
+            : Array.isArray(res?.archives)
+              ? res.archives
+              : [];
+          resolve(list);
+        },
         fail: (err) => reject(err || new Error('getArchiveList failed')),
       });
     });
@@ -234,7 +244,7 @@ export function createCloudSave(opts = {}) {
     const payload = {
       ...clean,
       version: SAVE_VERSION,
-      updatedAt: Math.max(clean.updatedAt || 0, nowTs),
+      updatedAt: clean.updatedAt > 0 ? clean.updatedAt : nowTs,
       savedAt: nowTs,
     };
     await writeLocalTapFile(fs, filePath, JSON.stringify(payload));
@@ -254,8 +264,8 @@ export function createCloudSave(opts = {}) {
         success: (res) => resolve(res),
         fail: (err) => reject(err || new Error('cloud archive write failed')),
       };
-      if (existing && existing.uuid) {
-        cloud.updateArchive({ archiveUUID: existing.uuid, ...options });
+      if (existing && (existing.uuid || existing.archiveId)) {
+        cloud.updateArchive({ archiveUUID: existing.uuid || existing.archiveId, ...options });
       } else {
         cloud.createArchive(options);
       }
@@ -271,6 +281,7 @@ export function createCloudSave(opts = {}) {
     const wait = cooldownLeftMs();
     if (wait > 0) {
       timer = setTimeout(() => { flushDirty(); }, wait + 50);
+      timer?.unref?.();
       emit();
       return { ok: false, reason: 'cooldown', waitSec: Math.ceil(wait / 1000) };
     }
@@ -289,17 +300,19 @@ export function createCloudSave(opts = {}) {
       if (dirtySave) {
         const nextWait = Math.max(coalesceMs, cooldownLeftMs() + 50);
         timer = setTimeout(() => { flushDirty(); }, nextWait);
+        timer?.unref?.();
       }
       return { ok: true };
     } catch (err) {
       syncing = false;
-      const code = err?.errCode ?? err?.code ?? '';
+      const code = err?.errCode ?? err?.errno ?? err?.code ?? '';
       lastError = String(code || err?.errMsg || err?.message || 'upload_failed');
       // 若命中 400001 频率限制，记一次冷却稍后自动补传
       if (String(code) === '400001' || /400001|freq|limit/i.test(lastError)) {
         lastUploadAt = safeNow();
         dirtySave = dirtySave || target;
         timer = setTimeout(() => { flushDirty(); }, cooldownMs + 200);
+        timer?.unref?.();
       }
       emit();
       return { ok: false, reason: 'error', error: lastError };
@@ -315,6 +328,7 @@ export function createCloudSave(opts = {}) {
     clearTimeout(timer);
     const delay = Math.max(coalesceMs, cooldownLeftMs() + 50);
     timer = setTimeout(() => { flushDirty(); }, delay);
+    timer?.unref?.();
     emit();
     return true;
   }
@@ -330,6 +344,7 @@ export function createCloudSave(opts = {}) {
       dirtySave = migrateSave(save);
       clearTimeout(timer);
       timer = setTimeout(() => { flushDirty(); }, wait + 50);
+      timer?.unref?.();
       emit();
       return { ok: false, reason: 'cooldown', waitSec: Math.ceil(wait / 1000) };
     }

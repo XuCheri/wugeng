@@ -136,7 +136,7 @@ export function recordCodexSummary(save, summary) {
   return true;
 }
 
-/** 统计图鉴整体收集进度（百物核心 12 兵刃 + 12 开光 + 12 法器 + 12 百鬼 = 48 项；另含打更人 3 项，总计 51 项）。 */
+/** 统计图鉴整体收集进度（百物核心 16 兵刃 + 16 开光 + 16 法器 + 12 百鬼 = 60 项；另含打更人 6 项，总计 66 项）。 */
 export function getCodexCounts(save) {
   const rawCodex = isPlainObj(save) && isPlainObj(save.codex) ? save.codex : null;
   const heroList = isPlainObj(save) && Array.isArray(save.unlockedHeroes) ? save.unlockedHeroes : [];

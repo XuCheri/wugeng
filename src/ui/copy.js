@@ -426,6 +426,19 @@ export const ACHIEVEMENT_NAMES = {
   hit10k: '一击过万',
   hit100m: '一击过亿',
   night10: '夜色十，天照亮',
+  totalKills1500: '桃木诛邪',
+  evolve5: '火鸦破夜',
+  night5: '五重镇岳',
+  evolve12: '万法开光',
+  score50k: '名动五更榜',
+  endless15: '玄霜孤月',
+  bossKills3: '三斩夜主',
+  bossKills15: '威镇百鬼王',
+  totalKills8000: '万邪莫近',
+  heroes4: '更房聚义',
+  codex30: '百物通晓',
+  clears5: '五度破晓',
+  coop3: '同守五更灯',
 };
 
 export const ACHIEVEMENT_DESC = {
@@ -436,6 +449,19 @@ export const ACHIEVEMENT_DESC = {
   hit10k: '单次伤害突破一万',
   hit100m: '单次伤害突破一亿',
   night10: '通关最高难度「夜色十」',
+  totalKills1500: '累计打散 1500 只邪祟，解锁兵刃「桃木飞剑」',
+  evolve5: '累计敕封开光 5 把神兵，解锁兵刃「纸鸢火鸦」',
+  night5: '通关「夜色五」及以上，解锁皮肤「紫金鸣鸿甲」',
+  evolve12: '累计敕封开光 12 把神兵，解锁皮肤「碧落乘鹤衣」',
+  score50k: '单局综合守夜积分突破 50000 分，解锁皮肤「鎏金太乙诏」',
+  endless15: '单局守夜存活达 900 秒，解锁特效「玄霜寒月」',
+  bossKills3: '累计打散 3 尊夜主首领',
+  bossKills15: '累计打散 15 尊夜主首领',
+  totalKills8000: '累计打散 8000 只邪祟',
+  heroes4: '解锁至少 4 名守夜打更人',
+  codex30: '百物谱累计收录达到 30 项',
+  clears5: '累计守满五更通关 5 回',
+  coop3: '参与同守五更联机或画阵扶起队友累计 3 次',
 };
 
 export const ENEMY_COPY = {

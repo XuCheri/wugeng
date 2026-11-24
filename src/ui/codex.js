@@ -1,4 +1,4 @@
-// 百物图鉴：查看已解锁 / 未解锁的 12 兵刃、12 开光神兵、12 法器、12 百鬼夜主（共 48 项百物）及打更人与守夜印记。
+// 百物图鉴：查看已解锁 / 未解锁的 16 兵刃、16 开光神兵、16 法器、12 百鬼夜主（共 60 项百物）及 6 名打更人（共 66 项）与守夜印记。
 import * as B from '../sim/balance.js';
 import { HERO_IDS, WEAPON_IDS, RELIC_IDS, ENEMY_IDS } from '../meta/save.js';
 import { ensureCodex, getCodexCounts } from '../meta/codex.js';
@@ -11,7 +11,7 @@ import {
 } from './copy.js';
 import { icon } from './icons.js';
 
-const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童' };
+const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
 const TABS = [
   { id: 'weapons', label: '兵刃' },
   { id: 'evolutions', label: '开光' },

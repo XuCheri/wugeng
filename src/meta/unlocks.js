@@ -1,4 +1,4 @@
-// 解锁与结算入账（PLAN §4.7 + v3 六角色）。
+// 解锁与结算入账（PLAN §4.7 + v3 六角色、累计神兵/夜主/联机统计、天榜最高分与 20 项功绩同步）。
 // - 阿绵：单局打败 ≥ 800 只敌人
 // - 小道童：一个包子都不吃，守到五更（撑到 8:00 = 480 秒）
 // - 沈观星：单局敕封开光 ≥ 2 把神兵
@@ -6,10 +6,12 @@
 // - 柳青衣：单局激活任意流派 6 件羁绊
 // - 夜色 N+1：通关夜色 N
 import {
-  HERO_IDS, NIGHT_MAX, markAchievement, toFiniteNumber,
+  DEFAULT_DAO_NAME, DEFAULT_UNLOCKED_WEAPONS, HERO_IDS, HERO_START_WEAPON, NIGHT_MAX, WEAPON_IDS,
+  markAchievement, sanitizeDaoName, toFiniteNumber,
   isPlainObj, canMutateObj, canWriteProp, canMutateArray,
 } from './save.js';
 import { recordCodexSummary, canMutateCodex } from './codex.js';
+import { ACHIEVEMENT_IDS, reconcileAchievements } from './achievements.js';
 import { WEAPONS, RELICS, SCHOOL_TAG_IDS } from '../sim/balance.js';
 
 export const MIAN_KILLS = 800;
@@ -21,8 +23,8 @@ export const NUOXI_SYNERGY_TIER = 6;
 const STAT_KEYS = [
   'runs', 'clears', 'firstRunDone', 'totalPlaySec',
   'bestTimeSec', 'bestKills', 'bestHit', 'totalKills', 'totalCoins',
+  'totalEvolutions', 'totalBossKills', 'coopRuns', 'coopRevives',
 ];
-const ACH_KEYS = ['firstClear', 'kills800', 'noBun480', 'endless10', 'hit10k', 'hit100m', 'night10'];
 
 const safeNum = (v, max = 1e15) => {
   const n = toFiniteNumber(v);
@@ -53,7 +55,7 @@ function canMutateUnlockSave(save) {
 
   if (isPlainObj(save.achievements)) {
     if (!canMutateObj(save.achievements)) return false;
-    for (const k of ACH_KEYS) {
+    for (const k of ACHIEVEMENT_IDS) {
       if (!save.achievements[k] && !canWriteProp(save.achievements, k)) return false;
     }
   } else if (!canWriteProp(save, 'achievements')) {
@@ -95,6 +97,10 @@ function ensureUnlockSave(save) {
   st.bestHit = safeNum(st.bestHit, 1e15);
   st.totalKills = safeInt(st.totalKills, 1e12);
   st.totalCoins = safeInt(st.totalCoins, 1e12);
+  st.totalEvolutions = safeInt(st.totalEvolutions, 1e9);
+  st.totalBossKills = safeInt(st.totalBossKills, 1e9);
+  st.coopRuns = safeInt(st.coopRuns, 1e9);
+  st.coopRevives = safeInt(st.coopRevives, 1e9);
 
   if (!isPlainObj(save.achievements)) save.achievements = {};
 }
@@ -123,6 +129,16 @@ function summaryEvolvedCount(summary) {
     }
   }
   return Math.max(safeInt(summary.evolvedCount, 99), fromArr);
+}
+
+function summaryBossKillCount(summary) {
+  let fromMap = 0;
+  if (isPlainObj(summary.killsByType)) {
+    for (const bid of ['horse', 'umbrella', 'youshen']) {
+      fromMap += safeInt(summary.killsByType[bid], 1e6);
+    }
+  }
+  return Math.max(safeInt(summary.bossKills, 1e6), fromMap);
 }
 
 function maxTagCountFromSummary(summary) {
@@ -154,6 +170,23 @@ function summaryMaxSynergy(summary) {
   return Math.max(safeInt(summary.maxSynergyTier, 99), maxTagCountFromSummary(summary));
 }
 
+function syncUnlockedHeroSignatureWeapons(save) {
+  if (Array.isArray(save.unlockedWeapons) && canMutateArray(save.unlockedWeapons)) {
+    for (const h of save.unlockedHeroes) {
+      const sig = HERO_START_WEAPON[h];
+      if (sig && WEAPON_IDS.includes(sig) && !save.unlockedWeapons.includes(sig)) {
+        save.unlockedWeapons.push(sig);
+      }
+    }
+  } else if (save.unlockedWeapons === undefined && canWriteProp(save, 'unlockedWeapons')) {
+    const set = new Set(DEFAULT_UNLOCKED_WEAPONS);
+    for (const h of save.unlockedHeroes) {
+      if (HERO_START_WEAPON[h]) set.add(HERO_START_WEAPON[h]);
+    }
+    save.unlockedWeapons = WEAPON_IDS.filter((w) => set.has(w));
+  }
+}
+
 /** 判定并写入 save，返回本次新解锁的列表 [{ kind: 'hero'|'night', id }]。 */
 export function evaluateUnlocks(save, summary) {
   const out = [];
@@ -170,6 +203,7 @@ export function evaluateUnlocks(save, summary) {
   if (summaryEvolvedCount(summary) >= YINYANG_EVOLVES) unlockHero('yinyang');
   if (Math.max(safeInt(save.stats?.totalKills), safeInt(summary.kills)) >= TIEJIANG_TOTAL_KILLS) unlockHero('tiejiang');
   if (summaryMaxSynergy(summary) >= NUOXI_SYNERGY_TIER) unlockHero('nuoxi');
+  syncUnlockedHeroSignatureWeapons(save);
 
   if (summary.cleared) {
     const rawNight = toFiniteNumber(summary.nightLevel);
@@ -192,8 +226,43 @@ export function heroUnlockProgress(save, heroId) {
   return null;
 }
 
+function recordLeaderboardEntry(save, sum, now) {
+  if (!canMutateObj(save)) return;
+  if (!isPlainObj(save.leaderboard)) {
+    if (!canWriteProp(save, 'leaderboard')) return;
+    save.leaderboard = { bestScore: 0, bestEndlessSec: 0, bestKills: 0, pendingScore: 0, history: [] };
+  }
+  const lb = save.leaderboard;
+  if (!canMutateObj(lb)) return;
+  const score = safeInt(sum.score, 1e12);
+  const kills = safeInt(sum.kills, 1e9);
+  const timeSec = Math.floor(safeNum(sum.timeSec, 1e9));
+  if (canWriteProp(lb, 'bestScore')) lb.bestScore = Math.max(safeInt(lb.bestScore, 1e12), score);
+  if (canWriteProp(lb, 'bestKills')) lb.bestKills = Math.max(safeInt(lb.bestKills, 1e12), kills);
+  if (sum.mode === 'endless' && canWriteProp(lb, 'bestEndlessSec')) {
+    lb.bestEndlessSec = Math.max(safeInt(lb.bestEndlessSec, 1e9), Math.max(0, timeSec - 600));
+  }
+  if (!Array.isArray(lb.history) && canWriteProp(lb, 'history')) lb.history = [];
+  if (Array.isArray(lb.history) && canMutateArray(lb.history)) {
+    const stampRaw = toFiniteNumber(now);
+    const at = Number.isFinite(stampRaw) && stampRaw > 0 ? Math.min(9e15, Math.floor(stampRaw)) : 1;
+    lb.history.push({
+      score,
+      heroId: HERO_IDS.includes(sum.heroId) ? sum.heroId : 'zhou',
+      daoName: sanitizeDaoName(save.daoName || DEFAULT_DAO_NAME),
+      nightLevel: Math.min(NIGHT_MAX, safeInt(sum.nightLevel, NIGHT_MAX)),
+      kills,
+      timeSec,
+      cleared: Boolean(sum.cleared),
+      at,
+    });
+    lb.history.sort((a, b) => (b.score - a.score) || (b.at - a.at));
+    if (lb.history.length > 20) lb.history.length = 20;
+  }
+}
+
 /**
- * 一局结束入账：加铜钱、记统计、判解锁、记成就、同步图鉴。调用方负责 saveSave。
+ * 一局结束入账：加铜钱、记统计、判解锁、记成就、同步图鉴与本地天榜。调用方负责 saveSave。
  * 返回 { coins, unlocks, achievements: [id] }
  */
 export function recordRun(save, summary, now = Date.now()) {
@@ -204,6 +273,11 @@ export function recordRun(save, summary, now = Date.now()) {
   const timeSec = safeNum(sum.timeSec, 1e12);
   const kills = safeInt(sum.kills, 1e12);
   const maxHit = safeNum(sum.maxHit, 1e15);
+  const evoCount = summaryEvolvedCount(sum);
+  const bossKills = summaryBossKillCount(sum);
+  const coopSize = safeInt(sum.coopSize, 16);
+  const revivesDone = safeInt(sum.revivesDone, 1e6);
+
   save.coins = Math.min(1e12, save.coins + coins);
   const st = save.stats;
   st.runs = Math.min(1e9, st.runs + 1);
@@ -214,8 +288,13 @@ export function recordRun(save, summary, now = Date.now()) {
   st.bestTimeSec = Math.max(st.bestTimeSec, timeSec);
   st.bestKills = Math.max(st.bestKills, kills);
   st.bestHit = Math.max(st.bestHit, maxHit);
+  st.totalEvolutions = Math.min(1e9, st.totalEvolutions + evoCount);
+  st.totalBossKills = Math.min(1e9, st.totalBossKills + bossKills);
+  if (coopSize >= 2) st.coopRuns = Math.min(1e9, st.coopRuns + 1);
+  st.coopRevives = Math.min(1e9, st.coopRevives + revivesDone);
   if (sum.cleared) st.clears = Math.min(1e9, st.clears + 1);
 
+  recordLeaderboardEntry(save, sum, now);
   const unlocks = evaluateUnlocks(save, sum);
   recordCodexSummary(save, sum);
 
@@ -228,6 +307,9 @@ export function recordRun(save, summary, now = Date.now()) {
   ach('hit10k', maxHit >= 1e4);
   ach('hit100m', maxHit >= 1e8);
   ach('night10', Boolean(sum.cleared) && safeInt(sum.nightLevel, NIGHT_MAX) >= NIGHT_MAX);
+  for (const extraId of reconcileAchievements(save, now)) {
+    if (!achievements.includes(extraId)) achievements.push(extraId);
+  }
   return { coins, unlocks, achievements };
 }
 

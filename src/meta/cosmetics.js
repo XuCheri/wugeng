@@ -1,5 +1,19 @@
 // 鬼市衣冠与重彩锋芒目录（F5 6角色×3套=18套皮肤 + F6 5套攻击特效主题 + 购买/穿戴/防刷钱计价）
-import { HERO_IDS, canMutateObj, isPlainObj } from './save.js';
+import { HERO_IDS } from '../sim/balance.js';
+
+function isPlainObj(v) {
+  if (v === null || typeof v !== 'object') return false;
+  try {
+    const proto = Object.getPrototypeOf(v);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    return false;
+  }
+}
+
+function canMutateObj(v) {
+  return isPlainObj(v) && !Object.isFrozen(v);
+}
 
 export const ATTACK_VFX_IDS = [
   'default',
@@ -474,4 +488,21 @@ export function cosmeticShopSpent(ownedList) {
     }
   }
   return sum;
+}
+
+export function cosmeticShopCount(ownedList) {
+  if (!Array.isArray(ownedList)) return 0;
+  let cnt = 0;
+  const seen = new Set();
+  for (const id of ownedList) {
+    if (typeof id !== 'string' || seen.has(id)) continue;
+    seen.add(id);
+    const def = Object.hasOwn(HERO_SKINS_BY_ID, id)
+      ? HERO_SKINS_BY_ID[id]
+      : Object.hasOwn(ATTACK_VFX_THEMES, id)
+        ? ATTACK_VFX_THEMES[id]
+        : null;
+    if (def && def.unlock === 'shop' && def.price > 0) cnt++;
+  }
+  return cnt;
 }
