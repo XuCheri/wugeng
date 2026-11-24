@@ -46,7 +46,8 @@ export function castUlt(run, force = false) {
 
   const areaMul = run.mods?.areaMul || 1;
   const dmg = ULT.baseDmg + ULT.perLevelDmg * p.level;
-  const heroId = run.heroId || 'zhou';
+  const heroId = p.heroId || run.heroId || 'zhou';
+  const ownerSlot = run._activeSlot || 0;
 
   if (heroId === 'mian') {
     // 纸扎匠·阿绵：百鬼纸马阵（八骑八向踏弹穿阵 + 5 秒纸兵狂热）
@@ -58,6 +59,7 @@ export function castUlt(run, force = false) {
       id: run._nextId++,
       kind: 'ultPulse',
       weaponId: 'ult',
+      ownerSlot,
       x: p.x,
       y: p.y,
       r: Math.max(0, R),
@@ -76,6 +78,7 @@ export function castUlt(run, force = false) {
         id: run._nextId++,
         kind: 'paperHorse',
         weaponId: 'paperhorse',
+        ownerSlot,
         x: p.x + cosA * 18,
         y: p.y + sinA * 18,
         r: M.horseR,
@@ -107,6 +110,7 @@ export function castUlt(run, force = false) {
       id: run._nextId++,
       kind: 'ultPulse',
       weaponId: 'ult',
+      ownerSlot,
       x: p.x,
       y: p.y,
       r: Math.max(0, R),
@@ -126,8 +130,194 @@ export function castUlt(run, force = false) {
         seekRange: D.seekRange,
         stun: D.stun,
         struck,
+        ownerSlot,
       });
     }
+  } else if (heroId === 'yinyang') {
+    // 阴阳先生·沈观星：奇门遁甲大阵（八卦聚怪大阵 + 四门天星连爆易伤）
+    const Y = ULT.yinyang;
+    const R = Y.burstR * areaMul;
+    const fieldR = Y.fieldRadius * areaMul;
+    clearEnemyBullets(run, p.x, p.y, 240 * areaMul);
+    damageCircle(run, p.x, p.y, R, dmg * Y.burstDmgMul, 'ult', {
+      knock: 160,
+      stun: Y.stun,
+      vuln: Y.vulnT,
+      vulnPct: Y.vulnPct,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'ultPulse',
+      weaponId: 'ult',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, R),
+      angle: 0,
+      t: 0,
+      life: ULT.pulseLife,
+      radius: 0,
+      maxRadius: R,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'compassField',
+      subKind: 'qimenArray',
+      weaponId: 'compass',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: 12,
+      radius: fieldR,
+      angle: 0,
+      t: 0,
+      life: Y.fieldLife,
+      dmg: dmg * 0.55,
+      tick: Y.fieldTick,
+      _tickT: 0.1,
+      pullForce: Y.pullForce,
+      evolved: true,
+    });
+    for (let i = 0; i < Y.gates; i++) {
+      const a = (i / Y.gates) * Math.PI * 2 + Math.PI / 4;
+      const gd = Y.gateDist * areaMul;
+      run._scheduled.push({
+        delay: Y.gateDelay * (i + 1),
+        type: 'explosion',
+        x: p.x + Math.cos(a) * gd,
+        y: p.y + Math.sin(a) * gd,
+        radius: Y.gateRadius * areaMul,
+        dmg: dmg * Y.gateDmgMul,
+        weaponId: 'ult',
+        evolved: true,
+        explosionKind: 'compassStar',
+        knock: 120,
+        stun: Y.stun,
+        vuln: Y.vulnT,
+        vulnPct: Y.vulnPct,
+        ownerSlot,
+      });
+    }
+  } else if (heroId === 'tiejiang') {
+    // 镇魂铁匠·石敢当：十方熔金镇狱锤（碎甲震退 + 金身护体 + 十方铁砧熔火场）
+    const T = ULT.tiejiang;
+    const R = T.slamR * areaMul;
+    const emberR = T.emberRadius * areaMul;
+    clearEnemyBullets(run, p.x, p.y, 230 * areaMul);
+    p.invulnT = Math.max(p.invulnT || 0, T.wardInvuln);
+    damageCircle(run, p.x, p.y, R, dmg * T.slamDmgMul, 'ult', {
+      armorBreak: true,
+      knock: 340,
+      stun: T.stun,
+      vuln: T.vulnT,
+      vulnPct: T.vulnPct,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'ultPulse',
+      weaponId: 'ult',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, R),
+      angle: 0,
+      t: 0,
+      life: ULT.pulseLife,
+      radius: 0,
+      maxRadius: R,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'inkPool',
+      weaponId: 'ult',
+      subKind: 'moltenZone',
+      ownerSlot,
+      evolved: true,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, emberR),
+      radius: emberR,
+      angle: 0,
+      t: 0,
+      life: T.emberLife,
+      tick: T.emberTick,
+      _tickT: 0.15,
+      dmg: dmg * T.emberDmgMul,
+    });
+    for (let i = 0; i < T.anvils; i++) {
+      const a = (i / T.anvils) * Math.PI * 2;
+      const rd = T.ringDist * areaMul;
+      run._scheduled.push({
+        delay: (i + 1) * T.anvilInterval,
+        type: 'explosion',
+        x: p.x + Math.cos(a) * rd,
+        y: p.y + Math.sin(a) * rd,
+        radius: T.anvilRadius * areaMul,
+        dmg: dmg * T.anvilDmgMul,
+        weaponId: 'ult',
+        evolved: true,
+        explosionKind: 'forgeAnvil',
+        armorBreak: true,
+        knock: 160,
+        stun: 0.6,
+        ownerSlot,
+      });
+    }
+  } else if (heroId === 'nuoxi') {
+    // 傩戏传人·柳青衣：大傩逐疫百相舞（四重随身逐疫傩鼓净弹 + 5 秒疾舞攻移速）
+    const N = ULT.nuoxi;
+    const R = N.burstR * areaMul;
+    clearEnemyBullets(run, p.x, p.y, 220 * areaMul);
+    damageCircle(run, p.x, p.y, R, dmg * N.burstDmgMul, 'ult', {
+      knock: 200,
+      stun: N.stun,
+      vuln: N.vulnT,
+      vulnPct: N.vulnPct,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'ultPulse',
+      weaponId: 'ult',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, R),
+      angle: 0,
+      t: 0,
+      life: ULT.pulseLife,
+      radius: 0,
+      maxRadius: R,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'nuoDanceRing',
+      weaponId: 'ult',
+      ownerSlot,
+      evolved: true,
+      x: p.x,
+      y: p.y,
+      r: 46,
+      radius: 46,
+      maxRadius: 46,
+      angle: 0,
+      t: 0,
+      life: N.danceT,
+    });
+    for (let k = 0; k < N.beats; k++) {
+      run._scheduled.push({
+        delay: (k + 1) * N.beatInterval,
+        type: 'zhouUltWave',
+        radius: N.beatRadius * areaMul,
+        dmg: dmg * N.beatDmgMul,
+        knock: 180,
+        stun: N.stun * 0.65,
+        vulnT: N.vulnT,
+        vulnPct: N.vulnPct,
+        ownerSlot,
+      });
+    }
+    run._nuoDanceT = N.danceT;
+    recomputeMods(run);
   } else {
     // 打更人·老周：五更镇魂锣（三叠扩域震波 + 破甲易伤 + 净除敌弹）
     const Z = ULT.zhou;
@@ -143,6 +333,7 @@ export function castUlt(run, force = false) {
       id: run._nextId++,
       kind: 'ultPulse',
       weaponId: 'ult',
+      ownerSlot,
       x: p.x,
       y: p.y,
       r: Math.max(0, r0),
@@ -162,11 +353,12 @@ export function castUlt(run, force = false) {
         stun: Z.stun * 0.7,
         vulnT: Z.vulnT,
         vulnPct: Z.vulnPct,
+        ownerSlot,
       });
     }
   }
 
-  run.events.push({ type: 'ult', heroId, x: p.x, y: p.y });
+  run.events.push({ type: 'ult', heroId, slot: ownerSlot, x: p.x, y: p.y });
   run.stats.ultsCast = (run.stats.ultsCast || 0) + 1;
   return true;
 }

@@ -5,7 +5,8 @@ import { turnToward } from '../core/math.js';
 import { damageEnemy, damageCircle, knockback, applySlow } from './combat.js';
 import { hurtPlayer } from './player.js';
 import { hitPropsCircle } from './props.js';
-import { papermanDmg, getWeapon, sweepSoulbanner, emitFire } from './weapons.js';
+import { papermanDmg, getWeapon, sweepSoulbanner, emitFire, weaponAreaMul } from './weapons.js';
+import { withPlayerContext, hurtTargetPlayer, coopPartySize } from './coop.js';
 
 export function explode(run, x, y, radius, dmg, weaponId, opts = {}) {
   const safeR = Math.max(0, radius || 0);
@@ -16,6 +17,7 @@ export function explode(run, x, y, radius, dmg, weaponId, opts = {}) {
     ...(opts.noReburst ? { noReburst: true } : {}),
     ...(opts.noCrit ? { noCrit: true } : {}),
     ...(opts.direct ? { direct: true } : {}),
+    ...(opts.armorBreak ? { armorBreak: true } : {}),
     ...(opts.stun ? { stun: opts.stun } : {}),
     ...(opts.vuln ? { vuln: opts.vuln, vulnPct: opts.vulnPct || 0.25 } : {}),
   };
@@ -30,6 +32,8 @@ export function explode(run, x, y, radius, dmg, weaponId, opts = {}) {
     t: 0,
     life: FX.explosionLife,
     weaponId,
+    ownerSlot: run._activeSlot || 0,
+    attackVfx: opts.attackVfx ?? run.player?.attackVfx ?? null,
     radius: safeR,
     evolved,
     subKind: kind,
@@ -68,11 +72,12 @@ export function processScheduled(run, dt) {
     return;
   }
 
-  const p = run.player;
   const hash = run._sys.hash;
   const scratch = run._sys.scratchW3 || run._sys.scratchW2;
 
-  for (const s of due) {
+  const execScheduled = (s) => {
+    const p = run.player;
+    const ownerSlot = s.ownerSlot || 0;
     switch (s.type) {
       case 'explosion':
         explode(run, s.x, s.y, s.radius, s.dmg, s.weaponId, {
@@ -80,6 +85,11 @@ export function processScheduled(run, dt) {
           explosionKind: s.explosionKind,
           knock: s.knock,
           noReburst: s.noReburst,
+          armorBreak: s.armorBreak,
+          stun: s.stun,
+          vuln: s.vuln,
+          vulnPct: s.vulnPct,
+          attackVfx: s.attackVfx,
         });
         break;
 
@@ -91,9 +101,20 @@ export function processScheduled(run, dt) {
           noCrit: true,
           direct: true,
         });
-        const rr = s.radius + p.r;
-        if ((p.x - s.x) ** 2 + (p.y - s.y) ** 2 <= rr * rr) {
-          hurtPlayer(run, s.playerDmg);
+        if (coopPartySize(run) > 1) {
+          for (let i = 0; i < run.players.length; i++) {
+            const pl = run.players[i];
+            if (pl.downed || pl.hp <= 0) continue;
+            const rr = s.radius + pl.r;
+            if ((pl.x - s.x) ** 2 + (pl.y - s.y) ** 2 <= rr * rr) {
+              hurtTargetPlayer(run, pl, s.playerDmg);
+            }
+          }
+        } else {
+          const rr = s.radius + p.r;
+          if ((p.x - s.x) ** 2 + (p.y - s.y) ** 2 <= rr * rr) {
+            hurtPlayer(run, s.playerDmg);
+          }
         }
         break;
       }
@@ -108,6 +129,7 @@ export function processScheduled(run, dt) {
             kind: 'bellChain',
             weaponId: 'bell',
             subKind: 'soulEcho',
+            ownerSlot,
             evolved: true,
             x: tgt.x,
             y: tgt.y,
@@ -147,6 +169,7 @@ export function processScheduled(run, dt) {
           id: run._nextId++,
           kind: 'ultPulse',
           weaponId: 'ult',
+          ownerSlot,
           x: p.x,
           y: p.y,
           r: Math.max(0, s.radius),
@@ -190,6 +213,7 @@ export function processScheduled(run, dt) {
           id: run._nextId++,
           kind: 'thunderBolt',
           weaponId: 'ult',
+          ownerSlot,
           evolved: true,
           x: tx,
           y: ty,
@@ -217,6 +241,7 @@ export function processScheduled(run, dt) {
           id: run._nextId++,
           kind: 'gongPulse',
           weaponId: 'gong',
+          ownerSlot,
           x: p.x,
           y: p.y,
           r: Math.max(0, s.radius),
@@ -228,6 +253,15 @@ export function processScheduled(run, dt) {
           evolved: false,
         });
         break;
+    }
+  };
+
+  for (const s of due) {
+    const slot = s.ownerSlot || 0;
+    if (slot > 0 && run.players?.[slot]) {
+      withPlayerContext(run, run.players[slot], () => execScheduled(s));
+    } else {
+      execScheduled(s);
     }
   }
   due.length = 0;
@@ -246,56 +280,56 @@ function pointToSegDist2(px, py, ax, ay, bx, by) {
 }
 
 export function updateProjectiles(run, dt) {
-  const p = run.player;
   const hash = run._sys.hash;
   const near = run._sys.scratchP;
   const arr = run.projectiles;
-  const lanternW = getWeapon(run, 'lantern');
   const lanternBase = run.time * WEAPONS.lantern.angSpeed;
+  const isCoop = coopPartySize(run) > 1;
 
-  for (let i = 0; i < arr.length; i++) {
-    const pr = arr[i];
-    if (pr.dead) continue;
-    pr.t += dt;
-    if (pr.persistent) {
-      if (pr.t >= 1) pr.t -= 1;
-    } else if (pr.t >= pr.life && pr.kind !== 'firecracker' && pr.kind !== 'compassField') {
-      if (pr.kind === 'paperman' && pr.mode === 'imp') {
-        explode(run, pr.x, pr.y, pr.blastR || 54, pr.dmg || 30, 'paperman', {
-          evolved: true,
-          explosionKind: 'paperImp',
-          knock: 100,
-        });
-      }
-      pr.dead = true;
-      continue;
-    }
-
+  const stepSingleProj = (pr) => {
+    const p = run.player;
     switch (pr.kind) {
       case 'gongPulse':
+      case 'nuoBeat':
       case 'ultPulse': {
         const k = Math.min(1, pr.t / pr.life);
         pr.radius = pr.maxRadius * (1 - (1 - k) * (1 - k));
-        pr.x = p.x;
-        pr.y = p.y;
+        if (!pr.fixedPos) {
+          pr.x = p.x;
+          pr.y = p.y;
+        }
         break;
       }
 
+      case 'nuoDanceRing':
+        pr.x = p.x;
+        pr.y = p.y;
+        break;
+
+      case 'soulChain':
+        pr.fromX = p.x;
+        pr.fromY = p.y;
+        break;
+
       case 'lantern': {
+        const lanternW = getWeapon(run, 'lantern');
         const lv = lanternW ? lanternW.level : 1;
-        const R = WEAPONS.lantern.orbitR[lv - 1] * run.mods.areaMul;
+        const R = WEAPONS.lantern.orbitR[lv - 1] * weaponAreaMul(run, lanternW);
         pr.angle = lanternBase + (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
         pr.x = p.x + Math.cos(pr.angle) * R;
         pr.y = p.y + Math.sin(pr.angle) * R;
         break;
       }
 
-      case 'flameRing':
+      case 'flameRing': {
+        const lanternW = getWeapon(run, 'lantern');
+        const areaMul = weaponAreaMul(run, lanternW);
         pr.x = p.x;
         pr.y = p.y;
-        pr.radius = pr.r = WEAPONS.lantern.evo.ringRadius * run.mods.areaMul;
-        pr.innerRadius = WEAPONS.lantern.evo.innerLotusRadius * run.mods.areaMul;
+        pr.radius = pr.r = WEAPONS.lantern.evo.ringRadius * areaMul;
+        pr.innerRadius = WEAPONS.lantern.evo.innerLotusRadius * areaMul;
         break;
+      }
 
       case 'talisman':
         updateTalismanProj(run, pr, dt, hash, near);
@@ -315,6 +349,18 @@ export function updateProjectiles(run, dt) {
 
       case 'paperman':
         updatePapermanProj(run, pr, dt, hash, near);
+        break;
+
+      case 'flyingSword':
+        updateFlyingSwordProj(run, pr, dt, hash, near);
+        break;
+
+      case 'fireCrow':
+        updateFireCrowProj(run, pr, dt, hash, near);
+        break;
+
+      case 'nuoDrum':
+        updateNuoDrumProj(run, pr, dt);
         break;
 
       case 'inkPool':
@@ -357,6 +403,8 @@ export function updateProjectiles(run, dt) {
                 y: pr.toY + Math.sin(a) * d,
                 radius: pr.radius * evo.lotusRadiusMul,
                 dmg: pr.dmg * evo.lotusDmgMul,
+                ownerSlot: pr.ownerSlot || 0,
+                attackVfx: pr.attackVfx || null,
               });
             }
             arr.push({
@@ -364,6 +412,8 @@ export function updateProjectiles(run, dt) {
               kind: 'inkPool',
               weaponId: 'firecracker',
               subKind: 'emberZone',
+              ownerSlot: pr.ownerSlot || 0,
+              attackVfx: pr.attackVfx || null,
               evolved: true,
               x: pr.toX,
               y: pr.toY,
@@ -401,16 +451,66 @@ export function updateProjectiles(run, dt) {
       case 'enemyBullet': {
         pr.x += pr.vx * dt;
         pr.y += pr.vy * dt;
-        const rr = pr.r + p.r;
-        if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) {
-          hurtPlayer(run, pr.dmg);
-          pr.dead = true;
+        if (isCoop) {
+          for (let k = 0; k < run.players.length; k++) {
+            const pl = run.players[k];
+            if (pl.downed || pl.hp <= 0) continue;
+            const rr = pr.r + pl.r;
+            if ((pr.x - pl.x) ** 2 + (pr.y - pl.y) ** 2 <= rr * rr) {
+              hurtTargetPlayer(run, pl, pr.dmg);
+              pr.dead = true;
+              break;
+            }
+          }
+        } else {
+          const rr = pr.r + p.r;
+          if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) {
+            hurtPlayer(run, pr.dmg);
+            pr.dead = true;
+          }
         }
         break;
       }
 
       default:
         break;
+    }
+  };
+
+  for (let i = 0; i < arr.length; i++) {
+    const pr = arr[i];
+    if (pr.dead) continue;
+    pr.t += dt;
+    if (pr.persistent) {
+      if (pr.t >= 1) pr.t -= 1;
+    } else if (pr.t >= pr.life && pr.kind !== 'firecracker' && pr.kind !== 'compassField' && pr.kind !== 'fireCrow') {
+      if (pr.kind === 'paperman' && pr.mode === 'imp') {
+        const slot = pr.ownerSlot || 0;
+        if (slot > 0 && run.players?.[slot]) {
+          withPlayerContext(run, run.players[slot], () => {
+            explode(run, pr.x, pr.y, pr.blastR || 54, pr.dmg || 30, 'paperman', {
+              evolved: true,
+              explosionKind: 'paperImp',
+              knock: 100,
+            });
+          });
+        } else {
+          explode(run, pr.x, pr.y, pr.blastR || 54, pr.dmg || 30, 'paperman', {
+            evolved: true,
+            explosionKind: 'paperImp',
+            knock: 100,
+          });
+        }
+      }
+      pr.dead = true;
+      continue;
+    }
+
+    const slot = pr.ownerSlot || 0;
+    if (pr.kind !== 'enemyBullet' && slot > 0 && run.players?.[slot]) {
+      withPlayerContext(run, run.players[slot], () => stepSingleProj(pr));
+    } else {
+      stepSingleProj(pr);
     }
   }
 
@@ -451,6 +551,8 @@ function updateTalismanProj(run, pr, dt, hash, near) {
           id: run._nextId++,
           kind: 'talismanArray',
           weaponId: 'talisman',
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
           evolved: true,
           x: e.x,
           y: e.y,
@@ -495,6 +597,8 @@ function chainFromTalisman(run, src, pr, hash) {
     id: run._nextId++,
     kind: 'talismanChain',
     weaponId: 'talisman',
+    ownerSlot: pr.ownerSlot || 0,
+    attackVfx: pr.attackVfx || null,
     evolved: true,
     x: src.x,
     y: src.y,
@@ -533,6 +637,8 @@ function updateTalismanArray(run, pr, dt, hash) {
         id: run._nextId++,
         kind: 'talismanChain',
         weaponId: 'talisman',
+        ownerSlot: pr.ownerSlot || 0,
+        attackVfx: pr.attackVfx || null,
         evolved: true,
         x: pr.x,
         y: pr.y,
@@ -610,6 +716,8 @@ function updateCoinswordProj(run, pr, dt, hash, near) {
           evolved: true,
           explosionKind: 'starCleave',
           knock: 120,
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
         });
       }
     }
@@ -622,6 +730,30 @@ function updatePapermanProj(run, pr, dt, hash, near) {
   const p = run.player;
   const haste = run.mods?.summonHasteMul || 1;
   if (pr.atkT > 0) pr.atkT -= dt;
+
+  const owner = run.players?.[pr.ownerSlot || 0] || p;
+  if (pr.persistent && owner?.downed) {
+    pr.mode = 'follow';
+    pr.targetId = null;
+    pr.chargeT = 0;
+    const idleR = pr.role === 'guard' ? evo.guardR * 0.75 : FX.summonOffset;
+    const oa = run.time * 1.1 + ((pr.orbitIndex || 0) / Math.max(1, pr.orbitCount || 1)) * Math.PI * 2;
+    const tx = owner.x + Math.cos(oa) * idleR;
+    const ty = owner.y + Math.sin(oa) * idleR;
+    const dx = tx - pr.x;
+    const dy = ty - pr.y;
+    const d = Math.hypot(dx, dy);
+    if (d > def.leash) {
+      pr.x = tx;
+      pr.y = ty;
+    } else if (d > 1) {
+      const step = Math.min(d, def.speed * 0.75 * dt);
+      pr.x += (dx / d) * step;
+      pr.y += (dy / d) * step;
+      pr.angle = Math.atan2(dy, dx);
+    }
+    return;
+  }
 
   // 纸扎 4 件羁绊：追魂红纸童冲阵自爆
   if (pr.mode === 'imp') {
@@ -651,10 +783,12 @@ function updatePapermanProj(run, pr, dt, hash, near) {
 
   const dmg = papermanDmg(run);
   const w = getWeapon(run, 'paperman');
+  const sigScale = pr.sigScale || 1;
+  const sigCdMul = pr.sigCdMul || 1;
 
   // 开光内卫：绕身拦截敌弹 + 近身震退横扫
   if (pr.role === 'guard') {
-    const R = evo.guardR * run.mods.areaMul;
+    const R = evo.guardR * weaponAreaMul(run, w);
     pr.angle = run.time * evo.guardAngSpeed * haste + (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
     pr.x = p.x + Math.cos(pr.angle) * R;
     pr.y = p.y + Math.sin(pr.angle) * R;
@@ -664,7 +798,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
       for (let j = 0; j < run.projectiles.length; j++) {
         const b = run.projectiles[j];
         if (b.kind === 'enemyBullet' && !b.dead) {
-          const rr = evo.guardBlockR + (b.r || 0);
+          const rr = evo.guardBlockR * sigScale + (b.r || 0);
           if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) {
             b.dead = true;
             pr._blockCd = evo.guardBlockCd || 0.65;
@@ -675,7 +809,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     }
 
     if (pr.atkT <= 0) {
-      const list = hash.queryCircle(pr.x, pr.y, evo.guardHitR, near);
+      const list = hash.queryCircle(pr.x, pr.y, evo.guardHitR * sigScale, near);
       let any = false;
       for (let j = 0; j < list.length; j++) {
         const e = list[j];
@@ -683,7 +817,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
         damageEnemy(run, e, dmg * 0.85, 'paperman', { knock: 95, originX: p.x, originY: p.y });
         any = true;
       }
-      if (any) pr.atkT = evo.guardAtkCd / haste;
+      if (any) pr.atkT = (evo.guardAtkCd * sigCdMul) / haste;
     }
     return;
   }
@@ -705,7 +839,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
       pr.x += pr.vx * dt;
       pr.y += pr.vy * dt;
     } else {
-      const cands = hash.queryCircle(p.x, p.y, evo.seekRange, near);
+      const cands = hash.queryCircle(p.x, p.y, evo.seekRange * sigScale, near);
       let best = null;
       let bestScore = -Infinity;
       for (let j = 0; j < cands.length; j++) {
@@ -757,7 +891,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     for (let j = 0; j < hits.length; j++) {
       const e = hits[j];
       if (e.dead || (pr._hitUntil.get(e.id) || 0) > run.time) continue;
-      pr._hitUntil.set(e.id, run.time + evo.cavalryHitCd / haste);
+      pr._hitUntil.set(e.id, run.time + (evo.cavalryHitCd * sigCdMul) / haste);
       damageEnemy(run, e, dmg * evo.cavalryDmgMul, 'paperman', {
         knock: evo.cavalryKnock,
         knockDx: Math.cos(pr.angle),
@@ -776,7 +910,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     pr.x = p.x;
     pr.y = p.y;
   }
-  const t = hash.nearest(pr.x, pr.y, def.seekRange, near, (e) => !e.dead);
+  const t = hash.nearest(pr.x, pr.y, def.seekRange * sigScale, near, (e) => !e.dead);
   let tx;
   let ty;
   if (t) {
@@ -803,7 +937,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
   }
   if (t && pr.atkT <= 0 && d <= pr.r + t.r + FX.summonReach) {
     damageEnemy(run, t, dmg, 'paperman');
-    pr.atkT = def.atkCd / haste;
+    pr.atkT = (def.atkCd * sigCdMul) / haste;
     if (w && (run._papermanFireT || 0) <= run.time) {
       run._papermanFireT = run.time + 0.55;
       emitFire(run, w, pr.x, pr.y, pr.angle);
@@ -831,10 +965,12 @@ function updateCompassField(run, pr, dt, hash, near) {
           y: pr.y,
           radius: pr.radius * 0.85,
           dmg: pr.dmg * 0.95,
-          weaponId: 'compass',
+          weaponId: pr.weaponId || 'compass',
           evolved: true,
           explosionKind: 'compassStar',
           knock: 90,
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
         });
       }
     }
@@ -958,6 +1094,8 @@ function updateMirrorBeam(run, pr, dt, hash, near) {
           evolved: true,
           explosionKind: 'solarFlare',
           knock: 105,
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
         });
       }
     }
@@ -1010,6 +1148,209 @@ function updatePaperHorse(run, pr, dt, hash, near) {
           evolved: true,
           explosionKind: 'paperStampede',
           knock: 95,
+          ownerSlot: pr.ownerSlot || 0,
+        });
+      }
+    }
+  }
+}
+
+function updateFlyingSwordProj(run, pr, dt, hash, near) {
+  const def = WEAPONS.taomujian;
+  const evo = def.evo;
+  let t = pr._tgt;
+  if (!t || t.dead) {
+    t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
+  }
+  if (t) {
+    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
+    pr.vx = Math.cos(pr.angle) * pr.speed;
+    pr.vy = Math.sin(pr.angle) * pr.speed;
+  }
+  pr.x += pr.vx * dt;
+  pr.y += pr.vy * dt;
+  hitPropsCircle(run, pr.x, pr.y, pr.r);
+
+  const list = hash.queryCircle(pr.x, pr.y, pr.r, near);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead || pr._hit.includes(e.id)) continue;
+    pr._hit.push(e.id);
+    damageEnemy(run, e, pr.dmg, 'taomujian', {
+      knock: def.knockback,
+      knockDx: pr.vx,
+      knockDy: pr.vy,
+    });
+    if (pr.evolved) {
+      run._taomujianHits = (run._taomujianHits || 0) + 1;
+      if (run._taomujianHits % evo.thunderEvery === 0) {
+        const tr = evo.thunderRadius * (run.mods?.areaMul || 1);
+        damageCircle(run, e.x, e.y, tr, pr.dmg * evo.thunderDmgMul, 'taomujian', {
+          stun: evo.stun,
+          knock: 75,
+        });
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'thunderBolt',
+          weaponId: 'taomujian',
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
+          evolved: true,
+          x: e.x,
+          y: e.y,
+          r: 10,
+          radius: tr,
+          angle: 0,
+          t: 0,
+          life: 0.28,
+        });
+      }
+    }
+    if (pr.pierce-- <= 0) {
+      pr.dead = true;
+      break;
+    }
+    pr._tgt = null;
+  }
+}
+
+function updateFireCrowProj(run, pr, dt, hash, near) {
+  const def = WEAPONS.zhinian_kite;
+  const evo = def.evo;
+  let t = pr._tgt;
+  if (!t || t.dead) {
+    t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead);
+  }
+  if (t) {
+    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
+    pr.vx = Math.cos(pr.angle) * pr.speed;
+    pr.vy = Math.sin(pr.angle) * pr.speed;
+  }
+  pr.x += pr.vx * dt;
+  pr.y += pr.vy * dt;
+
+  if (pr.evolved) {
+    pr._trailT = (pr._trailT ?? evo.trailInterval) - dt;
+    if (pr._trailT <= 0) {
+      pr._trailT = evo.trailInterval;
+      const tr = evo.trailRadius * (run.mods?.areaMul || 1);
+      run.projectiles.push({
+        id: run._nextId++,
+        kind: 'inkPool',
+        weaponId: 'zhinian_kite',
+        subKind: 'emberZone',
+        ownerSlot: pr.ownerSlot || 0,
+        attackVfx: pr.attackVfx || null,
+        evolved: true,
+        x: pr.x,
+        y: pr.y,
+        r: Math.max(0, tr),
+        radius: tr,
+        angle: pr.angle,
+        t: 0,
+        life: evo.trailLife * (run.mods?.durMul || 1),
+        tick: evo.trailTick,
+        _tickT: 0.12,
+        dmg: pr.dmg * evo.trailDmgMul,
+      });
+    }
+  }
+
+  let hitEnemy = false;
+  const list = hash.queryCircle(pr.x, pr.y, pr.r + 4, near);
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i].dead) {
+      hitEnemy = true;
+      break;
+    }
+  }
+
+  if (hitEnemy || pr.t >= pr.life) {
+    pr.dead = true;
+    const blastR = pr.blastR || pr.radius || 52;
+    if (pr.evolved) {
+      const marked = hash.queryCircle(pr.x, pr.y, blastR, run._sys.scratchW2);
+      for (let i = 0; i < marked.length; i++) {
+        const e = marked[i];
+        if (e.dead) continue;
+        e.yangyanMarkT = Math.max(e.yangyanMarkT || 0, evo.markDuration);
+        e.yangyanBurstDmg = Math.max(e.yangyanBurstDmg || 0, pr.dmg * 0.85);
+        e.yangyanBurstR = Math.max(e.yangyanBurstR || 0, blastR * 0.9);
+      }
+    }
+    explode(run, pr.x, pr.y, blastR, pr.dmg, 'zhinian_kite', {
+      evolved: pr.evolved,
+      explosionKind: pr.evolved ? 'goldenCrow' : 'fireCrow',
+      knock: def.knockback,
+    });
+  }
+}
+
+function updateNuoDrumProj(run, pr, dt) {
+  const def = WEAPONS.nuo_drum;
+  const evo = def.evo;
+  pr._beatT -= dt;
+  while (pr._beatT <= 0 && pr.beatsLeft > 0) {
+    pr._beatT += pr.beatInterval;
+    pr.beatsLeft--;
+    const isFinal = pr.beatsLeft === 0;
+    const accent = isFinal ? (pr.evolved ? evo.accentDmgMul : def.accentDmgMul) : 1;
+    damageCircle(run, pr.x, pr.y, pr.radius, pr.dmg * accent, 'nuo_drum', {
+      knock: isFinal ? def.knockback * 1.35 : def.knockback * 0.65,
+      slow: 0.65,
+      ...(isFinal ? { stun: pr.evolved ? evo.stunDur : 0.35 } : {}),
+      ...(pr.evolved ? { armorBreak: isFinal, vuln: evo.vulnDur, vulnPct: evo.vulnPct } : {}),
+    });
+
+    if (pr.evolved && isFinal) {
+      for (let j = 0; j < run.projectiles.length; j++) {
+        const b = run.projectiles[j];
+        if (b.kind === 'enemyBullet' && !b.dead) {
+          const rr = pr.radius + (b.r || 0);
+          if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) b.dead = true;
+        }
+      }
+    }
+
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'nuoBeat',
+      subKind: 'nuoBeat',
+      fixedPos: true,
+      weaponId: 'nuo_drum',
+      ownerSlot: pr.ownerSlot || 0,
+      attackVfx: pr.attackVfx || null,
+      x: pr.x,
+      y: pr.y,
+      r: Math.max(0, pr.radius),
+      radius: 0,
+      maxRadius: pr.radius,
+      angle: 0,
+      t: 0,
+      life: 0.30,
+      evolved: pr.evolved,
+    });
+
+    if (isFinal && pr.evolved) {
+      const burstR = evo.maskBurstR * (run.mods?.areaMul || 1);
+      const md = pr.radius * 0.68;
+      for (let m = 0; m < evo.maskBursts; m++) {
+        const ma = (m / evo.maskBursts) * Math.PI * 2;
+        run._scheduled.push({
+          delay: 0.06 * (m + 1),
+          type: 'explosion',
+          x: pr.x + Math.cos(ma) * md,
+          y: pr.y + Math.sin(ma) * md,
+          radius: burstR,
+          dmg: pr.dmg * evo.maskBurstMul,
+          weaponId: 'nuo_drum',
+          evolved: true,
+          explosionKind: 'nuoMaskBurst',
+          knock: 90,
+          ownerSlot: pr.ownerSlot || 0,
+          attackVfx: pr.attackVfx || null,
         });
       }
     }

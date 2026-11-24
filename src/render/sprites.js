@@ -315,6 +315,102 @@ function drawDaotong(g, rng, f, outfit) {
   });
 }
 
+function drawYinyang(g, rng, f, outfit) {
+  // 背后的八卦罗盘背饰
+  circ(g, -6.5, -17, 5.4);
+  fs(g, PAPER_SHADE, 1.1);
+  circ(g, -6.5, -17, 2.5);
+  fs(g, VERM, 0.8);
+  heroLegs(g, f);
+  heroRobe(g, LANTERN, outfit);
+  // 宽袖道袍云纹镶边
+  ink(g, 1.1, PAPER);
+  g.beginPath();
+  g.moveTo(-5.8, -7.2);
+  g.lineTo(5.8, -7.2);
+  g.stroke();
+  // 头与三缕清髯
+  circ(g, 0, -22.2, 3.7);
+  fs(g, PAPER, 1.1);
+  g.fillStyle = INK;
+  circ(g, 1.5, -21.5, 0.6);
+  g.fill();
+  circ(g, -1.2, -21.5, 0.6);
+  g.fill();
+  ink(g, 0.9, INK);
+  g.beginPath();
+  g.moveTo(-1.2, -19.2);
+  g.lineTo(-1.8, -15.4);
+  g.moveTo(0, -19);
+  g.lineTo(0, -14.8);
+  g.moveTo(1.2, -19.2);
+  g.lineTo(1.8, -15.4);
+  g.stroke();
+  // 方正阴阳道冠 + 太极金徽
+  poly(g, [[-4.2, -24.2], [-3.8, -32.4], [3.8, -32.4], [4.2, -24.2]]);
+  fs(g, INK, 1.1);
+  circ(g, 0, -28.4, 1.8);
+  fs(g, LANTERN, 0.8);
+}
+
+function drawTiejiang(g, rng, f, outfit) {
+  // 背后的重铁锤与锁链环
+  line(g, -9.2, -29, -2.5, -12, 1.8, INK);
+  poly(g, [[-11.8, -28.5], [-6.2, -31.2], [-4.8, -27.8], [-10.4, -25.2]]);
+  fs(g, PAPER_SHADE, 1.1);
+  heroLegs(g, f);
+  heroRobe(g, VERM_DARK, outfit);
+  // 锻炉护胸皮围裙与右肩铁甲
+  vfill(g, () => poly(g, [[-4.2, -16], [4.2, -16], [4.8, -5.8], [-4.8, -5.8]]), VERM_DARK);
+  poly(g, [[-6.8, -20.2], [-2.4, -20.2], [-3, -15.8], [-7.2, -16.4]]);
+  fs(g, PAPER_SHADE, 1);
+  // 方颌头像 + 浓髯 + 朱红束额巾
+  circ(g, 0, -22.4, 3.9);
+  fs(g, PAPER_SHADE, 1.1);
+  poly(g, [[-3.6, -20.2], [3.6, -20.2], [2.8, -16.2], [-2.8, -16.2]]);
+  fs(g, INK, 0.9);
+  vfill(g, () => poly(g, [[-4.4, -25.2], [4.4, -25.2], [4.4, -23], [-4.4, -23]]));
+  vfill(g, () => poly(g, [[-4.2, -24.4], [-8.5, -26.4], [-7.6, -23.2]]));
+  g.fillStyle = INK;
+  circ(g, 1.5, -21.6, 0.65);
+  g.fill();
+  circ(g, -1.3, -21.6, 0.65);
+  g.fill();
+}
+
+function drawNuoxi(g, rng, f, outfit) {
+  // 背后的傩戏小战鼓与飘带
+  circ(g, -6.2, -16.8, 4.4);
+  fs(g, VERM, 1.1);
+  circ(g, -6.2, -16.8, 2.2);
+  fs(g, PAPER, 0.8);
+  heroLegs(g, f);
+  heroRobe(g, VERM, outfit);
+  // 云肩披帛
+  poly(g, [[-6.4, -19.8], [0, -16.2], [6.4, -19.8], [4.4, -20.8], [-4.4, -20.8]]);
+  fs(g, LANTERN, 0.9);
+  // 头 + 斜戴双角朱金半傩面 + 双翎雉尾
+  ink(g, 1.1, VERM);
+  g.beginPath();
+  g.moveTo(-1.5, -27.5);
+  g.quadraticCurveTo(-6.5, -34.5, -11.5, -34);
+  g.moveTo(1.5, -27.5);
+  g.quadraticCurveTo(6.5, -34.5, 11.5, -34);
+  g.stroke();
+  circ(g, 0, -22.2, 3.8);
+  fs(g, PAPER, 1.1);
+  poly(g, [[-3.8, -24.5], [-3.2, -29.2], [3.8, -28.6], [3.6, -24.2]]);
+  fs(g, VERM, 1);
+  circ(g, 1.2, -26.5, 0.8);
+  g.fillStyle = LANTERN;
+  g.fill();
+  g.fillStyle = INK;
+  circ(g, 1.5, -21.4, 0.6);
+  g.fill();
+  circ(g, -1.2, -21.4, 0.6);
+  g.fill();
+}
+
 /** 手提灯笼（单独精灵，运行时以手为轴摆动） */
 function drawHandLantern(g, style = null) {
   line(g, 0, 0, 0, 2.6, 0.8);
@@ -351,11 +447,19 @@ function drawHandLantern(g, style = null) {
   vfill(g, () => poly(g, [[-0.6, 11.9], [0.6, 11.9], [0.9, 15.4], [-0.9, 15.4]]));
 }
 
-const HEROES = { zhou: drawZhou, mian: drawMian, daotong: drawDaotong };
+const HEROES = {
+  zhou: drawZhou,
+  mian: drawMian,
+  daotong: drawDaotong,
+  yinyang: drawYinyang,
+  tiejiang: drawTiejiang,
+  nuoxi: drawNuoxi,
+};
 
 export function heroSprite(heroId, frame = 0, flash = false, outfit = null) {
-  const fn = HEROES[heroId] || drawZhou;
-  return bake(`hero_${heroId}|${outfit || ''}|${frame}|${flash ? 1 : 0}`, 36, 46, 18, 42, (g, r) => fn(g, r, frame, outfit), { flash, speckle: 0.003 });
+  const safeId = typeof heroId === 'string' && Object.hasOwn(HEROES, heroId) ? heroId : 'zhou';
+  const fn = HEROES[safeId];
+  return bake(`hero_${safeId}|${outfit || ''}|${frame}|${flash ? 1 : 0}`, 36, 46, 18, 42, (g, r) => fn(g, r, frame, outfit), { flash, speckle: 0.003 });
 }
 export function handLanternSprite(style = null) {
   return bake(`handlantern|${style || '0'}`, 16, 20, 8, 2, (g) => drawHandLantern(g, style), { speckle: 0.002 });
@@ -2068,6 +2172,61 @@ function drawSoulFireBullet(g) {
   g.fill();
 }
 
+function drawTaomujianProj(g, evo) {
+  poly(g, [[-10, -2.5], [10, -3], [17, 0], [10, 3], [-10, 2.5]]);
+  fs(g, evo ? LANTERN : PAPER_SHADE, 1.1);
+  line(g, -7, 0, 13, 0, 1.2, VERM);
+  poly(g, [[-10, -5.5], [-7, 0], [-10, 5.5], [-12.5, 0]]);
+  fs(g, evo ? VERM : LANTERN, 1);
+  line(g, -16, 0, -12, 0, 2, INK);
+  vfill(g, () => poly(g, [[-16, -1], [-19, -3.5], [-18, 3.5]]));
+}
+
+function drawSoulHookProj(g, evo) {
+  g.beginPath();
+  g.arc(0, 0, 7.5, -Math.PI * 0.85, Math.PI * 0.45);
+  ink(g, evo ? 3.2 : 2.6, INK);
+  g.stroke();
+  ink(g, 1.3, evo ? LANTERN : VERM);
+  g.stroke();
+  poly(g, [[5, 5], [10, 1], [3, 1]]);
+  fs(g, PAPER, 1);
+}
+
+function drawFireCrowProj(g, frame, evo) {
+  const flap = frame ? -5 : 5;
+  poly(g, [[11, 0], [2, -3.5], [-4, -9 + flap * 0.45], [-7, -2], [-12, -4], [-9, 0], [-12, 4], [-7, 2], [-4, 9 - flap * 0.45], [2, 3.5]]);
+  fs(g, evo ? LANTERN : VERM, 1.1);
+  circ(g, 3, 0, 2.6);
+  fs(g, evo ? PAPER : LANTERN, 0.8);
+  circ(g, 6.5, -1.1, 0.8);
+  g.fillStyle = INK;
+  g.fill();
+}
+
+function drawNuoDrumTotemProj(g, evo) {
+  poly(g, [[-10, -6], [10, -6], [12, 2], [10, 9], [-10, 9], [-12, 2]]);
+  fs(g, VERM, 1.3);
+  ell(g, 0, -6, 10, 4.2);
+  fs(g, evo ? LANTERN : PAPER, 1.1);
+  vfill(g, () => circ(g, 0, -6, 2.6));
+  if (evo) {
+    poly(g, [[-7, -12], [-11, -18], [-3, -14], [3, -14], [11, -18], [7, -12]]);
+    fs(g, INK, 1);
+  }
+}
+
+function drawNuoMaskTotemProj(g) {
+  poly(g, [[-9, -8], [-13, -14], [-5, -10], [5, -10], [13, -14], [9, -8], [10, 4], [0, 12], [-10, 4]]);
+  fs(g, VERM, 1.2);
+  circ(g, -3.5, -2, 1.6);
+  fs(g, LANTERN, 0.8);
+  circ(g, 3.5, -2, 1.6);
+  fs(g, LANTERN, 0.8);
+  poly(g, [[-5, 6], [0, 3], [5, 6]]);
+  fs(g, PAPER, 0.8);
+}
+
 const PROJ_DEFS = {
   talisman: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, false) },
   talismanEvo: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, true) },
@@ -2104,6 +2263,17 @@ const PROJ_DEFS = {
   paperMoney: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawPaperMoney(g) },
   inkBullet: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawInkBullet(g) },
   soulFireBullet: { w: 18, h: 16, ax: 9, ay: 8, draw: (g) => drawSoulFireBullet(g) },
+  taomujian: { w: 38, h: 14, ax: 19, ay: 7, draw: (g) => drawTaomujianProj(g, false) },
+  taomujianEvo: { w: 42, h: 16, ax: 21, ay: 8, draw: (g) => drawTaomujianProj(g, true) },
+  soulHook: { w: 24, h: 22, ax: 12, ay: 11, draw: (g) => drawSoulHookProj(g, false) },
+  soulHookEvo: { w: 26, h: 24, ax: 13, ay: 12, draw: (g) => drawSoulHookProj(g, true) },
+  fireCrow0: { w: 28, h: 24, ax: 14, ay: 12, draw: (g) => drawFireCrowProj(g, 0, false) },
+  fireCrow1: { w: 28, h: 24, ax: 14, ay: 12, draw: (g) => drawFireCrowProj(g, 1, false) },
+  fireCrowEvo0: { w: 32, h: 26, ax: 16, ay: 13, draw: (g) => drawFireCrowProj(g, 0, true) },
+  fireCrowEvo1: { w: 32, h: 26, ax: 16, ay: 13, draw: (g) => drawFireCrowProj(g, 1, true) },
+  nuoDrum: { w: 28, h: 28, ax: 14, ay: 14, draw: (g) => drawNuoDrumTotemProj(g, false) },
+  nuoDrumEvo: { w: 32, h: 36, ax: 16, ay: 20, draw: (g) => drawNuoDrumTotemProj(g, true) },
+  nuoMaskTotem: { w: 28, h: 30, ax: 14, ay: 15, draw: (g) => drawNuoMaskTotemProj(g) },
 };
 
 export function projSprite(name) {

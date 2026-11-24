@@ -39,14 +39,49 @@ export const HERO_COPY = {
     ultDesc: '镇坛震波净弹，连劈九道索敌天雷轰击群祟',
     unlock: '一个包子不吃，守到五更（8:00）',
   },
+  yinyang: {
+    name: '阴阳先生·沈观星',
+    short: '沈观星',
+    flavor: '铁口断阴阳，罗盘定乾坤，星移鬼神惊。',
+    trait: '攻击范围 +15%，持续与弹速 +15%',
+    weapon: 'compass',
+    ultName: '奇门遁甲大阵',
+    ultDesc: '布下奇门八卦大阵聚拢群祟，四门星落轰击并附加破绽易伤',
+    unlock: '单局敕封开光 2 把神兵',
+  },
+  tiejiang: {
+    name: '镇魂铁匠·石敢当',
+    short: '石敢当',
+    flavor: '炉火炼百煞，重锤落砧，邪祟骨碎魂消。',
+    trait: '护甲 +2，伤害 +12%',
+    weapon: 'suohun_chain',
+    ultName: '十方熔金镇狱锤',
+    ultDesc: '重锤碎甲震退四方并获金身护体，十方熔金连爆灼烧邪祟',
+    unlock: '累计打败 2500 只敌人',
+  },
+  nuoxi: {
+    name: '傩戏传人·柳青衣',
+    short: '柳青衣',
+    flavor: '戴面即成神，鼓点一急，百鬼皆退避。',
+    trait: '移速 +12%，冷却缩减 +10%',
+    weapon: 'nuo_drum',
+    ultName: '大傩逐疫百相舞',
+    ultDesc: '起舞连擂四重逐疫傩鼓随身净弹，五秒内移速与攻速大幅提升',
+    unlock: '单局激活任意流派 6 件羁绊',
+  },
 };
 
+function own(obj, k) {
+  return Boolean(obj && typeof k === 'string' && Object.hasOwn(obj, k));
+}
+
 export function heroInfo(id) {
-  const c = HERO_COPY[id] || HERO_COPY.zhou;
-  const b = B.HEROES?.[id];
-  const u = B.ULT?.[id];
+  const safeId = own(HERO_COPY, id) ? id : 'zhou';
+  const c = HERO_COPY[safeId];
+  const b = own(B.HEROES, id) ? B.HEROES[id] : B.HEROES?.[safeId];
+  const u = own(B.ULT, id) ? B.ULT[id] : B.ULT?.[safeId];
   return {
-    id,
+    id: safeId,
     name: b?.name || c.name,
     short: b?.short || c.short,
     trait: b?.trait || c.trait,
@@ -69,19 +104,22 @@ export const SCHOOL_TAGS = B.SCHOOL_TAGS || {};
 export { BLESSINGS, SYNERGIES, describeEvolution };
 
 export function schoolName(tag) {
-  return SCHOOL_NAMES[tag] || tag || '';
+  if (own(SCHOOL_NAMES, tag)) return SCHOOL_NAMES[tag];
+  return typeof tag === 'string' ? tag : '';
 }
 
 export function weaponTags(weaponId) {
-  return B.WEAPONS?.[weaponId]?.tags ? [...B.WEAPONS[weaponId].tags] : [];
+  return own(B.WEAPONS, weaponId) && Array.isArray(B.WEAPONS[weaponId].tags) ? [...B.WEAPONS[weaponId].tags] : [];
 }
 
 export function relicTags(relicId) {
-  return B.RELICS?.[relicId]?.tags ? [...B.RELICS[relicId].tags] : [];
+  return own(B.RELICS, relicId) && Array.isArray(B.RELICS[relicId].tags) ? [...B.RELICS[relicId].tags] : [];
 }
 
 export function blessingInfo(id) {
-  return BLESSINGS?.[id] || { id, name: id, tier: 'auspicious', tags: [], maxStacks: 1, desc: '' };
+  if (own(BLESSINGS, id)) return BLESSINGS[id];
+  const s = typeof id === 'string' ? id : '';
+  return { id: s, name: s, tier: 'auspicious', tags: [], maxStacks: 1, desc: '' };
 }
 
 const WEAPON_FALLBACK = {
@@ -97,6 +135,10 @@ const WEAPON_FALLBACK = {
   soulbanner: ['招魂幡', '无常勾魂幡'],
   bronze_mirror: ['照妖铜镜', '乾坤赤阳镜'],
   paperhorse: ['纸马镖', '百鬼夜行图'],
+  taomujian: ['桃木飞剑', '天罡雷木剑阵'],
+  suohun_chain: ['无常锁魂链', '黑白无常夺魄索'],
+  zhinian_kite: ['纸鸢火鸦', '金乌焚天火鸦阵'],
+  nuo_drum: ['傩神战鼓', '太古百相傩坛'],
 };
 
 const RELIC_FALLBACK = {
@@ -112,6 +154,10 @@ const RELIC_FALLBACK = {
   glutinous: '糯米',
   fivecoins: '五帝钱',
   soulwick: '引魂灯芯',
+  leijimu: '雷击枣木',
+  yinpai: '勾魂阴牌',
+  huoyao_pouch: '硫磺火药囊',
+  wuse_mask: '五色傩面',
 };
 
 const PAIRS = {
@@ -127,6 +173,10 @@ const PAIRS = {
   glutinous: 'soulbanner',
   fivecoins: 'bronze_mirror',
   soulwick: 'compass',
+  leijimu: 'taomujian',
+  yinpai: 'suohun_chain',
+  huoyao_pouch: 'zhinian_kite',
+  wuse_mask: 'nuo_drum',
 };
 
 export const WEAPON_INTRO = {
@@ -142,6 +192,10 @@ export const WEAPON_INTRO = {
   soulbanner: '挥动招魂大幡重扫前方，破甲易伤并凝护体魂障',
   bronze_mirror: '射出持续横扫的赤阳神光，焚毁敌弹并灼烧叠伤',
   paperhorse: '唤出纸马铁骑从后方奔袭贯穿全屏，撞退沿途群祟',
+  taomujian: '御使桃木飞剑自动索敌穿刺，灵动贯穿群祟',
+  suohun_chain: '甩出无常铁链破甲定身，将前方邪祟强力拽聚',
+  zhinian_kite: '放飞纸鸢火鸦俯冲鬼群，轰然爆裂灼烧一片',
+  nuo_drum: '立起傩神战鼓连擂逐疫音波，减速震退四方群祟',
 };
 
 export const EVOLVE_INTRO = {
@@ -157,6 +211,10 @@ export const EVOLVE_INTRO = {
   soulbanner: B.WEAPONS?.soulbanner?.evoDesc || '巨幡往返横扫破除纸甲伞盾，残血斩杀并凝聚护体魂障抵挡伤害',
   bronze_mirror: B.WEAPONS?.bronze_mirror?.evoDesc || '赤阳神光横扫焚毁敌方弹幕，持续照射叠伤并引爆纯阳耀斑',
   paperhorse: B.WEAPONS?.paperhorse?.evoDesc || '成列纸马铁骑贯穿全屏冲阵，铁蹄踏碎敌群连环爆裂',
+  taomujian: B.WEAPONS?.taomujian?.evoDesc || '多柄雷木飞剑疾速御空穿刺，每三击引落天罡神雷轰击群祟',
+  suohun_chain: B.WEAPONS?.suohun_chain?.evoDesc || '双链裂空贯穿破甲，强力拽聚群祟定身并引爆夺魄阴煞',
+  zhinian_kite: B.WEAPONS?.zhinian_kite?.evoDesc || '成群金乌火鸦俯冲轰炸并刻印阳炎，掠过之处铺开流火焚天径',
+  nuo_drum: B.WEAPONS?.nuo_drum?.evoDesc || '立起百相神鼓连擂四重逐疫震波，净除敌弹、破甲易伤并终响五方爆裂',
 };
 
 export const RECIPE_LABELS = {
@@ -186,17 +244,22 @@ export const SHRINE_FLAVOR = {
 };
 
 export function weaponName(id, evolved = false) {
-  const w = B.WEAPONS?.[id];
-  if (evolved) return w?.evoName || WEAPON_FALLBACK[id]?.[1] || id;
-  return w?.name || WEAPON_FALLBACK[id]?.[0] || id;
+  const w = own(B.WEAPONS, id) ? B.WEAPONS[id] : null;
+  const fb = own(WEAPON_FALLBACK, id) ? WEAPON_FALLBACK[id] : null;
+  if (evolved) return w?.evoName || fb?.[1] || (typeof id === 'string' ? id : '');
+  return w?.name || fb?.[0] || (typeof id === 'string' ? id : '');
 }
 
 export function relicName(id) {
-  return B.RELICS?.[id]?.name || RELIC_FALLBACK[id] || id;
+  const r = own(B.RELICS, id) ? B.RELICS[id] : null;
+  const fb = own(RELIC_FALLBACK, id) ? RELIC_FALLBACK[id] : null;
+  return r?.name || fb || (typeof id === 'string' ? id : '');
 }
 
 export function pairOf(relicId) {
-  return B.RELICS?.[relicId]?.pair || PAIRS[relicId] || null;
+  if (own(B.RELICS, relicId)) return B.RELICS[relicId].pair || null;
+  if (own(PAIRS, relicId)) return PAIRS[relicId];
+  return null;
 }
 
 function fmtNum(v) {
@@ -223,12 +286,14 @@ const RELIC_TOTAL_FIELDS = [
   ['lightPct', (v) => `照亮 +${Math.round(v * 100)}%`],
   ['ultChargePct', (v) => `攒气 +${Math.round(v * 100)}%`],
   ['ultCdRefund', (v) => `大招返还冷却 ${Math.round(v * 100)}%`],
+  ['bonusPierce', (v) => `穿透 +${v}`],
+  ['controlDurPct', (v) => `控场时长 +${Math.round(v * 100)}%`],
 ];
 
 /** 法器在当前等级（1..5）下的总加成文案，直接由 relicEffect 计算保证零偏差 */
 export function relicTotalDesc(id, level = 1) {
   const lv = Math.max(1, Math.min(5, Math.floor(level || 1)));
-  if (!B.RELICS?.[id]) return '';
+  if (!own(B.RELICS, id)) return '';
   const eff = relicEffect(id, lv);
   const parts = [];
   for (const [k, fmt] of RELIC_TOTAL_FIELDS) {
@@ -296,14 +361,14 @@ export function describeChoice(c) {
       isNew: false, evolvable: false, locked: !!c.locked, tags: [], evolveHint: '',
     };
   }
-  if (c.kind === 'weapon' && B.WEAPONS?.[c.id]) {
+  if (c.kind === 'weapon' && own(B.WEAPONS, c.id)) {
     const u = describeUpgrade({ ...c, level: c.level ?? 1 });
     return {
       ...u,
       evolveTargetId: c.evolveTargetId || c.id,
     };
   }
-  if (c.kind === 'relic' && B.RELICS?.[c.id]) {
+  if (c.kind === 'relic' && own(B.RELICS, c.id)) {
     const u = describeUpgrade({ ...c, level: c.level ?? 1 });
     return {
       ...u,
@@ -390,5 +455,7 @@ export const ENEMY_COPY = {
 
 /** 反查某把武器配对开光的法器 ID */
 export function weaponPairRelic(weaponId) {
-  return B.WEAPONS?.[weaponId]?.pair || Object.keys(PAIRS).find((r) => PAIRS[r] === weaponId) || null;
+  if (own(B.WEAPONS, weaponId)) return B.WEAPONS[weaponId].pair || null;
+  if (typeof weaponId !== 'string') return null;
+  return Object.keys(PAIRS).find((r) => PAIRS[r] === weaponId) || null;
 }

@@ -267,6 +267,11 @@ export function updateShrines(run, dt, input = null) {
     }
   }
 
+  if (p.downed || p.hp <= 0) {
+    run.nearbyShrine = null;
+    return;
+  }
+
   // 计算最近可交互地标（仅对未使用且未激活的地标生效）
   const maxD2 = SHRINES.interactRadius * SHRINES.interactRadius;
   let closest = null;
@@ -297,8 +302,12 @@ function toOptionIndex(index) {
 }
 
 export function interactShrineImpl(run, shrineId = null) {
-  const refreshingOpen = shrineId != null && run?.status === 'shrine';
-  if (!run || (run.status !== 'playing' && !refreshingOpen)) return false;
+  if (!run || !run.player || run.player.downed || run.player.hp <= 0) {
+    if (run) run.nearbyShrine = null;
+    return false;
+  }
+  const refreshingOpen = shrineId != null && run.status === 'shrine';
+  if (run.status !== 'playing' && !refreshingOpen) return false;
   let s = null;
   if (shrineId != null) {
     const sid = typeof shrineId === 'string' && shrineId.trim() !== '' ? Number(shrineId) : shrineId;
@@ -328,7 +337,7 @@ export function dismissShrineImpl(run) {
 }
 
 export function resolveShrineImpl(run, optionIndex) {
-  if (!run || run.status !== 'shrine' || !run.activeShrine) return null;
+  if (!run || !run.player || run.player.downed || run.player.hp <= 0 || run.status !== 'shrine' || !run.activeShrine) return null;
   const idx = toOptionIndex(optionIndex);
   const modal = run.activeShrine;
   if (idx < 0 || !modal.options || idx >= modal.options.length) return null;

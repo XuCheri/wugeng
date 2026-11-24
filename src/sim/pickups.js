@@ -4,6 +4,7 @@ import { PICKUPS } from './balance.js';
 import { gainXp } from './xp.js';
 import { healPlayer, earnCoins } from './player.js';
 import { BLESSING_TUNING } from './blessings.js';
+import { coopPartySize, nearestLivingPlayer, withPlayerContext } from './coop.js';
 
 export function xpTier(value) {
   return value >= PICKUPS.xpTier3 ? 3 : value >= PICKUPS.xpTier2 ? 2 : 1;
@@ -48,15 +49,18 @@ export function dropXp(run, x, y, value, split = 1) {
 
 /** 吸附 + 拾取 */
 export function updatePickups(run, dt) {
-  const pl = run.player;
-  const range = run.mods.pickupRange;
-  const range2 = range * range;
-  const collect = pl.r + PICKUPS.touchRadius * 0.6;
-  const touch2 = (pl.r + PICKUPS.touchRadius) ** 2;
+  const isCoop = coopPartySize(run) > 1;
+  const p0 = run.player;
+  const baseRange = run.mods.pickupRange;
   const arr = run.pickups;
   let w = 0;
   for (let i = 0; i < arr.length; i++) {
     const o = arr[i];
+    const pl = isCoop ? nearestLivingPlayer(run, o.x, o.y) : p0;
+    const range = isCoop && pl !== p0 ? (pl._rt?.mods?.pickupRange || baseRange) : baseRange;
+    const range2 = range * range;
+    const collect = pl.r + PICKUPS.touchRadius * 0.6;
+    const touch2 = (pl.r + PICKUPS.touchRadius) ** 2;
     const dx = pl.x - o.x;
     const dy = pl.y - o.y;
     const d2 = dx * dx + dy * dy;
@@ -77,13 +81,13 @@ export function updatePickups(run, dt) {
     } else if (d2 <= touch2) {
       taken = true;
     }
-    if (taken) collectPickup(run, o);
+    if (taken) collectPickup(run, o, isCoop ? pl : p0);
     else arr[w++] = o;
   }
   arr.length = w;
 }
 
-function triggerSoulGourdIfOwned(run) {
+function triggerSoulGourdIfOwned(run, actor) {
   const s = run.mods?.soulGourdStacks || 0;
   if (s <= 0) return;
   const SG = BLESSING_TUNING.soul_gourd;
@@ -92,21 +96,34 @@ function triggerSoulGourdIfOwned(run) {
     type: 'soulGourdPulse',
     radius: SG.pulseRadius * (run.mods?.areaMul || 1),
     dmg: SG.pulseBaseDmg * s + run.player.level * 4,
+    ownerSlot: actor?.slot || 0,
   });
 }
 
-function collectPickup(run, o) {
+function collectPickup(run, o, collector = run.player) {
   switch (o.kind) {
     case 'xp':
       run._xpCount--;
       gainXp(run, o.value);
+      if (coopPartySize(run) > 1) {
+        for (let i = 1; i < run.players.length; i++) {
+          const al = run.players[i];
+          al.level = run.player.level;
+          al.xp = run.player.xp;
+          al.xpNext = run.player.xpNext;
+        }
+      }
       break;
     case 'coin':
       o.value = earnCoins(run, o.value, true);
       break;
     case 'bun': {
       const heal = PICKUPS.bunHeal * run.night.bunHealMul * (run.mods?.bunHealMul || 1);
-      healPlayer(run, heal);
+      if (collector && collector !== run.player) {
+        withPlayerContext(run, collector, () => healPlayer(run, heal));
+      } else {
+        healPlayer(run, heal);
+      }
       run.stats.bunsEaten++;
       if (run.stats.firstBunTime === null) run.stats.firstBunTime = run.time;
       o.value = heal;
@@ -119,11 +136,11 @@ function collectPickup(run, o) {
           p.ms = PICKUPS.magnetStartSpeed;
         }
       }
-      triggerSoulGourdIfOwned(run);
+      triggerSoulGourdIfOwned(run, collector);
       break;
     case 'chest':
       run._pendingChests++;
-      triggerSoulGourdIfOwned(run);
+      triggerSoulGourdIfOwned(run, collector);
       break;
   }
   run.events.push({ type: 'pickup', kind: o.kind, value: o.value });

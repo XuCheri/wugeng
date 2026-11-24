@@ -39,8 +39,12 @@ const SFX = {
   fire_soulbanner:    { gap: 0.05,  vol: 0.34 },
   fire_bronze_mirror: { gap: 0.05,  vol: 0.32 },
   fire_paperhorse:    { gap: 0.045, vol: 0.32 },
+  fire_taomujian:     { gap: 0.04,  vol: 0.30 },
+  fire_suohun_chain:  { gap: 0.05,  vol: 0.33 },
+  fire_zhinian_kite:  { gap: 0.045, vol: 0.29 },
+  fire_nuo_drum:      { gap: 0.055, vol: 0.36 },
 
-  // 局内战斗与奇遇扩展事件音色
+  // 局内战斗、奇遇与多人协同扩展事件音色
   explosion:      { gap: 0.045, vol: 0.48 },
   wave:           { gap: 0.12,  vol: 0.50 },
   shrineActivate: { gap: 0.10,  vol: 0.54 },
@@ -50,6 +54,8 @@ const SFX = {
   shieldBlock:    { gap: 0.05,  vol: 0.38 },
   heal:           { gap: 0.07,  vol: 0.34 },
   banish:         { gap: 0.06,  vol: 0.40 },
+  allyDown:       { gap: 0.25,  vol: 0.50 },
+  allyRevive:     { gap: 0.25,  vol: 0.60 },
 };
 
 /** 把 Karplus-Strong 拨弦渲染进 Float32Array（纯函数，便于预计算缓存）。 */
@@ -340,8 +346,45 @@ export function createAudio() {
       if (evo) osc('sine', 120, t, 0.11, v * 0.5, out, { a: 0.002, bend: 0.55 });
       return 0.13;
     },
+    fire_taomujian(t, v, out, evo = false) {
+      noise(t, 0.06, v * 0.42, out, { type: 'bandpass', freq: 2400, q: 2.2, sweepTo: 4200 });
+      osc('triangle', 1318.5, t, 0.09, v * 0.52, out, { a: 0.002, bend: 1.28 });
+      if (evo) {
+        osc('sine', 1975.5, t + 0.014, 0.09, v * 0.38, out, { a: 0.002 });
+        osc('sine', 2637, t + 0.028, 0.08, v * 0.30, out, { a: 0.002 });
+      }
+      return 0.12;
+    },
+    fire_suohun_chain(t, v, out, evo = false) {
+      noise(t, 0.07, v * 0.52, out, { type: 'highpass', freq: 3100, q: 1.4 });
+      osc('square', 880, t, 0.05, v * 0.28, out, { a: 0.001, bend: 0.72 });
+      osc('triangle', evo ? 147 : 185, t + 0.01, 0.11, v * 0.48, out, { a: 0.003, bend: 0.62 });
+      if (evo) {
+        osc('sine', 1480, t + 0.02, 0.08, v * 0.35, out, { a: 0.002, bend: 0.85 });
+      }
+      return 0.14;
+    },
+    fire_zhinian_kite(t, v, out, evo = false) {
+      noise(t, 0.08, v * 0.48, out, { freq: 1950, q: 1.8, sweepTo: 1100 });
+      osc('sawtooth', 740, t, 0.07, v * 0.32, out, { a: 0.003, bend: 0.76 });
+      if (evo) {
+        osc('triangle', 1108.7, t + 0.018, 0.09, v * 0.40, out, { a: 0.002, bend: 1.32 });
+        osc('sine', 1480, t + 0.03, 0.07, v * 0.28, out, { a: 0.002 });
+      }
+      return 0.13;
+    },
+    fire_nuo_drum(t, v, out, evo = false) {
+      osc('sine', evo ? 98 : 110, t, 0.16, v * 0.75, out, { a: 0.002, bend: 0.58 });
+      osc('triangle', 165, t, 0.11, v * 0.48, out, { a: 0.002, bend: 0.72 });
+      noise(t, 0.07, v * 0.36, out, { type: 'lowpass', freq: 520, q: 1.1, sweepTo: 210 });
+      if (evo) {
+        osc('square', 784, t + 0.01, 0.045, v * 0.28, out, { a: 0.001, bend: 0.88 });
+        osc('sine', 293.66, t + 0.02, 0.13, v * 0.38, out, { a: 0.003 });
+      }
+      return 0.17;
+    },
 
-    // ───────── 爆炸 / 尸潮 / 神龛 / 羁绊 / 命签 等局内事件音色 ─────────
+    // ───────── 爆炸 / 尸潮 / 神龛 / 羁绊 / 命签 / 协同救援 等局内事件音色 ─────────
     explosion(t, v, out, evo = false) {
       osc('sine', evo ? 128 : 108, t, 0.17, v * 0.85, out, { a: 0.002, bend: 0.34 });
       noise(t, 0.16, v * 0.75, out, { type: 'lowpass', freq: evo ? 1350 : 920, q: 0.9, sweepTo: 200 });
@@ -396,6 +439,15 @@ export function createAudio() {
       noise(t, 0.07, v * 0.55, out, { type: 'highpass', freq: 2700, q: 0.9 });
       osc('sine', 160, t + 0.02, 0.09, v * 0.5, out, { a: 0.001, bend: 0.5 });
       return 0.13;
+    },
+    allyDown(t, v, out) {
+      osc('triangle', 165, t, 0.22, v * 0.65, out, { a: 0.003, bend: 0.58 });
+      noise(t, 0.10, v * 0.32, out, { type: 'lowpass', freq: 540, q: 0.9 });
+      return 0.24;
+    },
+    allyRevive(t, v, out) {
+      [440, 587.33, 880].forEach((f, i) => bell(t + i * 0.045, f, v * 0.5, out, 0.24));
+      return 0.34;
     },
   };
 
@@ -486,7 +538,18 @@ export function createAudio() {
         case 'evolve': play('evolve'); break;
         case 'propBreak': play('paper', { volume: 1.3 }); break;
         case 'dawn': setWatch(6); play('dawn'); break;
-        case 'revive': play('evolve'); break;
+        case 'allyDown':
+        case 'allyDowned':
+          play('allyDown');
+          break;
+        case 'allyRevive':
+        case 'coopRevive':
+          play('allyRevive');
+          break;
+        case 'revive':
+          if (e.source === 'coop') play('allyRevive');
+          else play('evolve');
+          break;
         case 'playerHurt': play('hurt'); break;
         default: break;
       }

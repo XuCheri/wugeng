@@ -23,7 +23,7 @@ const SHOTS = path.join(ROOT, 'e2e', 'screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const PORT = Number(process.env.E2E_PORT || 8791);
-const CHROME = process.env.CHROME_PATH || '/usr/bin/chromium';
+const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 
 function startServer(port) {
   const proc = spawn('python3', ['-m', 'http.server', String(port)], { cwd: ROOT, stdio: 'ignore' });
@@ -66,11 +66,22 @@ async function runFullFlow(browser, baseUrl) {
   });
   await shot('04-hub');
 
+  const closeVeil = () =>
+    W(() => {
+      const v = document.querySelector('#ui .veil:last-of-type') || document.querySelector('#ui .veil');
+      const btn =
+        v?.querySelector('[data-action^="close"]') ||
+        v?.querySelector('.modal-close') ||
+        v?.querySelector('.scroll__foot .btn--ghost') ||
+        v?.querySelector('.btn--ghost');
+      btn?.click();
+    });
+
   // 1) 加点
   await page.click('.hub-nav .btn:nth-child(1)');
   await page.click('.shop-row .btn--small >> nth=0');
   await shot('05-shop');
-  await page.click('.veil .btn--ghost');
+  await closeVeil();
 
   // 2) 图鉴（百物谱）
   await page.click('.hub-nav .btn:nth-child(2)');
@@ -79,7 +90,7 @@ async function runFullFlow(browser, baseUrl) {
   await shot('05b-codex');
   await page.click('.codex-tab >> nth=1'); // 开光配方页
   await page.click('.codex-tab >> nth=3'); // 百鬼页
-  await page.click('.veil .btn--ghost');
+  await closeVeil();
 
   // 3) 更簿签到双倍
   await page.click('.hub-nav .btn:nth-child(3)');
@@ -87,7 +98,7 @@ async function runFullFlow(browser, baseUrl) {
   await page.click('.veil .btn--ad');
   await page.waitForSelector('.mock-ad');
   await page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7000 });
-  await page.click('.veil .btn--ghost');
+  await closeVeil();
 
   // 4) 设置与云存档自动备份 / 手动拉取验证（加点后已自动上云，62 秒冷却内再次上传会节流排队）
   await page.click('.hub-nav .btn:nth-child(4)');
@@ -112,7 +123,7 @@ async function runFullFlow(browser, baseUrl) {
   await W(() => { const r = window.__wugeng.game.run; r.player.xp = r.player.xpNext + 1; });
   await page.waitForFunction(() => window.__wugeng.overlay === 'levelup');
   await shot('08-levelup');
-  await page.click('.levelup-actions .btn--ghost');
+  await page.click('[data-action="reroll"]');
   await page.click('.qian >> nth=0');
 
   // 首 60s 内：即使免费换签用完，也不得显示换签广告
@@ -221,7 +232,7 @@ async function runAdEdgePaths(browser, baseUrl) {
   for (const mode of ['skip', 'fail']) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await ctx.newPage();
-    await page.goto(`${baseUrl}/index.html?mockAds=${mode}`);
+    await page.goto(`${baseUrl}/index.html?skipIntro=1&mockAds=${mode}`);
     await page.click('text=开始守夜');
     await page.click('.hub-nav .btn:nth-child(3)');
     const coins0 = await page.evaluate(() => window.__wugeng.save.coins);
@@ -239,12 +250,15 @@ async function runOfflineMode(browser, baseUrl) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`${baseUrl}/index.html`);
+  await page.goto(`${baseUrl}/index.html?skipIntro=1`);
   await page.click('text=开始守夜');
   await page.click('.hub-nav .btn:nth-child(3)');
   assert.equal(await page.$$eval('.btn--ad', (x) => x.length), 0, '离线模式更簿无广告');
   await page.click('.veil .btn--seal');
-  await page.click('.veil .btn--ghost');
+  await page.evaluate(() => {
+    const v = document.querySelector('#ui .veil:last-of-type') || document.querySelector('#ui .veil');
+    (v?.querySelector('[data-action^="close"]') || v?.querySelector('.modal-close') || v?.querySelector('.scroll__foot .btn--ghost') || v?.querySelector('.btn--ghost'))?.click();
+  });
   await page.click('text=出门打更');
   await page.evaluate(() => { const r = window.__wugeng.game.run; r.time = 90; r.rerolls.free = 0; r.player.xp = r.player.xpNext + 1; });
   await page.waitForFunction(() => window.__wugeng.overlay === 'levelup');
@@ -265,7 +279,7 @@ async function runOfflineMode(browser, baseUrl) {
 async function runAudioAndStress(browser, baseUrl) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true });
   const page = await ctx.newPage();
-  await page.goto(`${baseUrl}/index.html`);
+  await page.goto(`${baseUrl}/index.html?skipIntro=1`);
   await page.click('text=开始守夜');
 
   // Web Audio

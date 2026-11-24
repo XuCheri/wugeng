@@ -6,10 +6,26 @@ import { syncSynergies, synergyStatMods } from './synergies.js';
 import { computeBlessingMods, BLESSING_TUNING } from './blessings.js';
 import { clamp } from '../core/math.js';
 
-export function createPlayer(heroId) {
+export function createPlayer(heroId, extra = {}) {
+  const safeExtra = extra && typeof extra === 'object' ? extra : {};
+  const validHero = typeof heroId === 'string' && Object.hasOwn(HEROES, heroId) ? heroId : 'zhou';
+  const validStartWeapon =
+    typeof safeExtra.startWeapon === 'string' && Object.hasOwn(WEAPONS, safeExtra.startWeapon)
+      ? safeExtra.startWeapon
+      : HEROES[validHero].startWeapon;
   return {
-    x: 0,
-    y: 0,
+    slot: safeExtra.slot ?? 0,
+    peerId: safeExtra.peerId ?? 'local',
+    name: (typeof safeExtra.name === 'string' && safeExtra.name) || HEROES[validHero].short,
+    heroId: validHero,
+    startWeapon: validStartWeapon,
+    skinId: safeExtra.skinId ?? null,
+    attackVfx: safeExtra.attackVfx ?? null,
+    isBot: !!safeExtra.isBot,
+    x: safeExtra.x ?? 0,
+    y: safeExtra.y ?? 0,
+    vx: 0,
+    vy: 0,
     r: PLAYER_BASE.r,
     hp: PLAYER_BASE.maxHp,
     maxHp: PLAYER_BASE.maxHp,
@@ -27,7 +43,16 @@ export function createPlayer(heroId) {
     hurtT: 0,
     soulBarrier: 0,
     soulBarrierMax: 0,
-    heroId,
+    downed: false,
+    downedTimer: 0,
+    reviveProgress: 0,
+    weapons: Array.isArray(safeExtra.weapons) ? safeExtra.weapons : [],
+    relics: Array.isArray(safeExtra.relics) ? safeExtra.relics : [],
+    stats: {
+      damageDealt: 0,
+      kills: 0,
+      revivesDone: 0,
+    },
   };
 }
 
@@ -71,7 +96,8 @@ export function recomputeMods(run, opts = {}) {
   const synRes = syncSynergies(run, { emit: opts.emit !== undefined ? opts.emit : !run._initializing });
   const syn = synergyStatMods(synRes);
   const bl = computeBlessingMods(run);
-  const hero = HEROES[run.heroId]?.mods || {};
+  const activeHeroId = run.player?.heroId || run.heroId;
+  const hero = (typeof activeHeroId === 'string' && Object.hasOwn(HEROES, activeHeroId) ? HEROES[activeHeroId]?.mods : null) || {};
   const meta = run.meta;
   const prevMax = run.player.maxHp;
   const overflowMult = run.mods ? run.mods.overflowMult : 1;
@@ -80,12 +106,16 @@ export function recomputeMods(run, opts = {}) {
   const lanternEvo = run.weapons.some((w) => w.id === 'lantern' && w.evolved);
   const frenzyActive = (run._ultFrenzyT || 0) > 0;
   const summonFrenzyActive = (run._summonFrenzyT || 0) > 0;
+  const nuoDanceActive = (run._nuoDanceT || 0) > 0;
 
   const cooldownFloor = Math.min(DAMAGE.cooldownFloor, syn.cooldownFloor, bl.cooldownFloor);
-  const cdr = rel.cdr + syn.cdr + bl.cdr;
+  const cdr = rel.cdr + (hero.cdr || 0) + syn.cdr + bl.cdr;
   let cdMul = cooldownMul(cdr, cooldownFloor);
   if (frenzyActive && bl.thunderDecreeStacks > 0) {
     cdMul = Math.max(BLESSING_TUNING.thunder_decree.frenzyCdFloor, cdMul * BLESSING_TUNING.thunder_decree.frenzyCdMul);
+  }
+  if (nuoDanceActive) {
+    cdMul = Math.max(0.46, cdMul * ULT.nuoxi.danceCdMul);
   }
 
   const lightMul = (1 + rel.lightPct + (lanternEvo ? WEAPONS.lantern.evo.lightBonusPct : 0)) * syn.lightMul * bl.lightMul;
@@ -98,17 +128,17 @@ export function recomputeMods(run, opts = {}) {
     (frenzyActive ? BLESSING_TUNING.thunder_decree.frenzyCritDmg * bl.thunderDecreeStacks : 0);
 
   const mods = {
-    dmgPct: rel.dmgPct + (meta.dmgPct || 0) + bl.dmgPct,
+    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + (meta.dmgPct || 0) + bl.dmgPct,
     summonDmgPct: (hero.summonDmgPct || 0) + syn.summonDmgPct,
     zhizhaDmgPct: syn.zhizhaDmgPct,
     summonHasteMul: syn.summonHasteMul * (summonFrenzyActive ? ULT.mian.frenzyMul : 1),
     cdr,
     cooldownFloor,
     cdMul,
-    areaMul: Math.max(0.4, 1 + rel.areaPct + syn.areaPct + bl.areaPct),
-    durMul: Math.max(0.4, 1 + rel.durPct + syn.durPct),
+    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + syn.areaPct + bl.areaPct),
+    durMul: Math.max(0.4, 1 + rel.durPct + (hero.durPct || 0) + syn.durPct),
     amount: rel.amount + syn.amount + bl.amount,
-    bonusPierce: syn.bonusPierce,
+    bonusPierce: (rel.bonusPierce || 0) + syn.bonusPierce,
     critChance: PLAYER_BASE.critChance + rel.critChance + (hero.critChance || 0) + syn.critChance + bl.critChance,
     critMult,
     xpMul: (1 + rel.xpPct + (meta.xpPct || 0) + bl.xpPct) * run.night.xpMul,
@@ -125,7 +155,7 @@ export function recomputeMods(run, opts = {}) {
     spawnRateMul: bl.spawnRateMul,
     eliteChanceMul: bl.eliteChanceMul,
     knockbackMul: syn.knockbackMul * bl.knockbackMul,
-    controlDurMul: syn.controlDurMul,
+    controlDurMul: syn.controlDurMul * (1 + (rel.controlDurPct || 0)),
     takenDmgMul: bl.takenDmgMul,
     bunHealMul: bl.bunHealMul,
     hpRegen: bl.hpRegen,
@@ -155,19 +185,30 @@ export function recomputeMods(run, opts = {}) {
   run.mods = mods;
 
   const p = run.player;
-  p.armor = bl.zeroArmor ? 0 : PLAYER_BASE.armor + rel.armor + (meta.armor || 0) + syn.bonusArmor + bl.bonusArmor;
+  if ((p.slot ?? 0) === 0) {
+    p.weapons = run.weapons;
+    p.relics = run.relics;
+  }
+  p.armor = bl.zeroArmor ? 0 : PLAYER_BASE.armor + rel.armor + (hero.armor || 0) + (meta.armor || 0) + syn.bonusArmor + bl.bonusArmor;
   const rawMaxHp = (PLAYER_BASE.maxHp + rel.maxHp + bl.bonusMaxHp) * (1 + (meta.maxHpPct || 0) + (hero.maxHpPct || 0)) * bl.maxHpMul;
   p.maxHp = Math.max(10, Math.round(rawMaxHp));
-  p.speed = Math.max(40, PLAYER_BASE.speed * (1 + rel.speedPct + (meta.speedPct || 0) + bl.speedPct));
+  p.speed = Math.max(
+    40,
+    PLAYER_BASE.speed * (1 + rel.speedPct + (hero.speedPct || 0) + (meta.speedPct || 0) + bl.speedPct) * (nuoDanceActive ? ULT.nuoxi.danceSpeedMul : 1),
+  );
 
   const sb = run.weapons.find((w) => w.id === 'soulbanner');
   p.soulBarrierMax = sb ? (sb.evolved ? WEAPONS.soulbanner.evo.shieldMax : WEAPONS.soulbanner.shieldMax) : 0;
   if (p.soulBarrier > p.soulBarrierMax) p.soulBarrier = p.soulBarrierMax;
 
-  // 最大生命提升时，当前生命同步增加相同数值
-  if (p.maxHp > prevMax) p.hp += p.maxHp - prevMax;
-  p.hp = Math.min(p.hp, p.maxHp);
-  if (bl.maxHpMul < 1 && prevMax > p.maxHp && p.hp <= 0) p.hp = 1;
+  if (p.downed) {
+    p.hp = 0;
+  } else {
+    // 最大生命提升时，当前生命同步增加相同数值
+    if (p.maxHp > prevMax) p.hp += p.maxHp - prevMax;
+    p.hp = Math.min(p.hp, p.maxHp);
+    if (bl.maxHpMul < 1 && prevMax > p.maxHp && p.hp <= 0) p.hp = 1;
+  }
   return mods;
 }
 
@@ -207,6 +248,8 @@ export function updatePlayer(run, input, dt) {
   const spd = p.speed * effSlow;
   const dx = mx * spd * dt;
   const dy = my * spd * dt;
+  p.vx = dt > 0 ? dx / dt : 0;
+  p.vy = dt > 0 ? dy / dt : 0;
   p.x += dx;
   p.y += dy;
 
@@ -238,6 +281,10 @@ export function updatePlayer(run, input, dt) {
   if (run._summonFrenzyT > 0) {
     run._summonFrenzyT = Math.max(0, run._summonFrenzyT - dt);
     if (run._summonFrenzyT === 0) recomputeMods(run);
+  }
+  if (run._nuoDanceT > 0) {
+    run._nuoDanceT = Math.max(0, run._nuoDanceT - dt);
+    if (run._nuoDanceT === 0) recomputeMods(run);
   }
 
   if (p.invulnT > 0) p.invulnT = Math.max(0, p.invulnT - dt);
@@ -313,8 +360,9 @@ export function hurtPlayer(run, raw) {
 
 export function healPlayer(run, amount) {
   if (!run || !run.player || typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return 0;
-  amount = Math.min(amount, 1e9);
   const p = run.player;
+  if (p.downed) return 0;
+  amount = Math.min(amount, 1e9);
   const before = p.hp;
   p.hp = clamp(p.hp + amount, 0, p.maxHp);
   return p.hp - before;

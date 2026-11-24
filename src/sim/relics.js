@@ -24,13 +24,16 @@ export function emptyRelicTotals() {
     lightPct: 0,
     ultChargePct: 0,
     ultCdRefund: 0,
+    // +4 v3 新增法器属性（雷击枣木、勾魂阴牌）
+    bonusPierce: 0,
+    controlDurPct: 0,
   };
 }
 
 /** 单个法器在 level 级时的累计效果 */
 export function relicEffect(id, level) {
   const out = emptyRelicTotals();
-  const def = RELICS[id];
+  const def = typeof id === 'string' && Object.hasOwn(RELICS, id) ? RELICS[id] : null;
   if (!def || level <= 0) return out;
   if (id === 'scissors') {
     // 剪刀：2 级、5 级各 +1 数量；其余每级伤害 +4%
@@ -40,7 +43,14 @@ export function relicEffect(id, level) {
     }
     return out;
   }
-  for (const [k, v] of Object.entries(def.perLevel)) out[k] += v * level;
+  if (Array.isArray(def.pierceLevels)) {
+    for (let l = 1; l <= level; l++) {
+      if (def.pierceLevels.includes(l)) out.bonusPierce += 1;
+    }
+  }
+  if (def.perLevel) {
+    for (const [k, v] of Object.entries(def.perLevel)) out[k] += v * level;
+  }
   return out;
 }
 

@@ -58,6 +58,16 @@ const KIND_WEAPON = {
   soulSweep: 'soulbanner',
   mirrorBeam: 'bronze_mirror',
   paperHorse: 'paperhorse',
+  flyingSword: 'taomujian',
+  taomujian: 'taomujian',
+  peachSword: 'taomujian',
+  soulChain: 'suohun_chain',
+  suohunChain: 'suohun_chain',
+  fireCrow: 'zhinian_kite',
+  zhinianKite: 'zhinian_kite',
+  nuoDrum: 'nuo_drum',
+  nuoBeat: 'nuo_drum',
+  nuoDrumWave: 'nuo_drum',
 };
 
 const GROUND_KINDS = new Set([
@@ -70,6 +80,11 @@ const GROUND_KINDS = new Set([
   'talismanArray',
   'compassField',
   'cinderCore',
+  'nuoBeat',
+  'nuoDrumWave',
+  'qimenArray',
+  'moltenZone',
+  'nuoDanceRing',
 ]);
 
 // 精灵朝右绘制、需要随朝向翻转的敌人
@@ -587,11 +602,19 @@ export function createRenderer(canvas, opts = {}) {
         blit(ctx, ringSprite('verm', (id + 1) % 3), p.x, p.y, (r * 0.68) / 100, (r * 0.68 * 0.92) / 100, -clock * 0.8, a * 0.75);
         break;
       }
-      case 'inkPool': {
-        const r = p.radius || p.r || 42;
+      case 'inkPool':
+      case 'moltenZone': {
+        const r = Math.max(4, p.radius || p.r || 42);
         const a = Math.min(1, (p.t + 0.04) / 0.15) * (k > 0.75 ? (1 - k) / 0.25 : 1);
-        if (p.subKind === 'emberZone') {
+        if (p.subKind === 'emberZone' || p.subKind === 'moltenZone' || p.kind === 'moltenZone') {
           blit(ctx, emberPoolSprite(id), p.x, p.y, r / 50, r / 50, (id % 4) * 0.8, a);
+          if (p.subKind === 'moltenZone' && !low) {
+            ctx.strokeStyle = lanternA(0.45 * a);
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 0.62, 0, TAU);
+            ctx.stroke();
+          }
         } else {
           blit(ctx, inkPoolSprite(id), p.x, p.y, r / 50, r / 50, 0, a);
           if (p.subKind === 'inkRiver' && !low) {
@@ -613,8 +636,9 @@ export function createRenderer(canvas, opts = {}) {
         }
         break;
       }
-      case 'compassField': {
-        const R = p.radius || 85;
+      case 'compassField':
+      case 'qimenArray': {
+        const R = Math.max(8, p.radius || 85);
         const a = Math.min(1, (p.t + 0.03) / 0.15) * (k > 0.82 ? (1 - k) / 0.18 : 1);
         const dir = clock * (evolved ? 1.6 : 1.0);
         blit(ctx, baguaArraySprite(evolved ? 'compassEvo' : 'compass'), p.x, p.y, R / 100, R / 100, dir, a * 0.9);
@@ -986,6 +1010,99 @@ export function createRenderer(canvas, opts = {}) {
         ctx.restore();
         break;
       }
+      case 'flyingSword':
+      case 'taomujian':
+      case 'peachSword': {
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        if (!low) {
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          ctx.strokeStyle = evolved ? lanternA(0.72) : vermA(0.5);
+          ctx.lineWidth = evolved ? 2.6 : 1.8;
+          ctx.beginPath();
+          ctx.moveTo(p.x - ux * 24, p.y - uy * 24);
+          ctx.lineTo(p.x - ux * 4, p.y - uy * 4);
+          ctx.stroke();
+        }
+        blit(ctx, projSprite(evolved ? 'taomujianEvo' : 'taomujian'), p.x, p.y, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang);
+        break;
+      }
+      case 'soulChain':
+      case 'suohunChain': {
+        const x0 = Number.isFinite(p.fromX) ? p.fromX : playerPos.x;
+        const y0 = Number.isFinite(p.fromY) ? p.fromY : playerPos.y;
+        const x1 = Number.isFinite(p.endX) ? p.endX : p.x;
+        const y1 = Number.isFinite(p.endY) ? p.endY : p.y;
+        const ang = p.angle ?? Math.atan2(y1 - y0, x1 - x0);
+        const fade = Math.max(0, 1 - k * 0.75);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = evolved ? 5.5 : 4.2;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.strokeStyle = evolved ? LANTERN : PAPER_SHADE;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const segs = 7;
+        for (let s = 0; s < segs; s += 2) {
+          const t0 = s / segs;
+          const t1 = Math.min(1, (s + 1) / segs);
+          ctx.moveTo(x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0);
+          ctx.lineTo(x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1);
+        }
+        ctx.stroke();
+        ctx.restore();
+        blit(ctx, projSprite(evolved ? 'soulHookEvo' : 'soulHook'), x1, y1, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        break;
+      }
+      case 'fireCrow':
+      case 'zhinianKite': {
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        const fr = ((Math.floor(clock * 14) + id) & 1) ? '1' : '0';
+        if (!low) {
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          blit(ctx, dotSprite(2, evolved ? 'lantern' : 'verm'), p.x - ux * 14, p.y - uy * 14, 0.9, 0.9, 0, 0.65);
+        }
+        blit(ctx, projSprite((evolved ? 'fireCrowEvo' : 'fireCrow') + fr), p.x, p.y, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang);
+        break;
+      }
+      case 'nuoDrum': {
+        const fade = k > 0.85 ? (1 - k) / 0.15 : 1;
+        const bounce = Math.abs(Math.sin(clock * 16 + id)) * 2.2;
+        blit(ctx, shadowSprite(9), p.x, p.y + 8, 1, 1, 0, 0.55 * fade);
+        blit(ctx, projSprite(evolved ? 'nuoDrumEvo' : 'nuoDrum'), p.x, p.y - bounce, 1.05, 1.05, 0, fade);
+        break;
+      }
+      case 'nuoBeat':
+      case 'nuoDrumWave': {
+        const maxR = Math.max(10, p.maxRadius || p.radius || 90);
+        const r = Math.max(8, p.radius > 0 ? p.radius : maxR * Math.max(0.2, k));
+        const a = Math.max(0, (1 - k) * 0.9);
+        blit(ctx, ringSprite(evolved ? 'verm' : 'ink', id % 3), p.x, p.y, r / 100, (r / 100) * 0.9, clock, a);
+        if (evolved) {
+          blit(ctx, projSprite('nuoMaskTotem'), p.x, p.y - 6, 0.95, 0.95, 0, a * 0.8);
+        }
+        break;
+      }
+      case 'nuoDanceRing': {
+        const R = Math.max(16, p.radius || 46);
+        const fade = k > 0.88 ? (1 - k) / 0.12 : 1;
+        ctx.strokeStyle = vermA(0.45 * fade);
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 6, R, 0, TAU);
+        ctx.stroke();
+        for (let m = 0; m < 3; m++) {
+          const ma = clock * 3.4 + (m / 3) * TAU;
+          blit(ctx, projSprite('nuoMaskTotem'), p.x + Math.cos(ma) * R, p.y - 6 + Math.sin(ma) * R * 0.65, 0.72, 0.72, 0, 0.88 * fade);
+        }
+        break;
+      }
       case 'enemyBullet': {
         if (p.style === 'ink') {
           blit(ctx, projSprite('inkBullet'), p.x, p.y, 1, 1, clock * 3 + id);
@@ -1000,14 +1117,77 @@ export function createRenderer(canvas, opts = {}) {
       default: {
         ctx.fillStyle = INK;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r || 3, 0, TAU);
+        ctx.arc(p.x, p.y, Math.max(0, p.r || 3), 0, TAU);
         ctx.fill();
       }
     }
   }
 
-  /** 夜色遮罩 + 动态灯笼/神龛光圈挖空 */
-  function drawDarkness(darkness, lsx, lsy, camx, camy, lightR, evoCount, shrines, ox, oy) {
+  /** 联机倒地朱砂八卦救援阵（R = 48）与读条弧 */
+  function drawDownedBaguaCircle(pl, x, y) {
+    if (!pl || !pl.downed) return;
+    const R = 48;
+    blit(ctx, baguaArraySprite('talisman'), x, y, R / 100, R / 100, clock * 0.8, 0.72);
+    ctx.save();
+    ctx.strokeStyle = VERM;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, TAU);
+    ctx.stroke();
+    const revProg = Number.isFinite(pl.reviveProgress) ? Math.max(0, Math.min(1, pl.reviveProgress)) : 0;
+    if (revProg > 0.001) {
+      const startA = -Math.PI / 2;
+      const endA = startA + TAU * revProg;
+      ctx.strokeStyle = LANTERN;
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.arc(x, y, R + 2, startA, endA);
+      ctx.stroke();
+      ctx.strokeStyle = PAPER;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.arc(x, y, R + 2, startA, endA);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 联机协战队友头顶道号铭牌、血条与倒地求救朱印 */
+  function drawAllyOverlay(ally, x, y, slotIdx) {
+    if (!ally) return;
+    const name = ally.name || (ally.isBot ? `道友${slotIdx + 1}` : `守夜人${slotIdx + 1}`);
+    ctx.save();
+    ctx.font = `9.5px ${FONT_CN}`;
+    const tw = Math.min(84, Math.max(28, ctx.measureText(name).width + 8));
+    const ny = y - 41;
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x - tw / 2, ny - 6.5, tw, 12);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - tw / 2, ny - 6.5, tw, 12);
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, x, ny);
+
+    const bw = 28;
+    const bh = 3.6;
+    const by = y - 28.5;
+    const ratio = ally.maxHp > 0 && !ally.downed ? Math.max(0, Math.min(1, ally.hp / ally.maxHp)) : 0;
+    ctx.fillStyle = INK;
+    ctx.fillRect(x - bw / 2, by, bw, bh);
+    if (ratio > 0) {
+      ctx.fillStyle = VERM;
+      ctx.fillRect(x - bw / 2 + 1, by + 0.8, Math.max(0, (bw - 2) * ratio), bh - 1.6);
+    }
+    ctx.restore();
+    if (ally.downed) {
+      drawStamp(ctx, '救', x, y - 54, 10, { color: VERM, seed: 7 + slotIdx });
+    }
+  }
+
+  /** 夜色遮罩 + 动态灯笼/神龛/队友光圈挖空 */
+  function drawDarkness(darkness, lsx, lsy, camx, camy, lightR, evoCount, shrines, ox, oy, allyScreenLights = null) {
     if (darkness <= 0.01) return;
     const dw = darkCanvas.width;
     const dh = darkCanvas.height;
@@ -1073,6 +1253,24 @@ export function createRenderer(canvas, opts = {}) {
         g.fillStyle = sc;
         g.beginPath();
         g.arc(sx, sy, sr, 0, TAU);
+        g.fill();
+      }
+    }
+
+    // 联机存活队友的提灯光圈挖空
+    if (allyScreenLights && allyScreenLights.length) {
+      const ar = Math.max(8, lightR * 0.72 * S);
+      for (let i = 0; i < allyScreenLights.length; i++) {
+        const alPt = allyScreenLights[i];
+        const ax = alPt.x * S;
+        const ay = alPt.y * S;
+        if (ax < -ar || ax > dw + ar || ay < -ar || ay > dh + ar) continue;
+        const ac = g.createRadialGradient(ax, ay, ar * 0.25, ax, ay, ar);
+        ac.addColorStop(0, 'rgba(0,0,0,0.92)');
+        ac.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ac;
+        g.beginPath();
+        g.arc(ax, ay, ar, 0, TAU);
         g.fill();
       }
     }
@@ -1365,6 +1563,20 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos);
     }
 
+    // 联机倒地八卦救援阵（地面层绘制）
+    const party = Array.isArray(run.players) && run.players.length > 1 ? run.players : null;
+    if (party) {
+      if (p.downed && inView(pxI, pyI, 80)) drawDownedBaguaCircle(p, pxI, pyI);
+      for (let idx = 1; idx < party.length; idx++) {
+        const ally = party[idx];
+        if (!ally) continue;
+        const as = track('ally_' + (ally.slot ?? idx), ally.x, ally.y, newStep);
+        const ax = as.px + (as.x - as.px) * al;
+        const ay = as.py + (as.y - as.py) * al;
+        if (ally.downed && inView(ax, ay, 80)) drawDownedBaguaCircle(ally, ax, ay);
+      }
+    }
+
     // 拾取物
     const pk = run.pickups || [];
     for (let i = 0; i < pk.length; i++) {
@@ -1372,7 +1584,7 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(k.x, k.y, 30)) drawPickup(k, k.x, k.y);
     }
 
-    // y 排序：场景物件 + 奇遇建筑 + 敌人 + 玩家
+    // y 排序：场景物件 + 奇遇建筑 + 敌人 + 主控守夜人 + 协战道友
     drawList.length = 0;
     const props = run.props || [];
     for (let i = 0; i < props.length; i++) {
@@ -1395,6 +1607,21 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(x, y, e.boss || e.warder ? 220 : M)) drawList.push({ t: 1, o: e, y, x });
     }
     drawList.push({ t: 2, o: p, y: pyI, x: pxI });
+    let allyScreenLights = null;
+    if (party) {
+      allyScreenLights = [];
+      for (let idx = 1; idx < party.length; idx++) {
+        const ally = party[idx];
+        if (!ally) continue;
+        const as = interp.get('ally_' + (ally.slot ?? idx));
+        const ax = as ? as.px + (as.x - as.px) * al : ally.x;
+        const ay = as ? as.py + (as.y - as.py) * al : ally.y;
+        if (inView(ax, ay, 110)) {
+          drawList.push({ t: 4, o: ally, y: ay, x: ax, idx });
+          if (!ally.downed) allyScreenLights.push({ x: ax + ox, y: ay - 10 + oy });
+        }
+      }
+    }
     drawList.sort((a, b) => a.y - b.y);
 
     const nearbyShrineId = run.nearbyShrine ? run.nearbyShrine.id : null;
@@ -1404,7 +1631,17 @@ export function createRenderer(canvas, opts = {}) {
       if (d.t === 0) blit(ctx, propSprite(d.o.kind), d.x, d.y);
       else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
       else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded);
-      else lantern = drawPlayer(p, d.x, d.y, run, 1, settings.cosmetics, evoCount);
+      else if (d.t === 4) {
+        const ally = d.o;
+        const allyEvo = Array.isArray(ally.weapons) ? ally.weapons.filter((w) => w && w.evolved).length : 0;
+        drawPlayer(ally, d.x, d.y, run, ally.downed ? 0.5 : 0.94, null, allyEvo);
+        drawAllyOverlay(ally, d.x, d.y, d.idx);
+      } else {
+        lantern = drawPlayer(p, d.x, d.y, run, p.downed ? 0.5 : 1, settings.cosmetics, evoCount);
+        if (party && p.downed) {
+          drawStamp(ctx, '救', d.x, d.y - 46, 10, { color: VERM, seed: 3 });
+        }
+      }
     }
 
     // 空中弹体 / 光束 / 雷柱
@@ -1425,7 +1662,7 @@ export function createRenderer(canvas, opts = {}) {
     const lsy = lantern.ly + oy;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLanternWarmth(lsx, lsy, darkness, lightR, evoCount);
-    drawDarkness(darkness, lsx, lsy, cam.x, cam.y, lightR, evoCount, shrines, ox, oy);
+    drawDarkness(darkness, lsx, lsy, cam.x, cam.y, lightR, evoCount, shrines, ox, oy, allyScreenLights);
 
     // ---------- 夜色之上：黑暗中的眼 + 朱砂冲锋预警走廊 ----------
     if (darkness > 0.2 && !low) {

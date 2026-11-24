@@ -20,6 +20,10 @@ export const EVOLVED_NAMES = {
   soulbanner: '无常勾魂幡',
   bronze_mirror: '乾坤赤阳镜',
   paperhorse: '百鬼夜行图',
+  taomujian: '天罡雷木剑阵',
+  suohun_chain: '黑白无常夺魄索',
+  zhinian_kite: '金乌焚天火鸦阵',
+  nuo_drum: '太古百相傩坛',
 };
 
 const SHAKE_CAP = 5.5; // 混合震屏峰值 CSS px（兼顾打击感与防眩晕）
@@ -268,10 +272,17 @@ export function createFx(opts = {}) {
           }
           this.addShake(0.14);
           break;
-        case 'ult':
+        case 'ult': {
           this.addShake(0.75);
-          screen.push({ k: 'bloom', t: 0, life: 0.72, color: e.heroId === 'mian' ? 'verm' : e.heroId === 'daotong' ? 'lantern' : 'ink', strength: 0.42 });
+          const bloomCol =
+            e.heroId === 'mian' || e.heroId === 'tiejiang' || e.heroId === 'nuoxi'
+              ? 'verm'
+              : e.heroId === 'daotong' || e.heroId === 'yinyang'
+                ? 'lantern'
+                : 'ink';
+          screen.push({ k: 'bloom', t: 0, life: 0.72, color: bloomCol, strength: 0.42 });
           break;
+        }
         case 'levelup':
           screen.push({ k: 'bloom', t: 0, life: 0.75, color: 'ink', strength: 0.48 });
           break;

@@ -2,8 +2,8 @@
 // 纯逻辑：不访问浏览器全局对象或系统时间；同种子 + 同输入序列 → 完全相同的结果。
 
 import {
-  DT, MAIN_DURATION, WATCH_DURATION, DARKNESS, REROLL, REVIVE, HEROES, ENDLESS, COIN_REWARD, LEVELUP,
-  sanitizeNightLevel, nightModifiers, emptyMetaBonuses,
+  DT, MAIN_DURATION, WATCH_DURATION, DARKNESS, REROLL, REVIVE, HEROES, WEAPONS, RELICS, WEAPON_IDS, ENDLESS, COIN_REWARD, LEVELUP,
+  SCORE_TUNING, sanitizeNightLevel, nightModifiers, emptyMetaBonuses, isHeroSignatureWeapon,
 } from './balance.js';
 import { Rng, hashSeed } from '../core/rng.js';
 import { SpatialHash } from '../core/spatial-hash.js';
@@ -21,24 +21,86 @@ import {
   generateChoices, applyChoice, banishChoiceImpl, toggleLockChoiceImpl, describeUpgrade, describeEvolution,
 } from './levelup.js';
 import { resolveChest, buildChestChoices } from './evolutions.js';
-import { updateSynergyRuntime } from './synergies.js';
+import { updateSynergyRuntime, computeSynergies } from './synergies.js';
 import { generateBlessingChoices, BLESSING_TUNING } from './blessings.js';
 import { updateShrines, interactShrineImpl, resolveShrineImpl, dismissShrineImpl } from './shrines.js';
+import {
+  coopPartySize,
+  withPlayerContext,
+  initCoopPlayers,
+  normalizeSlotInputs,
+  stepCoopAlliesMovement,
+  markPlayerDowned,
+  areAllPlayersDowned,
+  updateCoopRevives,
+  syncAlliesOnTeamProgress,
+  buildSquadSummary,
+} from './coop.js';
 
 export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution };
 
 /**
- * 创建一局。
- * @param {{seed:any, heroId?:string, nightLevel?:number, meta?:object, charm?:{relicId:string}|null}} opts
+ * 创建一局（100% 向后兼容旧版单人参表，并支持自选初始武器、解锁池过滤与 2–4 人协同联机）。
  */
-export function createRun({ seed = 1, heroId = 'zhou', nightLevel = 0, meta = {}, charm = null } = {}) {
-  if (!HEROES[heroId]) heroId = 'zhou';
+function isOwnHero(id) {
+  return typeof id === 'string' && Object.hasOwn(HEROES, id);
+}
+
+function isOwnWeapon(id) {
+  return typeof id === 'string' && Object.hasOwn(WEAPONS, id);
+}
+
+function sanitizeMetaBonuses(meta) {
+  const out = emptyMetaBonuses();
+  if (!meta || typeof meta !== 'object') return out;
+  for (const k of Object.keys(out)) {
+    const rawV = meta[k];
+    if (rawV == null || typeof rawV === 'boolean') continue;
+    const num = typeof rawV === 'string' && rawV.trim() === '' ? NaN : +rawV;
+    if (!Number.isFinite(num)) continue;
+    if (k === 'freeRerolls' || k === 'armor') {
+      out[k] = Math.max(0, Math.min(999, Math.floor(num)));
+    } else {
+      out[k] = Math.max(-0.9, Math.min(100, num));
+    }
+  }
+  return out;
+}
+
+export function createRun(rawOpts = {}) {
+  let {
+    seed = 1,
+    heroId = 'zhou',
+    startWeapon = null,
+    unlockedWeapons = null,
+    nightLevel = 0,
+    meta = {},
+    charm = null,
+    coop = null,
+  } = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
+  const party0 = Array.isArray(coop) ? coop[0] : coop && typeof coop === 'object' ? coop.party?.[0] : null;
+  if (isOwnHero(party0?.heroId)) heroId = party0.heroId;
+  if (!isOwnHero(heroId)) heroId = 'zhou';
+  if (!isOwnWeapon(startWeapon) && isOwnWeapon(party0?.startWeapon)) {
+    startWeapon = party0.startWeapon;
+  }
+  const chosenStartWeapon = isOwnWeapon(startWeapon) ? startWeapon : HEROES[heroId].startWeapon;
+  let normUnlockedWeapons = null;
+  if (Array.isArray(unlockedWeapons)) {
+    const uSet = new Set(unlockedWeapons.filter((id) => isOwnWeapon(id)));
+    uSet.add(chosenStartWeapon);
+    normUnlockedWeapons = WEAPON_IDS.filter((id) => uSet.has(id));
+  }
+
   nightLevel = sanitizeNightLevel(nightLevel);
   const seedNum = typeof seed === 'number' && Number.isFinite(seed) ? seed >>> 0 : hashSeed(seed);
-  const metaB = { ...emptyMetaBonuses(), ...(meta || {}) };
+  const metaB = sanitizeMetaBonuses(meta);
   const run = {
     seed,
     heroId,
+    startWeapon: chosenStartWeapon,
+    signatureStart: isHeroSignatureWeapon(heroId, chosenStartWeapon),
+    unlockedWeapons: normUnlockedWeapons,
     nightLevel,
     time: 0,
     watch: 1,
@@ -46,7 +108,8 @@ export function createRun({ seed = 1, heroId = 'zhou', nightLevel = 0, meta = {}
     status: 'playing',
     choiceMode: 'normal',
     darkness: DARKNESS.watch1,
-    player: createPlayer(heroId),
+    player: createPlayer(heroId, { startWeapon: chosenStartWeapon }),
+    players: null,
     enemies: [],
     projectiles: [],
     pickups: [],
@@ -68,7 +131,17 @@ export function createRun({ seed = 1, heroId = 'zhou', nightLevel = 0, meta = {}
     rerolls: { free: REROLL.free + (metaB.freeRerolls | 0), ad: 0, adGrants: 0, adGrantMax: REROLL.adGrantMax },
     revives: { mainUsed: 0, endlessUsed: 0 },
     boss: null,
-    stats: { kills: 0, coins: 0, bunsEaten: 0, firstBunTime: null, damageDealt: 0, maxHit: 0, killsByType: {}, ultsCast: 0 },
+    stats: {
+      kills: 0,
+      coins: 0,
+      bunsEaten: 0,
+      firstBunTime: null,
+      damageDealt: 0,
+      maxHit: 0,
+      killsByType: {},
+      ultsCast: 0,
+      coopRevives: 0,
+    },
     events: [],
     // ↓ 内部状态
     meta: metaB,
@@ -77,6 +150,7 @@ export function createRun({ seed = 1, heroId = 'zhou', nightLevel = 0, meta = {}
     rng: new Rng(seedNum),
     _seedNum: seedNum,
     _initializing: true,
+    _activeSlot: 0,
     _nextId: 1,
     _spawnAcc: 0,
     _spawnQueue: [],
@@ -130,9 +204,12 @@ export function createRun({ seed = 1, heroId = 'zhou', nightLevel = 0, meta = {}
   });
 
   recomputeMods(run, { emit: false });
-  addOrUpgradeWeapon(run, HEROES[heroId].startWeapon);
-  if (charm && charm.relicId) addOrUpgradeRelic(run, charm.relicId);
+  addOrUpgradeWeapon(run, chosenStartWeapon);
+  if (charm && typeof charm === 'object' && typeof charm.relicId === 'string' && Object.hasOwn(RELICS, charm.relicId)) {
+    addOrUpgradeRelic(run, charm.relicId);
+  }
   recomputeMods(run, { emit: false });
+  initCoopPlayers(run, coop, charm);
   run._initializing = false;
   run.player.hp = run.player.maxHp;
   updateProps(run);
@@ -166,7 +243,7 @@ function updateWatch(run, dt) {
 
     // 添油续命命签：换更回血
     const oilStacks = run.mods?.lanternOilStacks || 0;
-    if (oilStacks > 0 && run.player.hp > 0) {
+    if (oilStacks > 0 && !run.player.downed && run.player.hp > 0) {
       const healed = healPlayer(run, Math.round(run.player.maxHp * BLESSING_TUNING.lantern_oil.watchHealPct * oilStacks));
       if (healed > 0) {
         run.events.push({ type: 'heal', amount: healed, source: 'lantern_oil', x: run.player.x, y: run.player.y });
@@ -197,7 +274,7 @@ function settleStatus(run) {
     }
     return;
   }
-  if (run.player.hp <= 0) {
+  if (areAllPlayersDowned(run)) {
     run.activeShrine = null;
     if (run.chestChoices.length) run.chestChoices.length = 0;
     run.status = 'dead';
@@ -246,20 +323,70 @@ export function stepRun(run, input = {}, dt = DT) {
     for (const e of run._outbox) run.events.push(e);
     run._outbox.length = 0;
   }
+
+  run.player.weapons = run.weapons;
+  run.player.relics = run.relics;
+  const isCoop = coopPartySize(run) > 1;
+  const slotInputs = normalizeSlotInputs(run, input);
+  const inp0 = slotInputs[0];
+
   run.time += dt;
   updateWatch(run, dt);
-  updatePlayer(run, input, dt);
+  if (isCoop) {
+    if (run.player.downed || run.player.hp <= 0) {
+      if (run.player.hp <= 0 && !run.player.downed) markPlayerDowned(run, run.player);
+      run.player.vx = 0;
+      run.player.vy = 0;
+      run.player.moving = false;
+    } else {
+      updatePlayer(run, inp0, dt);
+    }
+    stepCoopAlliesMovement(run, slotInputs, dt);
+  } else {
+    updatePlayer(run, inp0, dt);
+  }
+
   updateProps(run);
   updateShrines(run, dt, null);
   updateSpawner(run, dt);
   flushSpawnQueue(run);
   updateEnemies(run, dt);
-  updateWeapons(run, dt);
-  updateSynergyRuntime(run, dt);
+  if (isCoop) updateCoopRevives(run, dt);
+
+  if (!isCoop || (!run.player.downed && run.player.hp > 0)) {
+    updateWeapons(run, dt);
+    updateSynergyRuntime(run, dt);
+  }
+  if (isCoop) {
+    for (let i = 1; i < run.players.length; i++) {
+      const ally = run.players[i];
+      if (!ally.downed && ally.hp > 0) {
+        withPlayerContext(run, ally, () => {
+          updateWeapons(run, dt);
+          updateSynergyRuntime(run, dt);
+        });
+      }
+    }
+  }
+
   processScheduled(run, dt);
   updateProjectiles(run, dt);
   processScheduled(run, 0);
-  updateUltimate(run, input);
+
+  if (!isCoop || (!run.player.downed && run.player.hp > 0)) {
+    updateUltimate(run, inp0);
+  }
+  if (isCoop) {
+    for (let i = 1; i < run.players.length; i++) {
+      const ally = run.players[i];
+      if (!ally.downed && ally.hp > 0) {
+        withPlayerContext(run, ally, () => {
+          updateUltimate(run, slotInputs[i]);
+        });
+      }
+    }
+  }
+
   processScheduled(run, 0);
   flushSpawnQueue(run);
   compactEnemies(run);
@@ -268,7 +395,7 @@ export function stepRun(run, input = {}, dt = DT) {
     processScheduled(run, 0);
     compactEnemies(run);
   }
-  if (input && input.interact && run.nearbyShrine && run.status === 'playing') {
+  if (inp0 && inp0.interact && run.nearbyShrine && run.status === 'playing') {
     interactShrineImpl(run, run.nearbyShrine.id);
   }
   if (run.status === 'cleared') run._cleared = true;
@@ -308,11 +435,13 @@ export function chooseUpgrade(run, index) {
 
     if (isBlessing) {
       run._pendingBlessings = Math.max(0, (run._pendingBlessings || 0) - 1);
+      syncAlliesOnTeamProgress(run, 'blessing');
     } else {
       if (run.lockedChoice && run.lockedChoice.kind === picked.kind && run.lockedChoice.id === picked.id) {
         run.lockedChoice = null;
       }
       run._pendingLevels = Math.max(0, run._pendingLevels - 1);
+      syncAlliesOnTeamProgress(run, 'levelup');
     }
     run.choices = null;
     settleStatus(run);
@@ -359,6 +488,7 @@ export function openChest(run, preferredWeaponId = null) {
   return outside(run, () => {
     run._pendingChests = Math.max(0, run._pendingChests - 1);
     const res = resolveChest(run, preferredWeaponId);
+    syncAlliesOnTeamProgress(run, 'chest');
     settleStatus(run);
     return res;
   });
@@ -402,8 +532,21 @@ export function revive(run) {
     if (run.mode === 'main') run.revives.mainUsed++;
     else run.revives.endlessUsed++;
     const p = run.player;
+    p.downed = false;
+    p.downedTimer = 0;
+    p.reviveProgress = 0;
     p.hp = p.maxHp;
     p.invulnT = REVIVE.invuln;
+    if (Array.isArray(run.players)) {
+      for (let i = 1; i < run.players.length; i++) {
+        const ally = run.players[i];
+        ally.downed = false;
+        ally.downedTimer = 0;
+        ally.reviveProgress = 0;
+        ally.hp = ally.maxHp;
+        ally.invulnT = REVIVE.invuln;
+      }
+    }
     rebuildHash(run);
     castUlt(run, true);
     processScheduled(run, 0);
@@ -431,43 +574,165 @@ export function enterEndless(run) {
   run._endlessBossT = ENDLESS.bossEvery;
   run.darkness = DARKNESS.endless;
   if (run.player.hp <= 0) run.player.hp = 1;
+  if (Array.isArray(run.players)) {
+    for (const pl of run.players) {
+      pl.downed = false;
+      pl.reviveProgress = 0;
+      if (pl.hp <= 0) pl.hp = 1;
+    }
+  }
   run.status = 'playing';
   settleStatus(run);
   return true;
 }
 
-/** 结算（铜钱已乘财运、五帝钱时间奖与夜色加成，不含广告翻倍） */
-export function endRun(run) {
-  const cleared = run._cleared || run.status === 'cleared' || run.mode === 'endless';
+/** 计算单局综合守夜积分（正整数，供 TapTap 五更守夜总榜与本地荣誉榜共用） */
+export function computeRunScore(run, clearedArg) {
+  if (!run || typeof run !== 'object') return 0;
+  const isCleared =
+    clearedArg !== undefined ? Boolean(clearedArg) : Boolean(run._cleared || run.status === 'cleared' || run.mode === 'endless');
+  const safeTime = Number.isFinite(run.time) && run.time > 0 ? Math.min(run.time, 1e7) : 0;
+  const endlessStart =
+    Number.isFinite(run._endlessStart) && run._endlessStart >= 0 ? Math.min(run._endlessStart, safeTime) : Math.min(safeTime, MAIN_DURATION);
+  const mainSec = Math.min(safeTime, MAIN_DURATION);
+  const endlessSec = run.mode === 'endless' ? Math.max(0, safeTime - endlessStart) : 0;
+  const kills = Number.isFinite(run.stats?.kills) && run.stats.kills > 0 ? Math.min(1e9, Math.floor(run.stats.kills)) : 0;
+  const kbt = run.stats && typeof run.stats.killsByType === 'object' && run.stats.killsByType ? run.stats.killsByType : {};
+  const bossKills = Math.min(
+    1e6,
+    ['horse', 'umbrella', 'youshen'].reduce(
+      (acc, k) => acc + (Number.isFinite(kbt[k]) && kbt[k] > 0 ? Math.min(1e6, Math.floor(kbt[k])) : 0),
+      0,
+    ),
+  );
+  const evolvedCount = Array.isArray(run.weapons) ? run.weapons.filter((w) => w && w.evolved).length : 0;
+  const lv = Number.isFinite(run.player?.level) && run.player.level > 1 ? Math.min(999, Math.floor(run.player.level) - 1) : 0;
+  const revivesDone = Array.isArray(run.players)
+    ? run.players.reduce((s, p) => s + (Number.isFinite(p?.stats?.revivesDone) && p.stats.revivesDone > 0 ? Math.min(1e6, Math.floor(p.stats.revivesDone)) : 0), 0)
+    : 0;
+  const nightLv = sanitizeNightLevel(run.nightLevel);
+  const raw =
+    mainSec * SCORE_TUNING.perMainSec +
+    endlessSec * SCORE_TUNING.perEndlessSec +
+    kills * SCORE_TUNING.perKill +
+    bossKills * SCORE_TUNING.perBossKill +
+    evolvedCount * SCORE_TUNING.perEvolution +
+    lv * SCORE_TUNING.perLevel +
+    revivesDone * SCORE_TUNING.perCoopRevive +
+    (isCleared ? SCORE_TUNING.clearBonus : 0);
+  const mul = 1 + SCORE_TUNING.nightBonusPerLv * nightLv;
+  const scaled = raw * mul;
+  if (Number.isNaN(scaled) || scaled <= 0) return 0;
+  if (scaled === Infinity) return SCORE_TUNING.maxScore;
+  return Math.min(SCORE_TUNING.maxScore, Math.max(0, Math.round(scaled)));
+}
+
+/** 结算（铜钱已乘财运、五帝钱时间奖与夜色加成，不含广告翻倍；附守夜积分与联机 MVP 战绩） */
+export function endRun(run, clearedArg) {
+  if (!run || typeof run !== 'object') {
+    const cleared = Boolean(clearedArg);
+    return {
+      heroId: 'zhou',
+      startWeapon: 'gong',
+      signatureStart: true,
+      nightLevel: 0,
+      cleared,
+      mode: 'main',
+      timeSec: 0,
+      reachedWatch: cleared ? 6 : 1,
+      level: 1,
+      kills: 0,
+      coins: 0,
+      bunsEaten: 0,
+      firstBunTime: null,
+      maxHit: 0,
+      killsByType: {},
+      weapons: [],
+      relics: [],
+      evolvedCount: 0,
+      maxSynergyTier: 0,
+      bossKills: 0,
+      score: 0,
+      coopSize: 0,
+      revivesDone: 0,
+      squad: [],
+    };
+  }
+  const cleared =
+    clearedArg !== undefined ? Boolean(clearedArg) : Boolean(run._cleared || run.status === 'cleared' || run.mode === 'endless');
+  const nightLv = sanitizeNightLevel(run.nightLevel);
   const safeTime = Number.isFinite(run.time) && run.time > 0 ? run.time : 0;
-  const endlessStart = Number.isFinite(run._endlessStart) ? run._endlessStart : safeTime;
+  const endlessStart = Number.isFinite(run._endlessStart) && run._endlessStart >= 0 ? Math.min(run._endlessStart, safeTime) : safeTime;
   const mainTime = Math.min(safeTime, endlessStart);
   const endlessTime = run.mode === 'endless' ? Math.max(0, safeTime - endlessStart) : 0;
-  const inRunCoins = Number.isFinite(run.stats.coins) ? Math.min(1e9, Math.max(0, run.stats.coins)) : 0;
+  const st = run.stats && typeof run.stats === 'object' ? run.stats : {};
+  const inRunCoins = Number.isFinite(st.coins) && st.coins > 0 ? Math.min(1e9, Math.max(0, st.coins)) : 0;
+  const relicCoinPct = Number.isFinite(run.mods?.relicCoinPct) ? Math.max(0, Math.min(100, run.mods.relicCoinPct)) : 0;
+  const metaCoinPct = Number.isFinite(run.meta?.coinPct) ? Math.max(0, Math.min(100, run.meta.coinPct)) : 0;
   const timeBonus =
     (COIN_REWARD.perMinute * (Math.min(mainTime, MAIN_DURATION) / 60) +
       (cleared ? COIN_REWARD.clearBonus : 0) +
       COIN_REWARD.endlessPerMinute * (Math.min(endlessTime, 1e7) / 60)) *
-    (1 + (run.mods?.relicCoinPct || 0));
+    (1 + relicCoinPct);
   const raw = inRunCoins + (Number.isFinite(timeBonus) ? timeBonus : 0);
-  const scaled = raw * (1 + (run.meta.coinPct || 0) + COIN_REWARD.nightPct * run.nightLevel);
-  const coins = Number.isFinite(scaled) ? Math.min(1e9, Math.max(0, Math.floor(scaled))) : 1e9;
+  const scaled = raw * (1 + metaCoinPct + COIN_REWARD.nightPct * nightLv);
+  const coins =
+    Number.isNaN(scaled) || scaled <= 0
+      ? 0
+      : scaled === Infinity
+        ? 1e9
+        : Math.min(1e9, Math.max(0, Math.floor(scaled)));
+
+  const safeWeapons = Array.isArray(run.weapons) ? run.weapons.filter(Boolean) : [];
+  const safeRelics = Array.isArray(run.relics) ? run.relics.filter(Boolean) : [];
+  const evolvedCount = safeWeapons.filter((w) => w.evolved).length;
+  const synCalc = computeSynergies({ ...run, weapons: safeWeapons, relics: safeRelics });
+  const maxSynergyTier = synCalc.active.reduce((m, a) => Math.max(m, a.tier || 0), 0);
+  const rawKbt = st.killsByType && typeof st.killsByType === 'object' ? st.killsByType : {};
+  const cleanKbt = {};
+  for (const [k, v] of Object.entries(rawKbt)) {
+    if (Number.isFinite(v) && v > 0) cleanKbt[k] = Math.min(1e9, Math.floor(v));
+  }
+  const bossKills = Math.min(
+    1e6,
+    ['horse', 'umbrella', 'youshen'].reduce(
+      (acc, k) => acc + (Object.hasOwn(cleanKbt, k) ? Math.min(1e6, cleanKbt[k]) : 0),
+      0,
+    ),
+  );
+  const squad = buildSquadSummary(run);
+  const coopSize = squad.length;
+  const revivesDone = squad.reduce((s, m) => s + m.revivesDone, 0);
+  const score = computeRunScore(run, cleared);
+  const safeHeroId = isOwnHero(run.heroId) ? run.heroId : 'zhou';
+  const safeStartWeapon = isOwnWeapon(run.startWeapon) ? run.startWeapon : HEROES[safeHeroId].startWeapon;
+  const rawWatch = Number.isFinite(run.watch) ? Math.max(1, Math.min(5, Math.floor(run.watch))) : 1;
+
   run._ended = true;
   return {
-    heroId: run.heroId,
-    nightLevel: run.nightLevel,
+    heroId: safeHeroId,
+    startWeapon: safeStartWeapon,
+    signatureStart: run.signatureStart !== undefined ? !!run.signatureStart : isHeroSignatureWeapon(safeHeroId, safeStartWeapon),
+    nightLevel: nightLv,
     cleared,
-    mode: run.mode,
-    timeSec: Math.floor(run.time),
-    reachedWatch: cleared ? 6 : Math.min(5, run.watch),
-    level: run.player.level,
-    kills: run.stats.kills,
+    mode: run.mode === 'endless' ? 'endless' : 'main',
+    timeSec: Math.floor(Math.min(1e9, safeTime)),
+    reachedWatch: cleared ? 6 : rawWatch,
+    level: Number.isFinite(run.player?.level) && run.player.level >= 1 ? Math.min(1e9, Math.floor(run.player.level)) : 1,
+    kills: Number.isFinite(st.kills) && st.kills > 0 ? Math.min(1e9, Math.floor(st.kills)) : 0,
     coins,
-    bunsEaten: run.stats.bunsEaten,
-    firstBunTime: run.stats.firstBunTime,
-    maxHit: run.stats.maxHit,
-    killsByType: { ...run.stats.killsByType },
-    weapons: run.weapons.map((w) => ({ id: w.id, level: w.level, evolved: w.evolved })),
-    relics: run.relics.map((r) => ({ id: r.id, level: r.level })),
+    bunsEaten: Number.isFinite(st.bunsEaten) && st.bunsEaten > 0 ? Math.min(1e9, Math.floor(st.bunsEaten)) : 0,
+    firstBunTime: Number.isFinite(st.firstBunTime) && st.firstBunTime >= 0 ? st.firstBunTime : null,
+    maxHit: Number.isFinite(st.maxHit) && st.maxHit > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(st.maxHit)) : 0,
+    killsByType: cleanKbt,
+    weapons: safeWeapons.map((w) => ({ id: w.id, level: w.level, evolved: !!w.evolved })),
+    relics: safeRelics.map((r) => ({ id: r.id, level: r.level })),
+    evolvedCount,
+    maxSynergyTier,
+    bossKills,
+    score,
+    coopSize,
+    revivesDone,
+    squad,
   };
 }

@@ -4,6 +4,7 @@ import { makeCanvas, makeRng, brushStroke, roughRectPath, arcPoints, withMisreg,
 import { drawSeal, drawStamp, measureSeal } from './glyphs.js';
 import { drawIcon } from './icons.js';
 import { BOSS_NAMES } from './fx.js';
+import { MAX_WEAPONS, MAX_RELICS } from '../sim/balance.js';
 
 const TAU = Math.PI * 2;
 const WATCH_CN = ['', '一更', '二更', '三更', '四更', '五更', '天亮'];
@@ -165,52 +166,57 @@ export function createHud() {
     });
   }
 
-  /** 局内紧凑装备格缓存（位于顶栏计时印两侧 y=38..75，零遮挡中央世界视野） */
+  /** 局内紧凑 6+6 装备格缓存（360px 窄屏零重叠：武器 16×16 步进 17px，法器 15×15 步进 16px） */
   function weaponSlotTile(w) {
     const lv = Math.max(1, Math.min(5, w.level || 1));
     const evo = !!w.evolved;
-    return cached(`hudw|${w.id}|${lv}|${evo ? 1 : 0}`, 20, 20, (g) => {
+    const sig = !!w.signature;
+    return cached(`hudw|${w.id}|${lv}|${evo ? 1 : 0}|${sig ? 1 : 0}`, 18, 18, (g) => {
       g.fillStyle = PAPER;
-      g.fillRect(1, 1, 18, 18);
+      g.fillRect(1, 1, 16, 16);
       if (evo) {
         g.fillStyle = lanternA(0.34);
-        g.fillRect(2, 2, 16, 16);
+        g.fillRect(1.8, 1.8, 14.4, 14.4);
         g.strokeStyle = VERM;
-        g.lineWidth = 1.6;
-        g.strokeRect(1.4, 1.4, 17.2, 17.2);
+        g.lineWidth = 1.45;
+        g.strokeRect(1.3, 1.3, 15.4, 15.4);
         g.fillStyle = VERM;
         g.beginPath();
-        g.moveTo(13, 1);
-        g.lineTo(19, 1);
-        g.lineTo(19, 7);
+        g.moveTo(12, 1);
+        g.lineTo(17, 1);
+        g.lineTo(17, 6);
         g.closePath();
         g.fill();
       } else {
         g.strokeStyle = INK;
-        g.lineWidth = 1.15;
-        g.strokeRect(1.4, 1.4, 17.2, 17.2);
+        g.lineWidth = 1.1;
+        g.strokeRect(1.3, 1.3, 15.4, 15.4);
       }
-      drawIcon(g, evo ? 'evo' : 'weapon', w.id, 10, 8.8, 13.8);
+      if (sig) {
+        g.fillStyle = LANTERN;
+        g.fillRect(1.8, 1.8, 2.6, 2.6);
+      }
+      drawIcon(g, evo ? 'evo' : 'weapon', w.id, 9, 7.9, 12.2);
       const dotCol = evo ? VERM : INK;
       for (let i = 0; i < 5; i++) {
         g.fillStyle = i < lv ? dotCol : inkA(0.2);
-        g.fillRect(3 + i * 2.9, 16.3, 2.1, 1.8);
+        g.fillRect(2.4 + i * 2.7, 14.4, 1.9, 1.5);
       }
     });
   }
 
   function relicSlotTile(r) {
     const lv = Math.max(1, Math.min(5, r.level || 1));
-    return cached(`hudr|${r.id}|${lv}`, 18, 18, (g) => {
+    return cached(`hudr|${r.id}|${lv}`, 17, 17, (g) => {
       g.fillStyle = PAPER_SHADE;
-      g.fillRect(1, 1, 16, 16);
+      g.fillRect(1, 1, 15, 15);
       g.strokeStyle = INK;
-      g.lineWidth = 1.05;
-      g.strokeRect(1.4, 1.4, 15.2, 15.2);
-      drawIcon(g, 'relic', r.id, 9, 8, 12.2);
+      g.lineWidth = 1.0;
+      g.strokeRect(1.3, 1.3, 14.4, 14.4);
+      drawIcon(g, 'relic', r.id, 8.5, 7.4, 11.2);
       for (let i = 0; i < 5; i++) {
         g.fillStyle = i < lv ? VERM : inkA(0.2);
-        g.fillRect(2.8 + i * 2.6, 14.6, 1.8, 1.6);
+        g.fillRect(2.3 + i * 2.5, 13.5, 1.7, 1.4);
       }
     });
   }
@@ -219,63 +225,65 @@ export function createHud() {
     const sName = SCHOOL_SHORT[tag] || '印';
     const tName = TIER_CN[tier] || String(tier);
     const label = `${sName}${tName}`;
-    return cached(`hudsyn|${tag}|${tier}`, 30, 16, (g) => {
+    return cached(`hudsyn|${tag}|${tier}`, 26, 16, (g) => {
       if (tier >= 4) {
         g.fillStyle = VERM;
-        g.fillRect(1, 1, 28, 14);
+        g.fillRect(1, 1, 24, 14);
         g.strokeStyle = tier >= 6 ? LANTERN : PAPER;
-        g.lineWidth = tier >= 6 ? 1.3 : 0.8;
-        g.strokeRect(2.2, 2.2, 25.6, 11.6);
+        g.lineWidth = tier >= 6 ? 1.2 : 0.8;
+        g.strokeRect(2, 2, 22, 12);
         g.fillStyle = PAPER;
       } else {
         g.fillStyle = PAPER;
-        g.fillRect(1, 1, 28, 14);
+        g.fillRect(1, 1, 24, 14);
         g.strokeStyle = VERM;
-        g.lineWidth = 1.3;
-        g.strokeRect(1.5, 1.5, 27, 13);
+        g.lineWidth = 1.2;
+        g.strokeRect(1.5, 1.5, 23, 13);
         g.fillStyle = VERM;
       }
-      g.font = `10px ${FONT_CN}`;
+      g.font = `9.5px ${FONT_CN}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(label, 15, 8.5);
+      g.fillText(label, 13, 8.5);
     });
   }
 
-  function drawLoadoutAndSynergies(ctx, run, W, st, timerLeft, timerRight) {
-    const stripX = 8;
+  function drawLoadoutAndSynergies(ctx, run, W, st, timerLeft, timerRight, endlessStampRight = 0) {
+    const stripX = timerLeft < 110 ? 2 : 6;
+    const wStride = timerLeft < 105 ? Math.max(14, Math.floor((timerLeft - 2 - stripX - 16) / Math.max(1, MAX_WEAPONS - 1))) : 17;
+    const rStride = timerLeft < 105 ? Math.max(13, Math.floor((timerLeft - 2 - stripX - 15) / Math.max(1, MAX_RELICS - 1))) : 16;
     const row1Y = st + 38;
-    const row2Y = st + 58;
+    const row2Y = st + 56;
     const weapons = run.weapons || [];
     const relics = run.relics || [];
 
-    // 计时器左侧第一行：4 武器槽 (18×18, 2px 间距 -> x=8..86)
-    for (let i = 0; i < 4; i++) {
-      const wx = stripX + i * 20;
+    // 计时器左侧第一行：6 武器槽 (16×16, 默认 17px 步进 -> x=6..107 <= timerLeft=118；超长千分时钟自动收紧边距)
+    for (let i = 0; i < MAX_WEAPONS; i++) {
+      const wx = stripX + i * wStride;
       const w = weapons[i];
       if (w && w.id) {
-        ctx.drawImage(weaponSlotTile(w), wx - 1, row1Y - 1, 20, 20);
+        ctx.drawImage(weaponSlotTile(w), wx - 1, row1Y - 1, 18, 18);
       } else {
         ctx.strokeStyle = inkA(0.16);
         ctx.lineWidth = 1;
-        ctx.strokeRect(wx + 0.5, row1Y + 0.5, 17, 17);
+        ctx.strokeRect(wx + 0.5, row1Y + 0.5, 15, 15);
       }
     }
 
-    // 计时器左侧第二行：4 法器槽 (16×16, 2px 间距 -> x=8..78)
-    for (let i = 0; i < 4; i++) {
-      const rx = stripX + i * 18;
+    // 计时器左侧第二行：6 法器槽 (15×15, 默认 16px 步进 -> x=6..101 <= timerLeft=118)
+    for (let i = 0; i < MAX_RELICS; i++) {
+      const rx = stripX + i * rStride;
       const r = relics[i];
       if (r && r.id) {
-        ctx.drawImage(relicSlotTile(r), rx - 1, row2Y - 1, 18, 18);
+        ctx.drawImage(relicSlotTile(r), rx - 1, row2Y - 1, 17, 17);
       } else {
         ctx.strokeStyle = inkA(0.14);
         ctx.lineWidth = 1;
-        ctx.strokeRect(rx + 0.5, row2Y + 0.5, 15, 15);
+        ctx.strokeRect(rx + 0.5, row2Y + 0.5, 14, 14);
       }
     }
 
-    // 流派羁绊印章 + 命签/魂障简标（优先排在计时器与暂停钮之间的顶栏空隙，不侵入下方世界画面）
+    // 流派羁绊印章 + 命签/魂障简标（24×14 紧凑方印，零遮挡计时印与暂停键）
     const activeSyns = run.synergies?.active || [];
     const blessingCount = run.blessings?.length || 0;
     const barrier = run.player?.soulBarrier || 0;
@@ -287,53 +295,57 @@ export function createHud() {
     }
     if (blessingCount > 0) {
       badges.push(
-        cached(`hudbl|${blessingCount}`, 30, 16, (g) => {
+        cached(`hudbl|${blessingCount}`, 26, 16, (g) => {
           g.fillStyle = INK;
-          g.fillRect(1, 1, 28, 14);
+          g.fillRect(1, 1, 24, 14);
           g.strokeStyle = LANTERN;
           g.lineWidth = 1;
-          g.strokeRect(2, 2, 26, 12);
-          g.font = `9.5px ${FONT_CN}`;
+          g.strokeRect(2, 2, 22, 12);
+          g.font = `9px ${FONT_CN}`;
           g.fillStyle = LANTERN;
           g.textAlign = 'center';
           g.textBaseline = 'middle';
-          g.fillText(`签${blessingCount}`, 15, 8.5);
-        })
+          g.fillText(`签${blessingCount}`, 13, 8.5);
+        }),
       );
     }
     if (barrier > 0) {
       badges.push(
-        cached(`hudsb|${barrier}`, 30, 16, (g) => {
+        cached(`hudsb|${barrier}`, 26, 16, (g) => {
           g.fillStyle = PAPER;
-          g.fillRect(1, 1, 28, 14);
+          g.fillRect(1, 1, 24, 14);
           g.strokeStyle = INK;
           g.lineWidth = 1.1;
-          g.strokeRect(1.5, 1.5, 27, 13);
-          g.font = `9.5px ${FONT_CN}`;
+          g.strokeRect(1.5, 1.5, 23, 13);
+          g.font = `9px ${FONT_CN}`;
           g.fillStyle = INK;
           g.textAlign = 'center';
           g.textBaseline = 'middle';
-          g.fillText(`障${barrier}`, 15, 8.5);
-        })
+          g.fillText(`障${barrier}`, 13, 8.5);
+        }),
       );
     }
 
-    // 槽位：计时印右侧与暂停键之间的两行，以及左侧空余角位
-    const rxStart = timerRight + (run.mode === 'endless' ? 24 : 5);
-    const maxRight = W - 56;
+    const rxStart = run.mode === 'endless' ? Math.max(timerRight + 4, endlessStampRight + 3) : timerRight + 4;
+    const maxRight = W - 56; // .pause-btn 左缘为 W - 54 (306 on 360px)
     const slots = [];
-    if (rxStart + 28 <= maxRight) {
+    let usedRight = Math.max(timerRight, endlessStampRight);
+    if (rxStart + 24 <= maxRight) {
       slots.push([rxStart, row1Y], [rxStart, row2Y]);
-      if (rxStart + 59 <= maxRight) {
-        slots.push([rxStart + 31, row1Y], [rxStart + 31, row2Y]);
+      usedRight = rxStart + 24;
+      if (rxStart + 49 <= maxRight) {
+        slots.push([rxStart + 25, row1Y], [rxStart + 25, row2Y]);
+        usedRight = rxStart + 49;
       }
     }
-    if (stripX + 82 + 28 <= timerLeft) {
-      slots.push([stripX + 80, row1Y], [stripX + 74, row2Y]);
-    }
+    // 暂停钮正上方的顶栏空隙 (y = st+36..50 < st+52) 承接第 5..6 枚印章
+    if (W - 34 > usedRight + 1) slots.push([W - 34, st + 36]);
+    if (W - 60 > usedRight + 1) slots.push([W - 60, st + 36]);
+    else if (!run.boss) slots.push([stripX, st + 73], [stripX + 26, st + 73]);
+
     for (let i = 0; i < badges.length && i < slots.length; i++) {
       const [bx, by] = slots[i];
-      ctx.drawImage(badges[i], bx - 1, by - 1, 30, 16);
+      ctx.drawImage(badges[i], bx - 1, by - 1, 26, 16);
     }
   }
 
@@ -399,12 +411,16 @@ export function createHud() {
       ctx.arc(lx + labelW + 8, ty + th / 2, 1.6, 0, TAU);
       ctx.fill();
       drawSeal(ctx, clock, lx + labelW + 16, ty + th / 2, dSize, INK, 'left');
+      let endlessStampRight = 0;
       if (run.mode === 'endless') {
-        drawStamp(ctx, String(Math.max(1, Math.floor((run.time - 600) / 60) + 1)), tx + tw + 14, ty + th / 2, 10, { seed: 5, rot: 0.08 });
+        const endlessMinStr = String(Math.max(1, Math.floor((run.time - 600) / 60) + 1));
+        const stampCx = tx + tw + 14;
+        drawStamp(ctx, endlessMinStr, stampCx, ty + th / 2, 10, { seed: 5, rot: 0.08 });
+        endlessStampRight = stampCx + Math.ceil((measureSeal(endlessMinStr, 10) + 6.4) / 2) + 1;
       }
 
       /* ---------- 顶栏两侧紧凑装备与流派羁绊栏（T1-F11-03） ---------- */
-      drawLoadoutAndSynergies(ctx, run, W, st, tx - 3, tx + tw + 3);
+      drawLoadoutAndSynergies(ctx, run, W, st, tx - 3, tx + tw + 3, endlessStampRight);
 
       /* ---------- Boss 血条横幅 ---------- */
       if (run.boss) {

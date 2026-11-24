@@ -5,15 +5,25 @@ import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS } from './balance.js';
 import { clamp } from '../core/math.js';
 import { spawnEnemy, queueSpawn, setTelegraph, clearTelegraph } from './enemies.js';
 import { dropPickup } from './pickups.js';
+import { coopHpScale, coopPartySize, nearestLivingPlayer } from './coop.js';
 
 const V = { x: 0, y: 0 };
 
 /** 生成 Boss。opts.chest：死亡掉供盒；opts.final：最终 Boss（打败即通关） */
 export function spawnBoss(run, type, opts = {}) {
-  const p = run.player;
+  const p =
+    run.player?.downed && coopPartySize(run) > 1
+      ? nearestLivingPlayer(run, run.player.x, run.player.y)
+      : run.player;
   const a = run.rng.range(0, Math.PI * 2);
   const e = spawnEnemy(run, type, p.x + Math.cos(a) * BOSS_AI.spawnDist, p.y + Math.sin(a) * BOSS_AI.spawnDist);
-  let hp = ENEMIES[type].hp * (1 + SPAWN.nightHpGrowth * run.nightLevel) * run.night.bossHpMul * BOSS_AI.hpMul * (BOSS_AI[type]?.hpMul || 1);
+  let hp =
+    ENEMIES[type].hp *
+    (1 + SPAWN.nightHpGrowth * run.nightLevel) *
+    run.night.bossHpMul *
+    BOSS_AI.hpMul *
+    (BOSS_AI[type]?.hpMul || 1) *
+    coopHpScale(run);
   if (run.mode === 'endless') hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - run._endlessStart) / 60));
   e.hp = e.maxHp = Math.round(hp);
   e.chest = !!opts.chest;
@@ -287,6 +297,13 @@ export function onBossKilled(run, e) {
     run.status = 'cleared';
     run._cleared = true;
     if (run.player.hp <= 0) run.player.hp = 1;
+    if (Array.isArray(run.players)) {
+      for (const pl of run.players) {
+        pl.downed = false;
+        pl.reviveProgress = 0;
+        if (pl.hp <= 0) pl.hp = 1;
+      }
+    }
     run.watch = 6;
     run.darkness = DARKNESS.dawn;
     run.events.push({ type: 'dawn' });

@@ -82,8 +82,10 @@ export function candidateChoices(run) {
   for (const r of run.relics) {
     if (r.level < MAX_RELIC_LEVEL) add('relic', r.id, r.level + 1, false, LEVELUP.wOwnedRelic);
   }
+  const allowedWeapons = Array.isArray(run.unlockedWeapons) ? new Set(run.unlockedWeapons) : null;
   if (run.weapons.length < MAX_WEAPONS) {
     for (const id of WEAPON_IDS) {
+      if (allowedWeapons && !allowedWeapons.has(id)) continue;
       if (getWeapon(run, id)) continue;
       const sharesTag = WEAPONS[id].tags?.some((t) => countOwnedTag(run, t) > 0);
       add('weapon', id, 1, true, LEVELUP.wNewWeapon * (sharesTag ? LEVELUP.synergyBonus : 1));
@@ -102,8 +104,14 @@ export function candidateChoices(run) {
 }
 
 export function allMaxed(run) {
+  const maxW = Array.isArray(run.unlockedWeapons)
+    ? Math.min(
+        MAX_WEAPONS,
+        new Set([...run.unlockedWeapons.filter((id) => WEAPON_IDS.includes(id)), ...run.weapons.map((w) => w.id)]).size,
+      )
+    : MAX_WEAPONS;
   return (
-    run.weapons.length >= MAX_WEAPONS &&
+    run.weapons.length >= maxW &&
     run.relics.length >= MAX_RELICS &&
     run.weapons.every((w) => w.level >= MAX_WEAPON_LEVEL) &&
     run.relics.every((r) => r.level >= MAX_RELIC_LEVEL)
@@ -327,6 +335,10 @@ const WEAPON_INTRO = {
   soulbanner: '挥动招魂大幡重扫前方，附带破甲易伤并凝聚护体魂障',
   bronze_mirror: '射出持续横扫的赤阳神光，焚毁敌弹并持续灼伤叠伤',
   paperhorse: '唤出纸马铁骑从后方奔袭贯穿全屏，撞退沿途群祟',
+  taomujian: '御使桃木飞剑自动索敌穿刺，灵动贯穿群祟',
+  suohun_chain: '甩出无常铁链破甲定身，将前方邪祟强力拽聚',
+  zhinian_kite: '放飞纸鸢火鸦俯冲鬼群，轰然爆裂灼烧一片',
+  nuo_drum: '立起傩神战鼓连擂逐疫音波，减速震退四方群祟',
 };
 
 const EVOLVED_INTRO = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].evoDesc]));
@@ -389,6 +401,8 @@ const RELIC_FIELD_TEXT = {
   lightPct: (v) => `照亮范围 +${Math.round(v * 100)}%`,
   ultChargePct: (v) => `大招攒气 +${Math.round(v * 100)}%`,
   ultCdRefund: (v) => `大招返还冷却 ${Math.round(v * 100)}%`,
+  bonusPierce: (v) => `弹体穿透 +${v}`,
+  controlDurPct: (v) => `控场时长 +${Math.round(v * 100)}%`,
 };
 
 function relicDesc(id, level) {

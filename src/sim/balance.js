@@ -96,18 +96,18 @@ export function computeDamage(base, dmgPct, crit, evoMult = 1, overflow = 1, cri
 // ───────────────────────── 敌人（PLAN §3.2 + F10）─────────────────────────
 // hp/speed/dmg 为基础值；xp 为掉落魂火经验；r 为碰撞半径
 export const ENEMIES = {
-  paperkid: { name: '纸扎童子', hp: 8, speed: 50, dmg: 5, r: 11, xp: 1 },
-  shade: { name: '影祟', hp: 5, speed: 72, dmg: 4, r: 10, xp: 1 },
-  lanternghost: { name: '灯笼鬼', hp: 32, speed: 40, dmg: 8, r: 15, xp: 3 },
-  weasel: { name: '黄皮子', hp: 23, speed: 70, dmg: 9, r: 12, xp: 2 },
-  sedan: { name: '纸轿子', hp: 120, speed: 30, dmg: 12, r: 20, xp: 4 },
-  drowned: { name: '水鬼', hp: 54, speed: 50, dmg: 11, r: 13, xp: 3 },
-  suona: { name: '吹鼓鬼', hp: 48, speed: 44, dmg: 8, r: 14, xp: 2 },
-  paperbride: { name: '红衣纸新娘', hp: 62, speed: 56, dmg: 10, r: 13, xp: 2 },
-  cinder: { name: '阴火骷髅', hp: 32, speed: 64, dmg: 9, r: 12, xp: 1 },
-  horse: { name: '纸马将军', hp: 3050, speed: 60, dmg: 18, r: 30, xp: 40, boss: true },
-  umbrella: { name: '无面伞女', hp: 31000, speed: 52, dmg: 26, r: 28, xp: 80, boss: true },
-  youshen: { name: '夜游神', hp: 96000, speed: 58, dmg: 65, r: 40, xp: 0, boss: true },
+  paperkid: { name: '纸扎童子', hp: 10, speed: 50, dmg: 5, r: 11, xp: 1 },
+  shade: { name: '影祟', hp: 6, speed: 72, dmg: 4, r: 10, xp: 1 },
+  lanternghost: { name: '灯笼鬼', hp: 26, speed: 40, dmg: 7, r: 15, xp: 2.9 },
+  weasel: { name: '黄皮子', hp: 22, speed: 70, dmg: 8, r: 12, xp: 1.85 },
+  sedan: { name: '纸轿子', hp: 106, speed: 30, dmg: 10, r: 20, xp: 3.0 },
+  drowned: { name: '水鬼', hp: 58, speed: 50, dmg: 12, r: 13, xp: 2.2 },
+  suona: { name: '吹鼓鬼', hp: 48, speed: 44, dmg: 8, r: 14, xp: 1.7 },
+  paperbride: { name: '红衣纸新娘', hp: 68, speed: 56, dmg: 11, r: 13, xp: 1.6 },
+  cinder: { name: '阴火骷髅', hp: 29, speed: 64, dmg: 8, r: 12, xp: 0.95 },
+  horse: { name: '纸马将军', hp: 2350, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
+  umbrella: { name: '无面伞女', hp: 58000, speed: 52, dmg: 38, r: 28, xp: 75, boss: true },
+  youshen: { name: '夜游神', hp: 176000, speed: 58, dmg: 79, r: 40, xp: 0, boss: true },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES);
 export const REGULAR_ENEMY_IDS = ENEMY_IDS.filter((k) => !ENEMIES[k].boss);
@@ -133,11 +133,11 @@ export const ENEMY_AI = {
   suona: { auraRadius: 135, speedBuff: 1.22, dmgBuff: 1.20, holdDist: 165, retreatDist: 95 },
   // 红衣纸新娘：中距游走抛射纸钱弹
   paperbride: {
-    preferMin: 149, preferMax: 224, fireCd: 1.18, firstFireMin: 0.48, firstFireMax: 0.90,
-    fireRange: 360, bulletSpeed: 230, bulletDmg: 19, bulletR: 7, bulletLife: 3.4, bulletStyle: 'paperMoney',
+    preferMin: 149, preferMax: 224, fireCd: 1.12, firstFireMin: 0.48, firstFireMax: 0.90,
+    fireRange: 368, bulletSpeed: 236, bulletDmg: 18, bulletR: 7, bulletLife: 3.4, bulletStyle: 'paperMoney',
   },
   // 阴火骷髅：毙命后留阴火核延时爆裂（敌我皆伤）
-  cinder: { fuseTime: 0.90, blastRadius: 68, enemyBlastMul: 1.5, playerBlastDmg: 18 },
+  cinder: { fuseTime: 0.90, blastRadius: 68, enemyBlastMul: 1.5, playerBlastDmg: 17 },
 };
 
 export const BOSS_AI = {
@@ -147,33 +147,34 @@ export const BOSS_AI = {
   knockbackMul: 0.08,
   leashDist: 700, // 超出这个距离 Boss 会被拉回
   horse: {
-    chase: 2.8, windup: 0.92, chargeSpeed: 426, chargeTime: 0.55, gap: 0.22, charges: 3, rest: 1.7,
+    chase: 2.9, windup: 1.02, chargeSpeed: 384, chargeTime: 0.52, gap: 0.27, charges: 3, rest: 1.85,
     rewindMul: 0.65, // 连冲之间的再蓄力 = gap + windup × 0.65
-    chargeDmgMul: 1.25,
+    chargeDmgMul: 1.12,
   },
   umbrella: {
-    shieldTime: 5, openTime: 4, shieldDr: 0.7, spinSpeed: 2.4, shieldMoveMul: 0.5, firstRingDelay: 0.3,
-    ringInterval: 0.50, ringCount: 20, bulletSpeed: 198, bulletDmg: 34, bulletR: 7, bulletLife: 6,
+    shieldTime: 5, openTime: 4, shieldDr: 0.7, spinSpeed: 2.45, shieldMoveMul: 0.52, firstRingDelay: 0.3,
+    ringInterval: 0.39, ringCount: 24, bulletSpeed: 212, bulletDmg: 50, bulletR: 7, bulletLife: 6,
   },
   youshen: {
-    hpMul: 3.42,
-    phase2At: 0.88, phase3At: 0.70,
-    summonInterval: 2.8, summonCount: 11, summonTypes: ['shade', 'weasel', 'lanternghost'], summonDist: 140,
-    spiralInterval: 0.072, spiralArms: 4, spiralTurn: 0.33,
-    bulletSpeed: 220, bulletDmg: 51, bulletR: 7, bulletLife: 6,
-    enrageSpeedMul: 1.60, enrageSummonInterval: 2.0, enrageRingInterval: 0.46, enrageRingCount: 23, ringTurn: 0.2,
-    lungeEvery: 5.6, lungeWindup: 0.75, lungeSpeed: 450, lungeTime: 0.44, lungeDmgMul: 1.90, lungeRecover: 0.25,
+    hpMul: 3.56,
+    phase2At: 0.88, phase3At: 0.73,
+    summonInterval: 2.55, summonCount: 14, summonTypes: ['shade', 'weasel', 'drowned', 'lanternghost'], summonDist: 135,
+    spiralInterval: 0.069, spiralArms: 4, spiralTurn: 0.33,
+    bulletSpeed: 225, bulletDmg: 55, bulletR: 7, bulletLife: 6,
+    enrageSpeedMul: 1.60, enrageSummonInterval: 1.90, enrageRingInterval: 0.41, enrageRingCount: 25, ringTurn: 0.2,
+    lungeEvery: 4.55, lungeWindup: 0.74, lungeSpeed: 450, lungeTime: 0.44, lungeDmgMul: 1.95, lungeRecover: 0.25,
   },
 };
 
 // 精英：普通敌人的强化版与词缀
 export const ELITE = {
-  baseChance: 0.028,
-  perNight: 0.004, // 夜色每级额外概率
-  hpMul: 10,
+  baseChance: 0.030,
+  perNight: 0.005, // 夜色每级额外概率
+  perMinute: 0.0078, // 二更后随分钟递增精英率
+  hpMul: 11.5,
   rMul: 1.35,
-  dmgMul: 1.45,
-  xpMul: 5,
+  dmgMul: 1.66,
+  xpMul: 1.92,
   speedMul: 1.05,
   bannerChance: 0.06, // 精英额外掉招魂幡的概率
 };
@@ -182,55 +183,58 @@ export const ELITE_AFFIXES = {
   paper_armor: { id: 'paper_armor', name: '纸甲', armorHits: 6, dmgReduce: 0.35, kbResist: 0.55 },
   swift_step: { id: 'swift_step', name: '疾行', speedMul: 1.32, slowMul: 0.5 },
   soul_fire: {
-    id: 'soul_fire', name: '阴火', fireInterval: 1.85, fireRange: 340, bulletCount: 3, spread: 0.30,
-    bulletSpeed: 160, bulletDmg: 15, bulletR: 6, bulletLife: 3.2,
+    id: 'soul_fire', name: '阴火', fireInterval: 1.58, fireRange: 348, bulletCount: 3, spread: 0.30,
+    bulletSpeed: 180, bulletDmg: 17, bulletR: 6, bulletLife: 3.2,
   },
   mirror_twin: { id: 'mirror_twin', name: '分身', splitAtHpRatio: 0.5, twinHpRatio: 0.42, twinOffset: 24 },
   treasure_bearer: { id: 'treasure_bearer', name: '藏宝', hpMul: 1.25, bonusCoins: 12, bunChance: 0.65 },
 };
 export const ELITE_AFFIX_IDS = Object.keys(ELITE_AFFIXES);
 
-// 巡更小头目：2:30 与 6:00 必落供盒，扩充开光节奏
+// 巡更小头目：2:30、6:00 与 7:10（四更）必落供盒，扩充 6+6 开光节奏
 export const MINI_WARDERS = [
-  { id: 'warder_150', time: 150, type: 'sedan', affix: 'paper_armor', name: '巡街轿头', hpMul: 1.8, rMul: 1.15, chest: true },
-  { id: 'warder_360', time: 360, type: 'paperbride', affix: 'soul_fire', name: '冥婚喜娘', hpMul: 2.2, rMul: 1.2, chest: true },
+  { id: 'warder_150', time: 150, type: 'sedan', affix: 'paper_armor', name: '巡街轿头', hpMul: 1.55, rMul: 1.15, chest: true },
+  { id: 'warder_360', time: 360, type: 'paperbride', affix: 'soul_fire', name: '冥婚喜娘', hpMul: 2.85, rMul: 1.2, chest: true },
+  { id: 'warder_430', time: 430, type: 'suona', affix: 'mirror_twin', name: '催命吹鼓头', hpMul: 3.0, rMul: 1.22, chest: true },
 ];
 
-// ───────────────────────── 刷怪（PLAN §4.3 + §4.4 校准）─────────────────────────
+// ───────────────────────── 刷怪（PLAN §4.3 + §4.4 + v3 6+6 校准）─────────────────────────
 export const SPAWN = {
-  cap: 260, // 同屏上限
+  cap: 300, // 同屏上限（适配 6+6 割草规模）
   ringMin: 430,
   ringMax: 510,
   despawnDist: 820, // 超出这个距离的普通敌人被回收到前方圆环
   bossSpawnMul: 0.55, // 精英夜主在场时刷怪倍率
   youshenSpawnMul: 0.45,
-  minuteHpGrowth: 0.44, // 经模拟器校准，使非 Boss 时段压力比落在 0.60–0.95
-  minuteHpGrowth2: 0.088,
+  minuteHpGrowth: 0.37, // 经模拟器校准，使非 Boss 时段压力比落在 0.60–0.95
+  minuteHpGrowth2: 0.126,
   nightHpGrowth: 0.15, // HP × (1 + 0.15N)
-  rateA: 1.2,
-  rateB: 0.55,
-  rateC: 0.035,
-  rateMul: 0.76,
-  hpMul: 2.05,
+  rateA: 1.52,
+  rateB: 0.62,
+  rateC: 0.043,
+  rateMul: 0.805,
+  hpMul: 2.04,
   watch1LateAt: 52, // 一更后半（玩家升到 3–4 级后）灯笼鬼开始从巷口飘出
-  watch2LateAt: 175, // 二更后半纸轿与黄皮子先遣队入场，衔接三更压力
-  watch3LateAt: 285, // 三更后半（纸马将军退场后）红衣纸新娘与水鬼冥婚仪仗入场
+  watch2LateAt: 202, // 二更后半纸轿与黄皮子先遣队入场，衔接三更压力
+  watch3LateAt: 300, // 三更后半（纸马将军退场后）红衣纸新娘与水鬼冥婚仪仗入场
   // 平滑移速成长曲线：杜绝后期全屏超速粘死
   minuteSpeedGrowth: 0.032,
   speedGrowthCap: 1.35,
-  minuteDmgGrowth: 0.22,
+  minuteDmgGrowth: 0.20,
+  minuteDmgGrowth2: 0.044,
+  dmgGrowthCap: 4.85,
 };
 
 // 合围：每隔一段时间在玩家四周刷一圈同种敌人向内收拢（考验突围走位）
 export const WAVES = {
   enabled: true,
   firstAt: 95,
-  every: 27,
+  every: 26,
   baseCount: 18,
-  perMinute: 4.0, // 每分钟多几只
-  maxCount: 54,
+  perMinute: 5.7, // 每分钟多几只
+  maxCount: 68,
   radius: 315,
-  types: { 1: 'paperkid', 2: 'shade', 3: 'cinder', 4: 'lanternghost', 5: 'shade' },
+  types: { 1: 'paperkid', 2: 'paperkid', 3: 'lanternghost', 4: 'weasel', 5: 'drowned' },
 };
 
 /** 敌人移速 / 接触伤害的分钟成长倍率 */
@@ -238,7 +242,8 @@ export function enemySpeedScale(m) {
   return Math.min(SPAWN.speedGrowthCap, 1 + SPAWN.minuteSpeedGrowth * m);
 }
 export function enemyDmgScale(m) {
-  return 1 + SPAWN.minuteDmgGrowth * m;
+  const raw = 1 + SPAWN.minuteDmgGrowth * m + (SPAWN.minuteDmgGrowth2 || 0) * m * m;
+  return SPAWN.dmgGrowthCap ? Math.min(SPAWN.dmgGrowthCap, raw) : raw;
 }
 
 /** 每秒刷怪数 S(m) = a + b·m + c·m² */
@@ -255,13 +260,13 @@ export function enemyHpScale(m, night, endlessK = 0) {
 // 每更的刷怪权重（第 5 更同样用于无尽；1b/2b/3b 为后半更过渡）
 export const ROSTER = {
   1: { paperkid: 70, shade: 30 },
-  '1b': { paperkid: 30, shade: 18, lanternghost: 52 },
-  2: { paperkid: 18, shade: 14, lanternghost: 46, cinder: 14, suona: 8 },
-  '2b': { paperkid: 11, shade: 12, lanternghost: 30, weasel: 11, sedan: 17, cinder: 10, suona: 9 },
-  3: { paperkid: 11, shade: 15, lanternghost: 22, weasel: 17, sedan: 13, cinder: 12, suona: 7, paperbride: 3 },
-  '3b': { paperkid: 6, shade: 11, lanternghost: 12, weasel: 15, sedan: 12, drowned: 10, cinder: 10, suona: 6, paperbride: 18 },
-  4: { paperkid: 7, shade: 12, lanternghost: 13, weasel: 14, sedan: 13, drowned: 13, cinder: 8, suona: 6, paperbride: 14 },
-  5: { paperkid: 10, shade: 16, lanternghost: 15, weasel: 16, sedan: 9, drowned: 12, cinder: 9, suona: 7, paperbride: 6 },
+  '1b': { paperkid: 32, shade: 18, lanternghost: 50 },
+  2: { paperkid: 24, shade: 18, lanternghost: 43, cinder: 8, suona: 7 },
+  '2b': { paperkid: 19, shade: 17, lanternghost: 33, weasel: 6, sedan: 12, cinder: 6, suona: 7 },
+  3: { paperkid: 17, shade: 20, lanternghost: 25, weasel: 9, sedan: 12, cinder: 8, suona: 6, paperbride: 3 },
+  '3b': { paperkid: 5, shade: 10, lanternghost: 11, weasel: 16, sedan: 12, drowned: 11, cinder: 10, suona: 6, paperbride: 19 },
+  4: { paperkid: 5, shade: 10, lanternghost: 10, weasel: 18, sedan: 11, drowned: 14, cinder: 10, suona: 6, paperbride: 16 },
+  5: { paperkid: 7, shade: 13, lanternghost: 12, weasel: 16, sedan: 9, drowned: 18, cinder: 10, suona: 6, paperbride: 9 },
 };
 
 // Boss 时间轴
@@ -296,7 +301,7 @@ export const WEAPONS = {
     dmg: [14, 19, 25, 31, 38], radius: [70, 80, 90, 100, 110], cd: [2.2, 2.05, 1.9, 1.75, 1.6],
     knockback: 155, pulseLife: 0.35,
     evo: {
-      pulses: 3, interval: 0.22, waveRadius: 165, finalRadius: 220, pullForce: 135,
+      pulses: 3, interval: 0.22, waveRadius: 165, finalRadius: 215, pullForce: 135,
       safeInnerR: 54, staggerStun: 0.45, finalStun: 0.90, vulnDur: 3.0, vulnPct: 0.25,
       finalDmgMul: 1.45, finalKnock: 220, stun: 0.90,
     },
@@ -424,12 +429,56 @@ export const WEAPONS = {
     speed: 440, span: 560, r: 20, knockback: 105,
     evo: { bonusCount: 2, speed: 520, span: 680, r: 26, trampleExplodeR: 48, trampleExplodeMul: 0.48 },
   },
+  taomujian: {
+    name: '桃木飞剑', pair: 'leijimu', tags: ['daofa'], evoName: '天罡雷木剑阵',
+    evoDesc: '多柄雷木飞剑疾速御空穿刺，每三击引落天罡神雷轰击群祟',
+    evoMult: 1.92,
+    count: [1, 2, 2, 3, 4], dmg: [15, 20, 26, 33, 41], cd: [1.35, 1.28, 1.20, 1.12, 1.04],
+    speed: 420, life: 1.75, r: 10, pierce: 2, turnRate: 9.5, seekRange: 340, knockback: 22,
+    evo: {
+      bonusCount: 2, speed: 500, pierce: 5, turnRate: 12.0, seekRange: 400,
+      thunderEvery: 3, thunderRadius: 68, thunderDmgMul: 0.75, stun: 0.45,
+    },
+  },
+  suohun_chain: {
+    name: '无常锁魂链', pair: 'yinpai', tags: ['zhenhun'], evoName: '黑白无常夺魄索',
+    evoDesc: '双链裂空贯穿破甲，强力拽聚群祟定身并引爆夺魄阴煞',
+    evoMult: 1.94,
+    count: [1, 1, 2, 2, 2], dmg: [19, 26, 34, 43, 53], length: [165, 180, 195, 210, 228],
+    cd: [1.85, 1.75, 1.65, 1.55, 1.45], width: 24, life: 0.28, pullForce: 155, stunDur: 0.40, knockback: 0,
+    evo: {
+      bonusCount: 2, lengthMul: 1.28, widthMul: 1.35, pullForce: 225, stunDur: 0.75,
+      vulnDur: 3.5, vulnPct: 0.28, burstRadius: 72, burstDmgMul: 0.65,
+    },
+  },
+  zhinian_kite: {
+    name: '纸鸢火鸦', pair: 'huoyao_pouch', tags: ['zhizha', 'yangyan'], evoName: '金乌焚天火鸦阵',
+    evoDesc: '成群金乌火鸦俯冲轰炸并刻印阳炎，掠过之处铺开流火焚天径',
+    evoMult: 1.96,
+    count: [1, 2, 2, 3, 4], dmg: [18, 24, 31, 39, 48], radius: [48, 52, 56, 60, 66],
+    cd: [2.0, 1.88, 1.76, 1.64, 1.52], speed: 340, life: 1.8, r: 11, turnRate: 6.2, seekRange: 360, knockback: 95,
+    evo: {
+      bonusCount: 3, speed: 410, radiusMul: 1.25, markDuration: 3.0,
+      trailInterval: 0.18, trailRadius: 42, trailLife: 1.8, trailTick: 0.38, trailDmgMul: 0.28,
+    },
+  },
+  nuo_drum: {
+    name: '傩神战鼓', pair: 'wuse_mask', tags: ['zhenhun', 'yangyan'], evoName: '太古百相傩坛',
+    evoDesc: '立起百相神鼓连擂四重逐疫震波，净除敌弹、破甲易伤并终响五方爆裂',
+    evoMult: 1.85,
+    dmg: [12, 16, 21, 25, 29], radius: [78, 86, 94, 100, 106], cd: [2.75, 2.62, 2.50, 2.38, 2.28],
+    beats: [2, 2, 3, 3, 3], beatInterval: 0.36, placeRange: 115, accentDmgMul: 1.30, knockback: 100,
+    evo: {
+      beats: 4, beatInterval: 0.32, radiusMul: 1.12, accentDmgMul: 1.38,
+      vulnDur: 2.8, vulnPct: 0.16, stunDur: 0.60, maskBursts: 5, maskBurstR: 50, maskBurstMul: 0.28,
+    },
+  },
 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 export const WEAPON_NAMES = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].name]));
 export const EVOLVED_NAMES = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].evoName]));
 export const MAX_WEAPON_LEVEL = 5;
-export const MAX_WEAPONS = 4;
+export const MAX_WEAPONS = 6;
 
 // 武器 / 弹体的通用表现参数
 export const FX = {
@@ -448,7 +497,7 @@ export const FX = {
   chainLife: 0.25,
 };
 
-// ───────────────────────── 法器（12 件：经典 8 + 新增 4）─────────────────────────
+// ───────────────────────── 法器（16 件：经典 8 + v2 新增 4 + v3 新增 4）─────────────────────────
 export const RELICS = {
   clapper: { name: '梆子', pair: 'gong', tags: ['zhenhun'], perLevel: { cdr: 0.08 } },
   censer: { name: '香炉', pair: 'lantern', tags: ['yangyan'], perLevel: { areaPct: 0.10 } },
@@ -462,13 +511,17 @@ export const RELICS = {
   glutinous: { name: '糯米', pair: 'soulbanner', tags: ['zhenhun'], perLevel: { hurtInvuln: 0.04, killHeal: 2 }, killInterval: 35 },
   fivecoins: { name: '五帝钱', pair: 'bronze_mirror', tags: ['daofa', 'yangyan'], perLevel: { critDmg: 0.18, coinPct: 0.10 } },
   soulwick: { name: '引魂灯芯', pair: 'compass', tags: ['zhizha', 'yangyan'], perLevel: { lightPct: 0.08, ultChargePct: 0.10, ultCdRefund: 0.10 } },
+  leijimu: { name: '雷击枣木', pair: 'taomujian', tags: ['daofa', 'yangyan'], perLevel: { cdr: 0.04, critChance: 0.03 }, pierceLevels: [2, 5] },
+  yinpai: { name: '勾魂阴牌', pair: 'suohun_chain', tags: ['zhenhun'], perLevel: { dmgPct: 0.06, armor: 1, controlDurPct: 0.08 } },
+  huoyao_pouch: { name: '硫磺火药囊', pair: 'zhinian_kite', tags: ['zhizha', 'yangyan'], perLevel: { areaPct: 0.07, dmgPct: 0.05 } },
+  wuse_mask: { name: '五色傩面', pair: 'nuo_drum', tags: ['zhizha', 'daofa'], perLevel: { cdr: 0.04, speedPct: 0.04, ultChargePct: 0.08 } },
 };
 export const RELIC_IDS = Object.keys(RELICS);
 export const RELIC_NAMES = Object.fromEntries(RELIC_IDS.map((k) => [k, RELICS[k].name]));
 export const MAX_RELIC_LEVEL = 5;
-export const MAX_RELICS = 4;
+export const MAX_RELICS = 6;
 
-// ───────────────────────── 英雄（PLAN §4.7）─────────────────────────
+// ───────────────────────── 英雄（6 名守夜人 + 本命初始武器亲和）─────────────────────────
 export const HEROES = {
   zhou: {
     id: 'zhou', name: '打更人·老周', short: '老周', startWeapon: 'gong',
@@ -485,10 +538,37 @@ export const HEROES = {
     trait: '暴击率 +10%', mods: { critChance: 0.1 },
     unlock: { kind: 'noBunWatch5', value: 480, desc: '不吃一个包子守到五更（撑到 8:00）' },
   },
+  yinyang: {
+    id: 'yinyang', name: '阴阳先生·沈观星', short: '沈观星', startWeapon: 'compass',
+    trait: '攻击范围 +15%，持续与弹速 +15%', mods: { areaPct: 0.15, durPct: 0.15 },
+    unlock: { kind: 'evolves', value: 2, desc: '单局敕封开光 2 把神兵' },
+  },
+  tiejiang: {
+    id: 'tiejiang', name: '镇魂铁匠·石敢当', short: '石敢当', startWeapon: 'suohun_chain',
+    trait: '护甲 +2，伤害 +12%', mods: { armor: 2, dmgPct: 0.12 },
+    unlock: { kind: 'totalKills', value: 2500, desc: '累计打败 2500 只敌人' },
+  },
+  nuoxi: {
+    id: 'nuoxi', name: '傩戏传人·柳青衣', short: '柳青衣', startWeapon: 'nuo_drum',
+    trait: '移速 +12%，冷却缩减 +10%', mods: { speedPct: 0.12, cdr: 0.10 },
+    unlock: { kind: 'synergy6', value: 6, desc: '单局激活任意流派 6 件羁绊' },
+  },
 };
 export const HERO_IDS = Object.keys(HEROES);
 
-// ───────────────────────── 英雄专属大招（F10）─────────────────────────
+export const HERO_AFFINITY = {
+  dmgMul: 1.25,
+  cdMul: 0.90,
+  areaBonus: 0.15,
+};
+
+export function isHeroSignatureWeapon(heroId, weaponId) {
+  if (typeof heroId !== 'string' || typeof weaponId !== 'string') return false;
+  if (!Object.hasOwn(HEROES, heroId) || !Object.hasOwn(WEAPONS, weaponId)) return false;
+  return HEROES[heroId].startWeapon === weaponId;
+}
+
+// ───────────────────────── 英雄专属大招（F10 + v3 新增 3 位）─────────────────────────
 export const ULT = {
   max: 100,
   cost: 100,
@@ -496,7 +576,7 @@ export const ULT = {
   eliteCharge: 8, // 精英 +8
   bossCharge: 28,
   // 普通击杀攒气随时间衰减：× 1/(1 + decayPerMin × m)，让主线大约 50–80 秒放一次
-  decayPerMin: 2.5,
+  decayPerMin: 2.7,
   radius: 220,
   baseDmg: 85,
   perLevelDmg: 12,
@@ -534,6 +614,56 @@ export const ULT = {
     strikeDmgMul: 0.68,
     seekRange: 380,
     stun: 0.6,
+  },
+  yinyang: {
+    name: '奇门遁甲大阵',
+    burstR: 210,
+    burstDmgMul: 0.75,
+    fieldRadius: 195,
+    fieldLife: 3.2,
+    fieldTick: 0.30,
+    pullForce: 220,
+    gates: 4,
+    gateDelay: 0.24,
+    gateDist: 100,
+    gateRadius: 88,
+    gateDmgMul: 0.72,
+    vulnT: 4.0,
+    vulnPct: 0.30,
+    stun: 0.85,
+  },
+  tiejiang: {
+    name: '十方熔金镇狱锤',
+    slamR: 190,
+    slamDmgMul: 1.15,
+    wardInvuln: 1.8,
+    anvils: 10,
+    anvilInterval: 0.06,
+    ringDist: 135,
+    anvilRadius: 72,
+    anvilDmgMul: 0.65,
+    emberRadius: 145,
+    emberLife: 3.0,
+    emberTick: 0.35,
+    emberDmgMul: 0.32,
+    stun: 1.4,
+    vulnT: 4.0,
+    vulnPct: 0.25,
+  },
+  nuoxi: {
+    name: '大傩逐疫百相舞',
+    burstR: 180,
+    burstDmgMul: 0.65,
+    beats: 3,
+    beatInterval: 0.32,
+    beatRadius: 165,
+    beatDmgMul: 0.48,
+    danceT: 3.6,
+    danceSpeedMul: 1.22,
+    danceCdMul: 0.88,
+    stun: 0.8,
+    vulnT: 3.0,
+    vulnPct: 0.20,
   },
 };
 
@@ -621,12 +751,25 @@ export const CHEST = {
   evolvePushForce: 320,
 };
 
-// ───────────────────────── 铜钱结算 ─────────────────────────
+// ───────────────────────── 铜钱结算与守夜总榜计分 ─────────────────────────
 export const COIN_REWARD = {
   perMinute: 5, // 每坚持 1 分钟的基础铜钱（6 分钟死约 140–160，通关约 350–420）
   clearBonus: 55, // 通关额外
   endlessPerMinute: 12,
   nightPct: 0.15, // 夜色每级 +15%
+};
+
+export const SCORE_TUNING = {
+  perMainSec: 10, // 主线存活每秒 +10 分
+  perEndlessSec: 18, // 无尽残夜每秒 +18 分
+  perKill: 6, // 每斩散 1 只邪祟 +6 分
+  perBossKill: 1200, // 每讨伐 1 尊夜主 +1200 分
+  perEvolution: 600, // 每开光 1 把神兵 +600 分
+  perLevel: 50, // 每升 1 级（level - 1）+50 分
+  perCoopRevive: 350, // 联机每扶起 1 名队友 +350 分
+  clearBonus: 5000, // 守满五更破晓通关 +5000 分
+  nightBonusPerLv: 0.15, // 夜色每级总分乘算 +15%
+  maxScore: 1e9,
 };
 
 // ───────────────────────── 夜色 1–10（PLAN §4.7）─────────────────────────

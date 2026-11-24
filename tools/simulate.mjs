@@ -22,6 +22,7 @@ function parseArgs(argv) {
     meta: 0,
     night: 0,
     hero: 'zhou',
+    startWeapon: null,
     workers: Math.max(1, Math.min(2, os.cpus().length)),
     seed0: 1,
     json: false,
@@ -36,6 +37,7 @@ function parseArgs(argv) {
     else if (a === '--meta') (o.meta = +v), i++;
     else if (a === '--night') (o.night = +v), i++;
     else if (a === '--hero') (o.hero = v), i++;
+    else if (a === '--startWeapon') (o.startWeapon = v), i++;
     else if (a === '--workers') (o.workers = +v), i++;
     else if (a === '--seed0') (o.seed0 = +v), i++;
     else if (a === '--dt') (o.dt = 1 / +v), i++;
@@ -415,10 +417,14 @@ export function botInput(run, mem) {
 const WEAPON_PREF = {
   firecracker: 9.5,
   talisman: 9.4,
+  taomujian: 9.35,
   bell: 9.3,
   soulbanner: 9.3,
+  suohun_chain: 9.25,
+  zhinian_kite: 9.2,
   compass: 9.2,
   lantern: 9.2,
+  nuo_drum: 9.15,
   bronze_mirror: 9.1,
   paperhorse: 9.0,
   gong: 9.0,
@@ -430,8 +436,12 @@ const WEAPON_PREF = {
 const RELIC_PREF = {
   cinnabar: 7.0,
   clapper: 6.9,
+  leijimu: 6.8,
   fivecoins: 6.7,
+  yinpai: 6.65,
   soulwick: 6.6,
+  huoyao_pouch: 6.55,
+  wuse_mask: 6.5,
   bagua: 6.5,
   strawshoes: 6.4,
   glutinous: 6.4,
@@ -473,7 +483,8 @@ function scoreChoice(run, c) {
     case 'weapon': {
       const tags = BALANCE.WEAPONS[c.id]?.tags || [];
       const syn = c.isNew ? schoolBonusFor(run, tags) : 0;
-      return (c.isNew ? (WEAPON_PREF[c.id] ?? 8.8) + syn : 10.2 + c.level * 0.25) + (c.evolvable ? 5.5 : 0);
+      const sigBonus = BALANCE.isHeroSignatureWeapon?.(run.heroId, c.id) ? 0.8 : 0;
+      return (c.isNew ? (WEAPON_PREF[c.id] ?? 8.8) + syn : 10.2 + c.level * 0.25) + sigBonus + (c.evolvable ? 5.5 : 0);
     }
     case 'relic': {
       const def = BALANCE.RELICS[c.id];
@@ -580,9 +591,9 @@ export function botResolveShrine(run, mem = null) {
 
 // ───────────────────────── 单局 ─────────────────────────
 const ARRIVAL_LAG = 8;
-export function simulateOne({ seed, meta = 0, night = 0, hero = 'zhou', dt = DT, maxTime = MAIN_DURATION + 240 }) {
+export function simulateOne({ seed, meta = 0, night = 0, hero = 'zhou', startWeapon = null, dt = DT, maxTime = MAIN_DURATION + 240 }) {
   const metaB = metaBonusesFromLevels(metaLevelsForFraction(meta));
-  const run = createRun({ seed, heroId: hero, nightLevel: night, meta: metaB });
+  const run = createRun({ seed, heroId: hero, startWeapon, nightLevel: night, meta: metaB });
   const mem = { dismissedUntil: {} };
   const minutes = [];
   const evoRecipes = { paired: 0, resonance: 0, maxRelic: 0, altar: 0 };
@@ -816,7 +827,7 @@ async function runAll(o) {
     Array.from({ length: nW }, () =>
       new Promise((resolve, reject) => {
         const w = new Worker(self, {
-          workerData: { dynamic: true, meta: o.meta, night: o.night, hero: o.hero, dt: o.dt, maxTime: o.maxTime, set: o.set },
+          workerData: { dynamic: true, meta: o.meta, night: o.night, hero: o.hero, startWeapon: o.startWeapon, dt: o.dt, maxTime: o.maxTime, set: o.set },
         });
         const sendNext = () => {
           if (nextIdx < seeds.length) {

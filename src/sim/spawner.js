@@ -1,9 +1,16 @@
 // 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷巡更小头目与 Boss。
 
-import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, spawnRate } from './balance.js';
+import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate } from './balance.js';
 import { spawnEnemy, ringPoint } from './enemies.js';
 import { spawnBoss } from './bosses.js';
 import { findWell } from './props.js';
+import { coopSpawnScale, coopPartySize, nearestLivingPlayer } from './coop.js';
+
+function spawnAnchorPlayer(run) {
+  return run.player?.downed && coopPartySize(run) > 1
+    ? nearestLivingPlayer(run, run.player.x, run.player.y)
+    : run.player;
+}
 
 const ROSTER_LISTS = Object.fromEntries(
   Object.entries(ROSTER).map(([w, tbl]) => [w, Object.entries(tbl).map(([type, weight]) => ({ type, weight }))]),
@@ -53,7 +60,7 @@ function ensureAlleyFlow(run, dt) {
 
 function ambientSpawnPoint(run) {
   const rng = run.rng;
-  const p = run.player;
+  const p = spawnAnchorPlayer(run);
   const flow = run._alleyFlow || ensureAlleyFlow(run, 0);
   const roll = rng.next();
   let a;
@@ -78,11 +85,13 @@ function ambientSpawnPoint(run) {
 function spawnOne(run) {
   const def = run.rng.weighted(rosterFor(run));
   const type = def.type;
-  const eliteChance = Math.min(0.45, run.night.eliteChance * (run.mods?.eliteChanceMul || 1));
+  const m = spawnMinutes(run);
+  const baseElite = run.night.eliteChance + (ELITE.perMinute || 0) * Math.max(0, m - 2);
+  const eliteChance = Math.min(0.48, baseElite * (run.mods?.eliteChanceMul || 1));
   const elite = run.rng.chance(eliteChance);
   let pos = null;
   if (type === 'drowned') {
-    const well = findWell(run, ENEMY_AI.drowned.wellMin, ENEMY_AI.drowned.wellMax);
+    const well = findWell(run, ENEMY_AI.drowned.wellMin, ENEMY_AI.drowned.wellMax, spawnAnchorPlayer(run));
     if (well) pos = { x: well.x + run.rng.range(-well.r, well.r), y: well.y + run.rng.range(-well.r, well.r) };
   }
   if (!pos) pos = ambientSpawnPoint(run);
@@ -100,7 +109,7 @@ export function updateSpawner(run, dt) {
         run._warderSpawned[mw.id] = true;
         // 若被测试脚本大跨度跳转时间（超过 30 秒），跳过过时小头目
         if (run.time - mw.time <= 30) {
-          const pt = ringPoint(run, 340, 410, true);
+          const pt = ringPoint(run, 340, 410, true, spawnAnchorPlayer(run));
           spawnEnemy(run, mw.type, pt.x, pt.y, {
             elite: true,
             affix: mw.affix,
@@ -140,7 +149,7 @@ export function updateSpawner(run, dt) {
 
   updateWaves(run);
 
-  let rate = spawnRate(spawnMinutes(run)) * run.night.spawnMul * (run.mods?.spawnRateMul || 1);
+  let rate = spawnRate(spawnMinutes(run)) * run.night.spawnMul * (run.mods?.spawnRateMul || 1) * coopSpawnScale(run);
   if (run.boss) rate *= run.boss.type === 'youshen' ? SPAWN.youshenSpawnMul : SPAWN.bossSpawnMul;
   run._spawnAcc += rate * dt;
   while (run._spawnAcc >= 1) {
@@ -161,14 +170,19 @@ function updateWaves(run) {
   const rng = run.rng;
   run._nextWaveT = run.time + WAVES.every * rng.range(0.9, 1.1);
   const m = spawnMinutes(run);
-  const n = Math.min(WAVES.maxCount, Math.round(WAVES.baseCount + WAVES.perMinute * m), SPAWN.cap - run.enemies.length);
+  const waveScale = coopSpawnScale(run);
+  const n = Math.min(
+    Math.round(WAVES.maxCount * waveScale),
+    Math.round((WAVES.baseCount + WAVES.perMinute * m) * waveScale),
+    SPAWN.cap - run.enemies.length,
+  );
   if (n <= 0) return;
 
   const mainType = WAVES.types[run.mode === 'endless' ? 5 : Math.min(5, run.watch)];
   const roster = rosterFor(run);
   const pickWaveType = () => (rng.chance(0.78) ? mainType : rng.weighted(roster).type);
 
-  const p = run.player;
+  const p = spawnAnchorPlayer(run);
   const heading = p.moving ? Math.atan2(p.facingY, p.facingX) : rng.range(0, Math.PI * 2);
   const R = WAVES.radius;
   const styleRoll = rng.next();

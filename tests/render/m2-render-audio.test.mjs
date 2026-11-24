@@ -59,6 +59,10 @@ const CANONICAL_WEAPONS = [
   'soulbanner',
   'bronze_mirror',
   'paperhorse',
+  'taomujian',
+  'suohun_chain',
+  'zhinian_kite',
+  'nuo_drum',
 ];
 
 const CANONICAL_RELICS = [
@@ -74,6 +78,10 @@ const CANONICAL_RELICS = [
   'glutinous',
   'fivecoins',
   'soulwick',
+  'leijimu',
+  'yinpai',
+  'huoyao_pouch',
+  'wuse_mask',
 ];
 
 const CANONICAL_ENEMIES = [
@@ -256,7 +264,7 @@ test('icons.js & sprites.js：12 武器 + 12 独立开光神兵 + 12 法器 + 12
     assert.deepEqual(Object.keys(EVO_WEAPON_ICONS).sort(), [...CANONICAL_WEAPONS].sort());
     assert.deepEqual(Object.keys(RELIC_ICONS).sort(), [...CANONICAL_RELICS].sort());
     assert.deepEqual([...ENEMY_TYPES].sort(), [...CANONICAL_ENEMIES].sort());
-    assert.equal(Object.keys(EVOLVED_NAMES).length, 12);
+    assert.equal(Object.keys(EVOLVED_NAMES).length, 16);
 
     const weaponUrls = new Set();
     const evoUrls = new Set();
@@ -284,15 +292,15 @@ test('icons.js & sprites.js：12 武器 + 12 独立开光神兵 + 12 法器 + 12
       weaponUrls.add(uW);
       evoUrls.add(uE);
     }
-    assert.equal(weaponUrls.size, 12, '12 种基础武器 dataURL 必须两两互异');
-    assert.equal(evoUrls.size, 12, '12 种开光神兵 dataURL 必须两两互异');
+    assert.equal(weaponUrls.size, 16, '16 种基础武器 dataURL 必须两两互异');
+    assert.equal(evoUrls.size, 16, '16 种开光神兵 dataURL 必须两两互异');
 
     const relicUrls = new Set(CANONICAL_RELICS.map((id) => iconDataURL('relic', id, 64)));
-    assert.equal(relicUrls.size, 12, '12 种法器 dataURL 必须两两互异');
+    assert.equal(relicUrls.size, 16, '16 种法器 dataURL 必须两两互异');
 
-    const heroUrls = new Set(['zhou', 'mian', 'daotong'].map((id) => iconDataURL('hero', id, 64)));
-    assert.equal(heroUrls.size, 3);
-    assert.equal(Object.keys(HERO_ICONS).length, 3);
+    const heroUrls = new Set(['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'].map((id) => iconDataURL('hero', id, 64)));
+    assert.equal(heroUrls.size, 6);
+    assert.equal(Object.keys(HERO_ICONS).length, 6);
 
     const enemyUrls = new Set(CANONICAL_ENEMIES.map((id) => iconDataURL('enemy', id, 64)));
     assert.equal(enemyUrls.size, 12, '12 种邪祟/夜主实机立绘 dataURL 必须两两互异');
@@ -648,9 +656,8 @@ test('synth.js：Karplus-Strong 拨弦、15 基础音效、12 武器开火（含
     // 4. 验证 MAX_VOICES = 20 复音上限节流 + boss/dawn/gong 最高优先级穿透
     mockNow += 20;
     const twentyKeys = [
-      ...CANONICAL_WEAPONS.map((w) => 'fire_' + w), // 12
-      'explosion', 'wave', 'shrineActivate', 'synergyUp',
-      'blessingPick', 'warderSpawn', 'shieldBlock', 'heal', // +8 = 20
+      ...CANONICAL_WEAPONS.map((w) => 'fire_' + w), // 16
+      'explosion', 'wave', 'shrineActivate', 'synergyUp', // +4 = 20
     ];
     for (const k of twentyKeys) {
       assert.equal(audio.play(k), true, `声部填充 ${k} 应成功`);

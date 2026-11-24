@@ -1,61 +1,119 @@
-// Tier 3: Cross-Feature Combination & Interaction E2E Tests (18 multi-feature tests)
+// Tier 3: Cross-Feature Pairwise & Multi-Feature Combination E2E Tests (18 tests: T3-C01..T3-C18)
 // STRICT OPAQUE-BOX: ZERO imports from ../../src/**.
 
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {
+  ALL_WEAPON_IDS,
+  ATTACK_VFX_IDS,
+  COOP_SPEC,
+  DEFAULT_UNLOCKED_WEAPON_IDS,
+  HERO_IDS,
+  MAX_RELICS,
+  MAX_WEAPONS,
+  PRIMARY_LEADERBOARD_ID,
+} from './contracts.mjs';
+import {
   ROOT,
   VENV_PYTHON,
+  analyzeCanvasSpriteBox,
   bootAndStartRun,
+  bootColdIntro,
+  bootToHub,
+  checkHubSignatureBadge,
+  closeActiveModal,
+  compareSpriteSnapshots,
   confirmChestModal,
+  createCoopPages,
   createIsolatedPage,
+  engageInspectorPeek,
   execFileAsync,
   fastClick,
   grantItemViaLevelUp,
+  readLeaderboardBodyText,
+  readNormalizedSave,
+  releaseInspectorPeek,
   requireOpenSelector,
+  shopBuyAndEquipInModal,
+  stepCoopFrames,
   stepFrames,
+  suppressWardersInPage,
   triggerChest,
   triggerLevelUp,
 } from './harness.mjs';
+import { discoverCoopHeroSkins, launchTwoPageCoopRun } from './tier1-f8-f15.mjs';
 
 export const TIER3_TESTS = [
   {
     id: 'T3-C01',
     tier: 3,
-    feature: 'F3',
-    features: ['F3', 'F6'],
-    name: '[F3+F6] 镇魂 3-piece school resonance unlocks gong evolution in .overlay--chest without clapper + grants shockwave',
+    feature: 'F2',
+    features: ['F2', 'F3'],
+    name: '[F2+F3] Hero signature starter weapon (tiejiang + suohun_chain HERO_AFFINITY) + 6+6 loadout + yinpai paired Chest evolution',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { heroId: 'zhou', seed: 3101 }); // gong (zhenhun #1)
-        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4); // gong Lv5
-        await grantItemViaLevelUp(s.page, 'weapon', 'soulbanner', 1); // zhenhun #2
-        await grantItemViaLevelUp(s.page, 'relic', 'strawshoes', 1); // zhenhun #3 (NO clapper!)
+        await bootToHub(s.page, baseUrl, {
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS, selectedHero: 'tiejiang' },
+        });
+        await fastClick(s.page, '[data-hero-id="tiejiang"]');
+        await fastClick(s.page, '[data-starter-weapon="suohun_chain"]');
+        const badgeState = await checkHubSignatureBadge(s.page);
+        assert.equal(badgeState.visible, true, 'Expected .signature-badge visible on tiejiang + suohun_chain');
+        assert.ok(badgeState.text.includes('本命'), `Expected '本命' in .signature-badge, got '${badgeState.text}'`);
 
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.player.ult = 10;
-          r.projectiles.push({
-            id: 81001, kind: 'enemyBullet', x: r.player.x + 80, y: r.player.y,
-            r: 8, angle: 0, t: 0, life: 5, vx: 0, vy: 0, dmg: 12,
-          });
+        // Compare suohun_chain cooldown & damage on tiejiang (signature) vs zhou (non-signature)
+        const measureChain = (hid) =>
+          s.page.evaluate((h) => {
+            const g = window.__wugeng.game;
+            g.start({ heroId: h, startWeapon: 'suohun_chain', nightLevel: 0, meta: {}, charm: null, seed: 3001 });
+            const r = g.run;
+            r.enemies.length = 0;
+            r._spawnAcc = -99999;
+            r.mods.critChance = 0;
+            r._spawnQueue.push({ type: 'sedan', x: r.player.x + 56, y: r.player.y, opts: {} });
+            window.__e2eStepFrames(1);
+            r.enemies[0].hp = 9999;
+            r.enemies[0].maxHp = 9999;
+            r.enemies[0].speed = 0;
+            r.weapons[0].cd = 0;
+            window.__e2eStepFrames(1);
+            const cdAfter = r.weapons[0].cd;
+            window.__e2eStepFrames(12);
+            return { dmg: 9999 - r.enemies[0].hp, cdAfter };
+          }, hid);
+
+        const sig = await measureChain('tiejiang');
+        const nonSig = await measureChain('zhou');
+        assert.ok(sig.dmg > nonSig.dmg * 1.15, `Expected tiejiang signature suohun_chain dmg > zhou (${sig.dmg} vs ${nonSig.dmg})`);
+        assert.ok(sig.cdAfter < nonSig.cdAfter * 0.96, `Expected tiejiang signature cd < zhou (${sig.cdAfter} vs ${nonSig.cdAfter})`);
+
+        // Fill 6W+6R & evolve suohun_chain with yinpai
+        await bootAndStartRun(s.page, baseUrl, {
+          heroId: 'tiejiang',
+          startWeapon: 'suohun_chain',
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS },
+          seed: 3001,
         });
+        await grantItemViaLevelUp(s.page, 'weapon', 'suohun_chain', 4);
+        for (const wid of ['gong', 'talisman', 'compass', 'nuo_drum', 'taomujian']) {
+          await grantItemViaLevelUp(s.page, 'weapon', wid, 1);
+        }
+        for (const rid of ['yinpai', 'clapper', 'cinnabar', 'soulwick', 'wuse_mask', 'leijimu']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
         await triggerChest(s.page);
-        await confirmChestModal(s.page);
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          return {
-            synCount: r.synergies?.counts?.zhenhun,
-            evolved: r.weapons.find((w) => w.id === 'gong')?.evolved,
-            ult: r.player.ult,
-            bulletCleared: !r.projectiles.some((p) => p.id === 81001 && !p.dead),
-          };
-        });
-        assert.equal(res.synCount, 3);
-        assert.equal(res.evolved, true, 'Expected gong Lv5 to evolve via 3-piece zhenhun resonance');
-        assert.ok(res.ult >= 60);
-        assert.equal(res.bulletCleared, true);
+        await confirmChestModal(s.page, 'suohun_chain');
+
+        const finalState = await s.page.evaluate(() => ({
+          wLen: window.__wugeng.game.run.weapons.length,
+          rLen: window.__wugeng.game.run.relics.length,
+          evolved: window.__wugeng.game.run.weapons.find((w) => w.id === 'suohun_chain')?.evolved,
+        }));
+        assert.equal(finalState.wLen, MAX_WEAPONS);
+        assert.equal(finalState.rLen, MAX_RELICS);
+        assert.equal(finalState.evolved, true);
         s.assertNoErrors('T3-C01');
       } finally {
         await s.close();
@@ -65,28 +123,50 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C02',
     tier: 3,
-    feature: 'F5',
-    features: ['F3', 'F5', 'F6'],
-    name: '[F3+F5+F6] Dual-tag bronze_mirror (daofa+yangyan) Lv5 evolves via yangyan 3-piece resonance without fivecoins',
+    feature: 'F3',
+    features: ['F2', 'F3', 'F4'],
+    name: '[F2+F3+F4] Non-signature starter weapon (yinyang + nuo_drum) + 6+6 slot cap + 3-piece school resonance evolution',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3102 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'bronze_mirror', 5); // yangyan #1 + daofa #1
-        await grantItemViaLevelUp(s.page, 'weapon', 'lantern', 1); // yangyan #2
-        await grantItemViaLevelUp(s.page, 'relic', 'tinder', 1); // yangyan #3 (NO fivecoins!)
-        await triggerChest(s.page);
-        await confirmChestModal(s.page, 'bronze_mirror');
+        await bootAndStartRun(s.page, baseUrl, {
+          heroId: 'yinyang',
+          startWeapon: 'nuo_drum',
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS },
+          seed: 3002,
+        });
+        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 5); // zhenhun #1 Lv5
+        await grantItemViaLevelUp(s.page, 'weapon', 'soulbanner', 1); // zhenhun #2
+        await grantItemViaLevelUp(s.page, 'weapon', 'taomujian', 1);
+        await grantItemViaLevelUp(s.page, 'weapon', 'zhinian_kite', 1);
+        await grantItemViaLevelUp(s.page, 'weapon', 'talisman', 1);
 
+        await grantItemViaLevelUp(s.page, 'relic', 'strawshoes', 1); // zhenhun #3 (NO clapper!)
+        for (const rid of ['leijimu', 'wuse_mask', 'cinnabar', 'censer', 'bagua']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
+
+        await s.page.evaluate(() => { window.__wugeng.game.run.rerolls.free = 6; });
+        await triggerLevelUp(s.page);
+        for (let i = 0; i < 4; i++) {
+          const anyNew = await s.page.evaluate(() => window.__wugeng.game.run.choices.some((c) => c.isNew));
+          assert.equal(anyNew, false, 'Full 6+6 loadout must block 7th isNew item');
+          await fastClick(s.page, '[data-action="reroll"]');
+        }
+        await fastClick(s.page, '.qian');
+
+        await triggerChest(s.page);
+        await confirmChestModal(s.page, 'gong');
         const res = await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
-          return {
-            yangyan: r.synergies?.counts?.yangyan,
-            evolved: r.weapons.find((w) => w.id === 'bronze_mirror')?.evolved,
-          };
+          const gongEvo = r.weapons.find((w) => w.id === 'gong')?.evolved;
+          const sum = window.__wugeng.game.finish();
+          return { gongEvo, signatureStart: sum.signatureStart, startWeapon: sum.startWeapon };
         });
-        assert.equal(res.yangyan, 3);
-        assert.equal(res.evolved, true, 'Expected dual-tag bronze_mirror Lv5 to evolve via 3-piece yangyan resonance');
+        assert.equal(res.gongEvo, true, 'gong Lv5 must evolve via 3-piece zhenhun school resonance without clapper');
+        assert.equal(res.startWeapon, 'nuo_drum');
+        assert.equal(res.signatureStart, false);
         s.assertNoErrors('T3-C02');
       } finally {
         await s.close();
@@ -96,45 +176,87 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C03',
     tier: 3,
-    feature: 'F9',
-    features: ['F9', 'F3', 'F12'],
-    name: '[F9+F3+F12] 土地香案 (altar) blood-rite enables altar evolution path for Lv5 weapon & syncs Codex',
+    feature: 'F8',
+    features: ['F8', 'F5', 'F6', 'F4'],
+    name: '[F8+F5+F6+F4] Ghost-Market Shop buy skin + jade_ghostfire VFX -> live emerald VFX while Boss telegraph stays #C23B26',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3103 });
-        // Upgrade gong to Lv5 with ZERO relics and only 1 school item (only altar rite can unlock/evolve it!)
-        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
-        const hasShrines = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          if (!Array.isArray(r.shrines)) return false;
-          const altar = r.shrines.find((x) => x.kind === 'altar' && !x.used);
-          if (!altar) return false;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.player.hp = r.player.maxHp;
-          r.player.x = altar.x;
-          r.player.y = altar.y;
-          window.__e2eStepFrames(3);
-          return true;
-        });
-        assert.equal(hasShrines, true, 'Expected starter altar shrine');
+        await bootToHub(s.page, baseUrl, { savePatch: { coins: 6000, unlockedHeroes: HERO_IDS, selectedHero: 'zhou' } });
+        await fastClick(s.page, '[data-action="open-market"]');
+        await requireOpenSelector(s.page, '.cosmetic-shop-modal');
 
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
-        await requireOpenSelector(s.page, '.overlay--shrine', 'Expected .overlay--shrine');
-        await fastClick(s.page, '.overlay--shrine [data-shrine-option]:not([disabled])');
-        if (await s.page.evaluate(() => window.__wugeng.overlay === 'levelup')) {
-          await fastClick(s.page, '.qian');
-        }
-        let evolved = await s.page.evaluate(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong').evolved);
-        if (!evolved) {
-          await triggerChest(s.page);
-          await confirmChestModal(s.page);
-          evolved = await s.page.evaluate(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong').evolved);
-        }
-        assert.equal(evolved, true, 'Expected altar blood-rite path to evolve Lv5 gong without paired relic or school resonance');
-        const inCodex = await s.page.evaluate(() => window.__wugeng.save.codex.evolutions.includes('gong'));
-        assert.equal(inCodex, true, 'Expected altar-evolved weapon synced into save.codex.evolutions');
+        const skinRes = await shopBuyAndEquipInModal(s.page, {
+          kind: 'skin',
+          heroId: 'zhou',
+          targetIdx: 1,
+          buy: true,
+          equip: true,
+          close: false,
+        });
+        assert.equal(skinRes.ok, true, skinRes.reason || 'Failed buying skin in T3-C03');
+        const vfxRes = await shopBuyAndEquipInModal(s.page, {
+          kind: 'vfx',
+          vfxId: 'jade_ghostfire',
+          buy: true,
+          equip: true,
+          close: true,
+        });
+        assert.equal(vfxRes.ok, true, vfxRes.reason || 'Failed buying jade_ghostfire in T3-C03');
+
+        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+        await stepFrames(s.page, 2);
+
+        const colors = await s.page.evaluate(async () => {
+          const w = window.__wugeng;
+          const r = w.game.run;
+          r.props.length = 0;
+          r.pickups.length = 0;
+          r.darkness = 0.4;
+          r.enemies = [
+            {
+              id: 77801, type: 'horse', boss: true, elite: false,
+              x: r.player.x - 100, y: r.player.y + 80, r: 26, hp: 9999, maxHp: 9999,
+              state: 'windup', stateT: 0.45, windupT: 0.45, chargeAngle: 0, angle: 0, dx: 1, dy: 0, telegraphLen: 300,
+              hitT: 0, slowT: 0, stunT: 0, kbx: 0, kby: 0, dead: false,
+            },
+          ];
+          r.boss = r.enemies[0];
+          r.projectiles = [
+            { id: 77802, kind: 'gongPulse', x: r.player.x, y: r.player.y - 70, r: 58, radius: 58, maxRadius: 78, t: 0.12, life: 0.35, evolved: true, attackVfx: 'jade_ghostfire' },
+          ];
+          w.game.pause();
+          await new Promise((res) => requestAnimationFrame(res));
+          await new Promise((res) => requestAnimationFrame(res));
+
+          const c = document.getElementById('game-canvas');
+          const ctx = c.getContext('2d');
+          const dpr = c.width / window.innerWidth;
+          const playerBox = ctx.getImageData(
+            Math.floor((window.innerWidth / 2 - 70) * dpr),
+            Math.floor((window.innerHeight / 2 - 140) * dpr),
+            Math.floor(140 * dpr),
+            Math.floor(140 * dpr),
+          ).data;
+          let jadePx = 0;
+          for (let i = 0; i < playerBox.length; i += 4) {
+            if (playerBox[i + 1] > playerBox[i] + 20 && playerBox[i + 1] > 95) jadePx++;
+          }
+          const teleBox = ctx.getImageData(
+            Math.floor((window.innerWidth / 2 - 20) * dpr),
+            Math.floor((window.innerHeight / 2 + 50) * dpr),
+            Math.floor(100 * dpr),
+            Math.floor(60 * dpr),
+          ).data;
+          let vermPx = 0;
+          for (let i = 0; i < teleBox.length; i += 4) {
+            if (teleBox[i] >= 105 && teleBox[i] - teleBox[i + 1] >= 40 && teleBox[i] - teleBox[i + 2] >= 45) vermPx++;
+          }
+          return { jadePx, vermPx };
+        });
+
+        assert.ok(colors.jadePx >= 20, `Expected emerald player VFX pixels (>=20), got ${colors.jadePx}`);
+        assert.ok(colors.vermPx >= 15, `Expected Boss telegraph to stay #C23B26 vermilion (>=15), got ${colors.vermPx}`);
         s.assertNoErrors('T3-C03');
       } finally {
         await s.close();
@@ -144,47 +266,42 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C04',
     tier: 3,
-    feature: 'F8',
-    features: ['F9', 'F8'],
-    name: '[F9+F8] 鬼市货郎 (peddler) grants extra reroll/banish charges usable on subsequent .overlay--levelup',
+    feature: 'F7',
+    features: ['F7', 'F2', 'F5', 'F6'],
+    name: '[F7+F2+F5+F6] Hub Dynamic Stage (.hero-stage__canvas) reflects Hero x Skin x Starter Weapon x Attack VFX',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3104 });
-        const setup = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          if (!Array.isArray(r.shrines)) return false;
-          const ped = r.shrines.find((x) => x.kind === 'peddler' && !x.used);
-          if (!ped) return false;
-          r.banishesLeft = 0;
-          r.rerolls.free = 0;
-          r.stats.coins = 500;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.player.x = ped.x;
-          r.player.y = ped.y;
-          window.__e2eStepFrames(3);
-          return true;
+        await bootToHub(s.page, baseUrl, {
+          savePatch: {
+            coins: 9999,
+            unlockedHeroes: HERO_IDS,
+            unlockedWeapons: ALL_WEAPON_IDS,
+            selectedHero: 'zhou',
+          },
         });
-        assert.equal(setup, true, 'Expected starter peddler shrine');
+        const stageSel = (await s.page.$('.hero-stage__canvas')) ? '.hero-stage__canvas' : '.screen--hub canvas';
+        const snapBase = await analyzeCanvasSpriteBox(s.page, stageSel);
 
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
-        await requireOpenSelector(s.page, '.overlay--shrine', 'Expected .overlay--shrine');
-        const chargeIdx = await s.page.evaluate(() => {
-          const opts = window.__wugeng.game.run.activeShrine?.options || [];
-          return opts.findIndex((o) => !o.disabled && /签|刷|弃|换/.test(`${o.label}${o.desc}`));
+        await fastClick(s.page, '[data-hero-id="nuoxi"]');
+        await fastClick(s.page, '[data-starter-weapon="taomujian"]');
+        await fastClick(s.page, '[data-action="open-market"]');
+        await requireOpenSelector(s.page, '.cosmetic-shop-modal');
+        const vtRes = await shopBuyAndEquipInModal(s.page, {
+          kind: 'vfx',
+          vfxId: 'violet_thunder',
+          buy: true,
+          equip: true,
+          close: true,
         });
-        assert.ok(chargeIdx >= 0, 'Expected peddler to offer a reroll/banish slip-agency option');
-        await fastClick(s.page, `.overlay--shrine [data-shrine-option="${chargeIdx}"]`);
+        assert.equal(vtRes.ok, true, vtRes.reason || 'Failed equipping violet_thunder in T3-C04');
+        await s.page.waitForTimeout(120);
 
-        const agencyAfter = await s.page.evaluate(() => ({
-          banishes: window.__wugeng.game.run.banishesLeft,
-          rerolls: window.__wugeng.game.run.rerolls.free,
-        }));
-        assert.ok(
-          agencyAfter.banishes > 0 || agencyAfter.rerolls > 0,
-          `Expected peddler slip option to replenish banishes or free rerolls: ${JSON.stringify(agencyAfter)}`,
-        );
+        const snapUpdated = await analyzeCanvasSpriteBox(s.page, stageSel);
+        const cmp = compareSpriteSnapshots(snapBase, snapUpdated);
+        assert.ok(cmp.pixelDiffRatio > 0.14, `Expected Hub stage canvas to change >14%, got ${(cmp.pixelDiffRatio * 100).toFixed(1)}%`);
+        const overflow = await s.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        assert.ok(overflow <= 1);
         s.assertNoErrors('T3-C04');
       } finally {
         await s.close();
@@ -194,39 +311,60 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C05',
     tier: 3,
-    feature: 'F7',
-    features: ['F8', 'F7'],
-    name: '[F8+F7] Locked normal slip (留签) survives across a 120s 守夜命签 watch blessing draw into the next normal level-up',
+    feature: 'F9',
+    features: ['F9', 'F2', 'F3'],
+    name: '[F9+F2+F3] Achievement unlocks exclusive weapon (taomujian) -> Hub starter pick -> in-run combat damage',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3105 });
-        await triggerLevelUp(s.page);
-        const lockedTargetId = await s.page.getAttribute('.qian >> nth=1', 'data-item-id');
-        assert.ok(lockedTargetId, 'Expected data-item-id on .qian');
+        await bootToHub(s.page, baseUrl, {
+          savePatch: {
+            unlockedHeroes: HERO_IDS,
+            unlockedWeapons: DEFAULT_UNLOCKED_WEAPON_IDS,
+            nightUnlocked: 10,
+            nightCleared: 10,
+            stats: {
+              runs: 30, clears: 10, firstRunDone: true, bestTimeSec: 1200,
+              bestKills: 3500, bestHit: 50_000, totalKills: 25_000,
+              totalEvolutions: 30, totalBossKills: 25, coopRuns: 6, coopRevives: 6,
+            },
+          },
+        });
+        await fastClick(s.page, '[data-action="open-achievements"]');
+        await s.page.evaluate(async () => {
+          const modal = document.querySelector('.achievements-modal');
+          const claimAll = () => {
+            modal.querySelectorAll('button:not([disabled])').forEach((b) => {
+              if (/领|取|赏/.test(b.textContent || '')) b.click();
+            });
+          };
+          claimAll();
+          for (const t of modal.querySelectorAll('[data-ach-tab], [data-category], [role="tab"]')) {
+            t.click();
+            await new Promise((r) => requestAnimationFrame(r));
+            claimAll();
+          }
+        });
+        await closeActiveModal(s.page, 'close-achievements');
 
-        assert.ok(await s.page.locator('[data-action="lock"]').count() > 0, 'Expected [data-action="lock"]');
-        const cardLock = s.page.locator('.qian >> nth=1 >> [data-action="lock"]');
-        if (await cardLock.count() > 0) await cardLock.first().click();
-        else { await fastClick(s.page, '[data-action="lock"]'); await s.page.evaluate(() => document.querySelectorAll('.qian')[1]?.click()); }
-        await fastClick(s.page, '.qian');
+        await fastClick(s.page, '[data-starter-weapon="taomujian"]');
+        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+        await stepFrames(s.page, 2);
 
-        await s.page.evaluate(() => {
+        const dmg = await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.time = 119.97;
-          window.__e2eStepFrames(4);
+          r._spawnQueue.push({ type: 'sedan', x: r.player.x + 80, y: r.player.y, opts: {} });
+          window.__e2eStepFrames(1);
+          r.enemies[0].hp = 9999;
+          r.enemies[0].speed = 0;
+          r.weapons[0].cd = 0;
+          window.__e2eStepFrames(35);
+          return { wid: r.weapons[0].id, dealt: 9999 - r.enemies[0].hp };
         });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
-        await fastClick(s.page, '.qian');
-
-        await triggerLevelUp(s.page);
-        const idsAfterBlessing = await s.page.evaluate(() => window.__wugeng.game.run.choices.map((c) => c.id));
-        assert.ok(
-          idsAfterBlessing.includes(lockedTargetId),
-          `Locked slip '${lockedTargetId}' must survive across intervening watch blessing draw (got ${idsAfterBlessing.join(',')})`,
-        );
+        assert.equal(dmg.wid, 'taomujian');
+        assert.ok(dmg.dealt > 0, 'Unlocked taomujian starter weapon must deal combat damage');
         s.assertNoErrors('T3-C05');
       } finally {
         await s.close();
@@ -236,53 +374,105 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C06',
     tier: 3,
-    feature: 'F1',
-    features: ['F5', 'F1'],
-    name: '[F5+F1] Glutinous (糯米) extends F1 post-hit hurtInvuln beyond base 0.24s and heals on retaliatory kills',
+    feature: 'F9',
+    features: ['F9', 'F5', 'F8'],
+    name: '[F9+F5+F8] Achievement unlocks exclusive Hero Skin -> synced owned & wearable in Ghost-Market Shop for 0 copper',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3106 });
-        await grantItemViaLevelUp(s.page, 'relic', 'glutinous', 4);
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.weapons.forEach((w) => { w.cd = 9999; });
-          r.player.hp = 60;
-          r.player.invulnT = 0;
-          r._spawnQueue.push({ type: 'paperkid', x: r.player.x + 5, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(2);
-          const invulnAfterHit = r.player.invulnT;
-          const hpAfterHit = r.player.hp;
-
-          r.enemies.length = 0;
-          r._nextWaveT = 99999;
-          r.mods.pickupRange = 1;
-          const kills0 = r.stats.kills;
-          for (let wave = 0; wave < 2; wave++) {
-            r.pickups.length = 0;
-            for (let i = 0; i < 24; i++) {
-              const a = (i / 24) * Math.PI * 2;
-              r._spawnQueue.push({
-                type: 'paperkid',
-                x: r.player.x + Math.cos(a) * 34,
-                y: r.player.y + Math.sin(a) * 34,
-                opts: { fixedHp: 1, atkT: 10 },
-              });
-            }
-            window.__e2eStepFrames(1);
-            r.weapons[0].cd = 0;
-            window.__e2eStepFrames(2);
-          }
-          return { invulnAfterHit, hpAfterHit, hpAfterKills: r.player.hp, killsDelta: r.stats.kills - kills0 };
+        await bootToHub(s.page, baseUrl, {
+          savePatch: {
+            coins: 0,
+            unlockedHeroes: HERO_IDS,
+            nightUnlocked: 10,
+            nightCleared: 10,
+            stats: {
+              runs: 30, clears: 10, firstRunDone: true, bestTimeSec: 1200,
+              bestKills: 3500, bestHit: 50_000, totalKills: 25_000,
+              totalEvolutions: 30, totalBossKills: 25, coopRuns: 6, coopRevives: 6,
+            },
+          },
         });
-        assert.ok(
-          res.invulnAfterHit > 0.26,
-          `Expected glutinous Lv4 to extend post-hit invulnT > 0.26s (above base 0.24s), got ${res.invulnAfterHit}`,
-        );
-        assert.ok(res.killsDelta >= 35, `Expected >= 35 kills across two gong waves for glutinous killInterval=35, got ${res.killsDelta}`);
-        assert.ok(res.hpAfterKills > res.hpAfterHit + 0.5, `Expected glutinous kill-heal after wiping swarm (${res.hpAfterHit} -> ${res.hpAfterKills})`);
+        await fastClick(s.page, '[data-action="open-achievements"]');
+        await s.page.evaluate(async () => {
+          const modal = document.querySelector('.achievements-modal');
+          const claimAll = () => {
+            modal.querySelectorAll('button:not([disabled])').forEach((b) => {
+              if (/领|取|赏/.test(b.textContent || '')) b.click();
+            });
+          };
+          claimAll();
+          for (const t of modal.querySelectorAll('[data-ach-tab], [data-category], [role="tab"]')) {
+            t.click();
+            await new Promise((r) => requestAnimationFrame(r));
+            claimAll();
+          }
+        });
+        await closeActiveModal(s.page, 'close-achievements');
+
+        const afterAchSave = await readNormalizedSave(s.page);
+        const coinsAfterAch = afterAchSave.coins;
+        const unlockedAchSkins = afterAchSave.ownedCosmetics.filter((id) => !ATTACK_VFX_IDS.includes(id) && !/default$/i.test(id));
+        assert.ok(unlockedAchSkins.length >= 1, `Expected >= 1 achievement skin unlocked, got [${unlockedAchSkins.join(',')}]`);
+
+        await fastClick(s.page, '[data-action="open-market"]');
+        await requireOpenSelector(s.page, '.cosmetic-shop-modal');
+        const equippedAchSkin = await s.page.evaluate(async ({ heroIds, achSkinIds }) => {
+          const modal = document.querySelector('.cosmetic-shop-modal');
+          const vfxRe = /青冥幽火|紫电天罡|鎏金神诏|玄霜寒月|古墨朱砂/;
+          const equipRe = /穿戴|装备|披挂|启用|使用/;
+
+          const tryEquipUnlocked = async () => {
+            const cards = [...modal.querySelectorAll('[data-skin-id], [data-cosmetic-id], .cosmetic-card, .market-card, .shop-card')].filter(
+              (c) => !c.hasAttribute('data-vfx-id') && !vfxRe.test(c.textContent || ''),
+            );
+            const candidates = cards.filter((c) => {
+              const cid = c.dataset?.skinId || c.dataset?.cosmeticId || c.dataset?.id || '';
+              if (cid && achSkinIds.includes(cid)) return true;
+              if (/默认|原装|初始|default/i.test(cid + ' ' + (c.textContent || ''))) return false;
+              return /功绩|成就|已拥有|已解锁|穿戴|装备/.test(c.textContent || '');
+            });
+            for (const c of candidates) {
+              c.click();
+              await new Promise((r) => requestAnimationFrame(r));
+              const inCard = [...c.querySelectorAll('button')].find((b) => !b.disabled && equipRe.test(b.textContent || ''));
+              const selfBtn = c.tagName === 'BUTTON' && !c.disabled && equipRe.test(c.textContent || '') ? c : null;
+              const inModal = [...modal.querySelectorAll('button')].find((b) => {
+                if (b.disabled || !equipRe.test(b.textContent || '')) return false;
+                const owner = b.closest('[data-skin-id], [data-vfx-id], [data-cosmetic-id], .cosmetic-card, .market-card, .shop-card');
+                return !owner || owner === c;
+              });
+              const eq = inCard || selfBtn || inModal;
+              if (eq) {
+                eq.click();
+                await new Promise((r) => requestAnimationFrame(r));
+                return true;
+              }
+            }
+            return false;
+          };
+
+          if (await tryEquipUnlocked()) return true;
+          for (const hid of heroIds) {
+            const hBtn = modal.querySelector(
+              `[data-shop-hero="${hid}"]:not([data-skin-id]):not(.cosmetic-card):not(.shop-card):not(.market-card), ` +
+              `[data-filter-hero="${hid}"]:not([data-skin-id]):not(.cosmetic-card):not(.shop-card):not(.market-card), ` +
+              `[data-hero-id="${hid}"]:not([data-skin-id]):not([data-cosmetic-id]):not(.cosmetic-card):not(.shop-card):not(.market-card)`,
+            );
+            if (hBtn) {
+              hBtn.click();
+              await new Promise((r) => requestAnimationFrame(r));
+              if (await tryEquipUnlocked()) return true;
+            }
+          }
+          return false;
+        }, { heroIds: HERO_IDS, achSkinIds: unlockedAchSkins });
+        assert.equal(equippedAchSkin, true, 'Expected achievement-unlocked skin wearable in Ghost-Market Shop');
+        await closeActiveModal(s.page, 'close-market');
+
+        const afterShop = await readNormalizedSave(s.page);
+        assert.equal(afterShop.coins, coinsAfterAch, 'Equipping achievement-unlocked skin in Market must spend 0 copper');
+        assert.ok(Object.values(afterShop.heroSkins).some((v) => v && !/default$/i.test(v)), 'Expected achievement skin equipped on hero');
         s.assertNoErrors('T3-C06');
       } finally {
         await s.close();
@@ -292,42 +482,45 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C07',
     tier: 3,
-    feature: 'F2',
-    features: ['F5', 'F2'],
-    name: '[F5+F2] Strawshoes (草鞋) speed + slow-resist counters drowned aura to outrun Watch 5 shade & weasel',
+    feature: 'F10',
+    features: ['F10', 'F3'],
+    name: '[F10+F3] Loadout Inspector + peek-battlefield across .overlay--levelup & .overlay--chest with full 6+6 build',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3107 });
-        await grantItemViaLevelUp(s.page, 'relic', 'strawshoes', 3);
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r._bossSpawned = { horse: true, umbrella: true, youshen: true };
-          r._warderSpawned = { warder_150: true, warder_360: true };
-          r.weapons.forEach((w) => { w.cd = 9999; });
-          r.time = 500;
-          r.watch = 5;
-          r._spawnQueue.push({ type: 'drowned', x: r.player.x, y: r.player.y + 45, opts: { atkT: 20 } });
-          r._spawnQueue.push({ type: 'shade', x: r.player.x - 220, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(2);
+        await bootAndStartRun(s.page, baseUrl, {
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: { unlockedWeapons: ALL_WEAPON_IDS },
+          seed: 3007,
         });
-        await s.page.keyboard.down('KeyD');
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          const x0 = r.player.x;
-          const t0 = r.time;
-          window.__e2eStepFrames(10, { preserveInput: true });
-          const effectivePlayerSpeed = (r.player.x - x0) / (r.time - t0);
-          const shadeSpeed = r.enemies.find((e) => e.type === 'shade').speed;
-          return { effectivePlayerSpeed, shadeSpeed };
-        });
-        await s.page.keyboard.up('KeyD');
-        assert.ok(
-          res.effectivePlayerSpeed > res.shadeSpeed,
-          `Player with strawshoes Lv3 inside drowned aura (${res.effectivePlayerSpeed.toFixed(1)}) should still outrun Watch 5 shade (${res.shadeSpeed.toFixed(1)})`,
-        );
+        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
+        await grantItemViaLevelUp(s.page, 'weapon', 'talisman', 5);
+        for (const wid of ['compass', 'suohun_chain', 'nuo_drum', 'taomujian']) {
+          await grantItemViaLevelUp(s.page, 'weapon', wid, 1);
+        }
+        for (const rid of ['clapper', 'cinnabar', 'soulwick', 'yinpai', 'wuse_mask', 'leijimu']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
+
+        await triggerLevelUp(s.page);
+        await requireOpenSelector(s.page, '.overlay--levelup .selection-owned-bar');
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        const peek1 = await engageInspectorPeek(s.page);
+        assert.ok(peek1.state.effectiveOpacity <= 0.45);
+        await releaseInspectorPeek(s.page, peek1.mode);
+        await fastClick(s.page, '[data-action="close-inspector"]');
+        assert.equal(await s.page.evaluate(() => window.__wugeng.overlay), 'levelup');
+        await fastClick(s.page, '.qian');
+
+        await triggerChest(s.page);
+        await requireOpenSelector(s.page, '.overlay--chest .selection-owned-bar');
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        const peek2 = await engageInspectorPeek(s.page);
+        assert.ok(peek2.state.effectiveOpacity <= 0.45);
+        await releaseInspectorPeek(s.page, peek2.mode);
+        await fastClick(s.page, '[data-action="close-inspector"]');
+        assert.equal(await s.page.evaluate(() => window.__wugeng.overlay), 'chest');
+        await confirmChestModal(s.page, 'gong');
         s.assertNoErrors('T3-C07');
       } finally {
         await s.close();
@@ -338,45 +531,43 @@ export const TIER3_TESTS = [
     id: 'T3-C08',
     tier: 3,
     feature: 'F10',
-    features: ['F5', 'F10'],
-    name: '[F5+F10] Soulwick (引魂灯芯) + daotong 九天玄雷敕 ultimate spawns thunderBolts & refunds weapon cooldowns',
+    features: ['F10', 'F2', 'F4'],
+    name: '[F10+F2+F4] Shrine modal (.overlay--shrine) Loadout Inspector preserves shrine options & resolves cleanly',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
         await bootAndStartRun(s.page, baseUrl, {
-          heroId: 'daotong',
-          seed: 3108,
-          savePatch: { unlockedHeroes: ['zhou', 'daotong'], selectedHero: 'daotong' },
+          heroId: 'yinyang',
+          startWeapon: 'compass',
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS },
+          seed: 3008,
         });
-        await grantItemViaLevelUp(s.page, 'relic', 'soulwick', 3);
-        await grantItemViaLevelUp(s.page, 'weapon', 'compass', 2);
+        await grantItemViaLevelUp(s.page, 'weapon', 'talisman', 1); // daofa 2pc
 
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
+          const ped = r.shrines.find((x) => x.kind === 'peddler' && !x.used) || r.shrines.find((x) => !x.used);
+          r.stats.coins = 500;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r._spawnQueue.push({ type: 'sedan', x: r.player.x + 95, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(1);
-          r.enemies[0].hp = 9999;
-          r.weapons.forEach((w) => { w.cd = 3.0; });
-          r.player.ult = r.player.ultMax;
+          r.player.x = ped.x;
+          r.player.y = ped.y;
+          window.__e2eStepFrames(3);
         });
-        await s.page.keyboard.press('Space');
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          let sawThunder = false;
-          window.__e2eStepFrames(15, {
-            onStep: () => {
-              if (r.projectiles.some((p) => p.kind === 'thunderBolt')) sawThunder = true;
-            },
-          });
-          return {
-            sawThunder,
-            maxCd: Math.max(...r.weapons.map((w) => w.cd)),
-          };
-        });
-        assert.equal(res.sawThunder, true, 'Expected daotong ultimate to spawn thunderBolt strikes');
-        assert.ok(res.maxCd < 2.5, `Expected soulwick to refund weapon cooldowns from 3.0s down to <2.5s (got ${res.maxCd})`);
+        await fastClick(s.page, '[data-action="interact-shrine"]');
+        await requireOpenSelector(s.page, '.overlay--shrine');
+        const optsBefore = await s.page.evaluate(() => JSON.stringify(window.__wugeng.game.run.activeShrine?.options || []));
+
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        assert.equal(await s.page.evaluate(() => window.__wugeng.inspectorOpen && window.__wugeng.overlay === 'shrine'), true);
+        const inspText = (await s.page.textContent('.veil--inspector')) || '';
+        assert.ok(inspText.includes('道法'), 'Inspector inside shrine must display active 道法 synergy');
+        await fastClick(s.page, '[data-action="close-inspector"]');
+
+        const optsAfter = await s.page.evaluate(() => JSON.stringify(window.__wugeng.game.run.activeShrine?.options || []));
+        assert.equal(optsAfter, optsBefore);
+        await fastClick(s.page, '.overlay--shrine [data-shrine-option]:not([disabled])');
         s.assertNoErrors('T3-C08');
       } finally {
         await s.close();
@@ -386,46 +577,55 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C09',
     tier: 3,
-    feature: 'F6',
-    features: ['F4', 'F6'],
-    name: '[F4+F6] 4-piece 镇魂 synergy + evolved 五更鸣锣 & 千铃引魂 amplifies stun control & chain crowd wipe',
+    feature: 'F11',
+    features: ['F11', 'F8', 'F9'],
+    name: '[F11+F8+F9] Cloud Save v3 sync (?mockCloud=1) + Copper Shop (cosmeticShopSpent) + remote Achievement union merge',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, { isolated: true });
       try {
-        await bootAndStartRun(s.page, baseUrl, { heroId: 'zhou', seed: 3109 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
-        await grantItemViaLevelUp(s.page, 'relic', 'clapper', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-        await grantItemViaLevelUp(s.page, 'weapon', 'bell', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'redstring', 1); // 4 zhenhun!
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r._nextWaveT = 99999;
-          for (let i = 0; i < 10; i++) {
-            r._spawnQueue.push({
-              type: 'drowned',
-              x: r.player.x + 65 + (i % 5) * 18,
-              y: r.player.y - 20 + Math.floor(i / 5) * 35,
-              opts: {},
-            });
-          }
-          window.__e2eStepFrames(1);
-          r.enemies.forEach((e) => { e.hp = 800; e.maxHp = 800; });
-          r.weapons.forEach((w) => { w.cd = 0; });
-          window.__e2eStepFrames(30);
-          return {
-            tier: r.synergies?.active?.find((a) => a.tag === 'zhenhun')?.tier,
-            stunnedOrDead: (10 - r.enemies.length) + r.enemies.filter((e) => e.dead || e.stunT > 0 || e.hp < 800).length,
-          };
+        await bootToHub(s.page, baseUrl, {
+          query: 'mockCloud=1',
+          savePatch: {
+            coins: 3000,
+            unlockedHeroes: HERO_IDS,
+            unlockedWeapons: [...DEFAULT_UNLOCKED_WEAPON_IDS, 'taomujian'],
+            achievements: { firstClear: 1700000001000 },
+          },
         });
-        assert.equal(res.tier, 4);
-        assert.equal(res.stunnedOrDead, 10, 'Expected 4-piece zhenhun + evolved gong/bell to stun & chain all 10 enemies');
+        await s.page.evaluate(async () => {
+          window.__wugeng.save.updatedAt = 1700000020000;
+          await window.__wugeng.cloud.uploadNow(window.__wugeng.save);
+          // Balance local unlockedWeapons count (zhinian_kite on local vs taomujian on remote) so timestamp-tie score tests cosmeticShopSpent cleanly
+          window.__wugeng.save.unlockedWeapons = [
+            ...window.__wugeng.save.unlockedWeapons.filter((x) => x !== 'taomujian'),
+            'zhinian_kite',
+          ];
+        });
+
+        await fastClick(s.page, '[data-action="open-market"]');
+        await requireOpenSelector(s.page, '.cosmetic-shop-modal');
+        const buyGilded = await shopBuyAndEquipInModal(s.page, {
+          kind: 'vfx',
+          vfxId: 'gilded_imperial',
+          buy: true,
+          equip: false,
+          close: true,
+        });
+        assert.equal(buyGilded.ok, true, buyGilded.reason || 'Failed buying gilded_imperial in T3-C09');
+
+        const coinsAfterBuy = await s.page.evaluate(() => {
+          window.__wugeng.save.updatedAt = 1700000020000;
+          localStorage.setItem('wugeng.save', JSON.stringify(window.__wugeng.save));
+          return window.__wugeng.save.coins;
+        });
+        await fastClick(s.page, '[data-action="quick-cloud"]');
+        await s.page.waitForTimeout(100);
+
+        const afterSync = await readNormalizedSave(s.page);
+        assert.equal(afterSync.coins, coinsAfterBuy, 'quick-cloud merge must preserve post-purchase copper');
+        assert.ok(afterSync.ownedCosmetics.includes('gilded_imperial'), 'Must retain purchased gilded_imperial VFX');
+        assert.ok(afterSync.unlockedWeapons.includes('taomujian'), 'Must union remote achievement-unlocked taomujian');
+        assert.ok(afterSync.unlockedWeapons.includes('zhinian_kite'), 'Must retain local zhinian_kite in union merge');
         s.assertNoErrors('T3-C09');
       } finally {
         await s.close();
@@ -435,51 +635,82 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C10',
     tier: 3,
-    feature: 'F4',
-    features: ['F4', 'F6'],
-    name: '[F4+F6] 4-piece 道法 synergy + evolved 天师符阵 & 七星剑阵 triggers crit thunder strikes + Bagua arrays',
+    feature: 'F12',
+    features: ['F12', 'F2', 'F4'],
+    name: '[F12+F2+F4] Night 3 + signature evolved Dawn clear score multiplier -> auto submitScores to c5mzumajes9houq0ra',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, {
+        beforeBootInitScript: () => {
+          window.__lbSubmits = [];
+          window.tap = {
+            getLeaderboardManager() {
+              return {
+                submitScores(p) {
+                  window.__lbSubmits.push(p?.scores || []);
+                  p?.callback?.onSuccess?.({ results: [] });
+                },
+                loadLeaderboardScores(p) { p?.callback?.onSuccess?.({ scores: [] }); },
+                loadCurrentPlayerLeaderboardScore(p) { p?.callback?.onSuccess?.({}); },
+                openLeaderboard(p) { p?.callback?.onSuccess?.({}); },
+              };
+            },
+          };
+        },
+      });
       try {
+        // Run 1: Night 0 non-clear
         await bootAndStartRun(s.page, baseUrl, {
-          heroId: 'daotong',
-          seed: 3110,
-          savePatch: { unlockedHeroes: ['zhou', 'daotong'], selectedHero: 'daotong' },
+          nightLevel: 0,
+          savePatch: { nightUnlocked: 5 },
+          seed: 3010,
         });
-        await grantItemViaLevelUp(s.page, 'weapon', 'talisman', 4);
-        await grantItemViaLevelUp(s.page, 'relic', 'cinnabar', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-        await grantItemViaLevelUp(s.page, 'weapon', 'coinsword', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'fivecoins', 3); // 4 daofa + high crit
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
+        const lowScore = await s.page.evaluate(() => {
+          window.__wugeng.game.run.time = 200;
+          window.__wugeng.game.run.stats.kills = 150;
+          return window.__wugeng.game.finish().score;
+        });
 
-        const res = await s.page.evaluate(() => {
+        // Run 2: Night 3 Dawn clear with evolved signature weapon
+        await bootAndStartRun(s.page, baseUrl, {
+          heroId: 'zhou',
+          startWeapon: 'gong',
+          nightLevel: 3,
+          savePatch: { nightUnlocked: 5 },
+          seed: 3010,
+        });
+        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
+        await grantItemViaLevelUp(s.page, 'relic', 'clapper', 1);
+        await triggerChest(s.page);
+        await confirmChestModal(s.page);
+        await suppressWardersInPage(s.page);
+
+        const highRes = await s.page.evaluate(async () => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.mods.critChance = 1.0;
-          r._spawnQueue.push({ type: 'sedan', x: r.player.x + 110, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(1);
-          r.enemies[0].hp = 50000;
-          r.enemies[0].speed = 0;
-          r.weapons.forEach((w) => { w.cd = 0; });
-          const kinds = new Set();
-          window.__e2eStepFrames(40, {
-            onStep: () => {
-              for (const p of r.projectiles) kinds.add(p.kind);
-            },
-          });
+          r._bossSpawned = { horse: true, umbrella: true, youshen: false };
+          r.time = 601;
+          window.__e2eStepFrames(2, { stopOnOverlay: false });
+          while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
+          const ys = r.enemies.find((e) => e.type === 'youshen');
+          ys.x = r.player.x + 25;
+          ys.y = r.player.y;
+          ys.hp = 1;
+          r.weapons[0].cd = 0;
+          window.__e2eStepFrames(4, { stopOnOverlay: false });
+          r.stats.kills = 150;
+          const sum = window.__wugeng.game.finish();
+          await new Promise((res2) => setTimeout(res2, 60));
           return {
-            tier: r.synergies?.active?.find((a) => a.tag === 'daofa')?.tier,
-            kinds: [...kinds],
-            dmgDealt: 50000 - r.enemies[0].hp,
+            score: sum.score,
+            bestScore: window.__wugeng.save.leaderboard?.bestScore,
+            submits: window.__lbSubmits,
           };
         });
-        assert.equal(res.tier, 4);
-        assert.ok(res.kinds.includes('talismanArray'), `Expected talismanArray, saw ${res.kinds.join(',')}`);
-        assert.ok(res.dmgDealt > 500, `Expected heavy crit + daofa thunder damage, got ${res.dmgDealt}`);
+
+        assert.ok(highRes.score > lowScore * 1.3, `Expected Night 3 Dawn clear score (${highRes.score}) > Night 0 loss (${lowScore})`);
+        assert.equal(highRes.bestScore, highRes.score);
+        assert.ok(highRes.submits.some((batch) => batch.some((x) => x.leaderboardId === PRIMARY_LEADERBOARD_ID && x.score === highRes.score)));
         s.assertNoErrors('T3-C10');
       } finally {
         await s.close();
@@ -489,41 +720,32 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C11',
     tier: 3,
-    feature: 'F6',
-    features: ['F4', 'F5', 'F6'],
-    name: '[F4+F5+F6] 阿绵 (mian) + 4-piece 纸扎 synergy + evolved 纸扎仪仗 & 纸马镖 boosts construct swarm DPS',
+    feature: 'F13',
+    features: ['F12', 'F13'],
+    name: '[F12+F13] TapTap Friends x Leaderboard ([data-collection="friends"] under ?mockTap=1 + 1025 Chinese fallback)',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, { isolated: true });
       try {
-        await bootAndStartRun(s.page, baseUrl, {
-          heroId: 'mian',
-          seed: 3111,
-          savePatch: { unlockedHeroes: ['zhou', 'mian'], selectedHero: 'mian' },
-        }); // starts with paperman (zhizha #1)
-        await grantItemViaLevelUp(s.page, 'weapon', 'paperman', 4);
-        await grantItemViaLevelUp(s.page, 'weapon', 'paperhorse', 3); // zhizha #2
-        await grantItemViaLevelUp(s.page, 'relic', 'scissors', 2); // zhizha #3
-        await grantItemViaLevelUp(s.page, 'relic', 'inkstone', 1); // zhizha #4
-        await triggerChest(s.page);
-        await confirmChestModal(s.page, 'paperman');
+        await bootToHub(s.page, baseUrl, { query: 'mockTap=1' });
+        await fastClick(s.page, '[data-action="open-leaderboard"]');
+        await requireOpenSelector(s.page, '.leaderboard-modal');
+        await fastClick(s.page, '[data-collection="friends"]');
+        await s.page.waitForTimeout(80);
+        const friendsLb = await readLeaderboardBodyText(s.page);
+        assert.ok(/\d+/.test(friendsLb.bodyText), `Expected mock friends scores rendered in leaderboard body, got '${friendsLb.bodyText}'`);
 
-        const res = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r._spawnQueue.push({ type: 'sedan', x: r.player.x + 95, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(1);
-          r.enemies[0].hp = 20000;
-          r.enemies[0].speed = 0;
-          r.weapons.forEach((w) => { w.cd = 0; });
-          window.__e2eStepFrames(60);
-          return {
-            tier: r.synergies?.active?.find((a) => a.tag === 'zhizha')?.tier,
-            dmg: 20000 - r.enemies[0].hp,
-          };
-        });
-        assert.equal(res.tier, 4);
-        assert.ok(res.dmg > 300, `Expected mian + 4pc zhizha + evolved paperman/paperhorse to deal >300 dmg in 1s, got ${res.dmg}`);
+        await bootToHub(s.page, baseUrl, { query: 'mockLeaderboard=1025' });
+        await fastClick(s.page, '[data-action="open-leaderboard"]');
+        await requireOpenSelector(s.page, '.leaderboard-modal');
+        await fastClick(s.page, '[data-collection="friends"]');
+        await s.page.waitForTimeout(80);
+        const fbLb = await readLeaderboardBodyText(s.page);
+        assert.ok(
+          /权限|授权|未开通|暂未|暂不可用|无法|本地|本机|荣誉/.test(fbLb.bodyText),
+          `Expected Chinese permission/fallback notice in leaderboard body on 1025, got '${fbLb.bodyText}'`,
+        );
+        assert.equal(/friend permission not granted|undefined|\[object Object\]/i.test(fbLb.fullText), false);
+        await fastClick(s.page, '[data-collection="public"]');
         s.assertNoErrors('T3-C11');
       } finally {
         await s.close();
@@ -533,209 +755,207 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C12',
     tier: 3,
-    feature: 'F4',
-    features: ['F4', 'F6'],
-    name: '[F4+F6] 4-piece 阳炎 synergy + evolved 长明灯 & 满堂红 expands AoE/light & amplifies scorch damage',
+    feature: 'F14',
+    features: ['F14', 'F12'],
+    timeoutMs: 18_000,
+    name: '[F14+F12] Real 2-page BroadcastChannel Co-op run -> .result-squad & .mvp-seal -> Leaderboard c5mzumajes9houq0ra submit',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const coop = await createCoopPages(browser, 2);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3112 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'lantern', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'censer', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-        await grantItemViaLevelUp(s.page, 'weapon', 'firecracker', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'tinder', 1); // 4 yangyan!
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
+        await launchTwoPageCoopRun(coop, baseUrl);
+        await stepCoopFrames([coop.hostPage, coop.guestPage], 30, 6);
 
-        const res = await s.page.evaluate(() => {
+        const settled = await coop.hostPage.evaluate(async () => {
           const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.weapons.find((w) => w.id === 'gong').cd = 9999;
-          r._spawnQueue.push({ type: 'sedan', x: r.player.x + 85, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(1);
-          r.enemies[0].hp = 30000;
-          r.enemies[0].speed = 0;
-          r.weapons.find((w) => w.id === 'lantern').cd = 0;
-          r.weapons.find((w) => w.id === 'firecracker').cd = 0;
-          window.__e2eStepFrames(65);
-          return {
-            tier: r.synergies?.active?.find((a) => a.tag === 'yangyan')?.tier,
-            areaMul: r.mods.areaMul,
-            dmg: 30000 - r.enemies[0].hp,
-          };
+          r.time = 180;
+          r.stats.kills = 120;
+          r.players[0].stats.damageDealt = 8500;
+          r.players[0].stats.kills = 80;
+          r.players[1].stats.damageDealt = 3200;
+          r.players[1].stats.kills = 40;
+          const sum = window.__wugeng.game.finish();
+          await new Promise((res2) => setTimeout(res2, 60));
+          return { score: sum.score, bestScore: window.__wugeng.save.leaderboard?.bestScore };
         });
-        assert.equal(res.tier, 4);
-        assert.ok(res.areaMul > 1.18, `Expected censer + 4pc yangyan areaMul > 1.18, got ${res.areaMul}`);
-        assert.ok(res.dmg > 400, `Expected heavy scorch + lotus cluster damage, got ${res.dmg}`);
-        s.assertNoErrors('T3-C12');
+
+        await requireOpenSelector(coop.hostPage, '.screen--result .result-squad');
+        await requireOpenSelector(coop.hostPage, '.screen--result .mvp-seal');
+        assert.ok(settled.score > 0 && settled.bestScore === settled.score);
+
+        await fastClick(coop.hostPage, '[data-action="result-leaderboard"]');
+        await requireOpenSelector(coop.hostPage, '.leaderboard-modal');
+        coop.assertNoErrors('T3-C12');
       } finally {
-        await s.close();
+        await coop.close();
       }
     },
   },
   {
     id: 'T3-C13',
     tier: 3,
-    feature: 'F10',
-    features: ['F10', 'F9', 'F3', 'F5'],
-    name: '[F10+F9+F3+F5] 2:30 Mini-Warder chest + Trial Stele chest sequentially evolve 2 new F5 weapons',
+    feature: 'F14',
+    features: ['F13', 'F14'],
+    timeoutMs: 20_000,
+    name: '[F13+F14] Friend invite share (coop-invite-friend room=) -> 2nd tab URL auto-join -> 2-page Co-op Bagua revive',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const coop = await createCoopPages(browser, 2, {
+        beforeBootInitScript: () => {
+          window.__sharedQueries = [];
+          window.tap = {
+            shareAppMessage(p) {
+              window.__sharedQueries.push(p?.query || p?.sceneParam || '');
+              p?.success?.({});
+            },
+          };
+        },
+      });
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3113 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'compass', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'soulwick', 1);
-        await grantItemViaLevelUp(s.page, 'weapon', 'soulbanner', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'glutinous', 1);
+        await bootToHub(coop.hostPage, baseUrl, { query: 'mockFriends=1' });
+        await fastClick(coop.hostPage, '[data-action="open-coop"]');
+        await fastClick(coop.hostPage, '[data-action="coop-create"]');
+        await coop.hostPage.waitForSelector('[data-room-code]');
+        await fastClick(coop.hostPage, '[data-action="coop-invite-friend"]');
 
-        await s.page.evaluate(() => {
+        const sharedQuery = await coop.hostPage.evaluate(() => {
+          const q = (window.__sharedQueries || [])[0] || '';
+          const m = q.match(/room=([A-Z0-9]{4,8})/i);
+          if (m) return `room=${m[1]}`;
+          const code = document.querySelector('[data-room-code]')?.getAttribute('data-room-code') || '';
+          return `room=${code}`;
+        });
+        assert.match(sharedQuery, /^room=[A-Z0-9]{4,8}$/i);
+
+        await coop.guestPage.goto(`${baseUrl}/index.html?skipIntro=1&${sharedQuery}`);
+        await coop.guestPage.waitForSelector('.coop-modal', { timeout: 4500 });
+        await coop.guestPage.evaluate(() => document.querySelector('[data-action="coop-ready"]:not([disabled])')?.click());
+        await coop.hostPage.waitForFunction(() => {
+          const w = window.__wugeng;
+          return (w?.coop?.getParty?.()?.length || w?.coop?.party?.length || w?.coop?.state?.party?.length || 0) >= 2;
+        }, null, { timeout: 4500 });
+
+        await fastClick(coop.hostPage, '[data-action="coop-start"]');
+        await Promise.all([
+          coop.hostPage.waitForFunction(() => window.__wugeng.game.run?.players?.length >= 2),
+          coop.guestPage.waitForFunction(() => window.__wugeng.game.run?.players?.length >= 2),
+        ]);
+
+        // Down Guest & revive via Host standing inside r<=48 circle
+        await coop.hostPage.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r._nextWaveT = 99999;
-          r.time = 149.96;
-          for (let k = 0; k < 5; k++) {
-            window.__e2eStepFrames(2);
-            while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
-          }
-          const warder = r.enemies.find((e) => e.chest);
-          if (warder) {
-            warder.x = r.player.x + 20;
-            warder.y = r.player.y;
-            warder.hp = 1;
-            warder.paperArmor = 0;
-            r.weapons[0].cd = 0;
-            window.__e2eStepFrames(6);
-          }
+          r.weapons.forEach((w) => { w.cd = 9999; });
+          r.players[0].x = 0;
+          r.players[0].y = 0;
+          r.players[1].x = 12;
+          r.players[1].y = 0;
+          r.players[1].downed = true;
+          r.players[1].hp = 0;
+          r.players[1].reviveProgress = 0;
         });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.overlay), 'chest', 'Expected 150s Mini-Warder to open chest');
-        await confirmChestModal(s.page, 'compass');
-
-        const foundTrial = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          if (!Array.isArray(r.shrines)) return false;
-          const tr = r.shrines.find((x) => x.kind === 'trial' && !x.used);
-          if (!tr) return false;
-          r.player.x = tr.x;
-          r.player.y = tr.y;
-          window.__e2eStepFrames(3);
-          return true;
-        });
-        assert.equal(foundTrial, true, 'Expected starter trial stele');
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
-        if (await s.page.evaluate(() => window.__wugeng.overlay === 'shrine')) {
-          await fastClick(s.page, '.overlay--shrine [data-shrine-option]:not([disabled])');
-        }
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          for (let sec = 0; sec < 20; sec++) {
-            r.player.invulnT = 5;
-            window.__e2eStepFrames(60);
-            while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
-            if (r.status === 'chest') break;
-          }
-          const c = r.pickups.find((p) => p.kind === 'chest');
-          if (c) { c.x = r.player.x; c.y = r.player.y; window.__e2eStepFrames(4); }
-        });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.overlay), 'chest', 'Expected Trial Stele chest');
-        await confirmChestModal(s.page);
-
-        const both = await s.page.evaluate(() => ({
-          compass: window.__wugeng.game.run.weapons.find((w) => w.id === 'compass')?.evolved,
-          soulbanner: window.__wugeng.game.run.weapons.find((w) => w.id === 'soulbanner')?.evolved,
-        }));
-        assert.equal(both.compass, true);
-        assert.equal(both.soulbanner, true);
-        s.assertNoErrors('T3-C13');
+        await stepCoopFrames([coop.hostPage, coop.guestPage], 162, 6);
+        const revived = await coop.hostPage.evaluate(() => !window.__wugeng.game.run.players[1].downed);
+        assert.equal(revived, true);
+        coop.assertNoErrors('T3-C13');
       } finally {
-        await s.close();
+        await coop.close();
       }
     },
   },
   {
     id: 'T3-C14',
     tier: 3,
-    feature: 'F11',
-    features: ['F6', 'F7', 'F11'],
-    name: '[F6+F7+F11] Evolved weapon + active 羁绊 + active 守夜命签 all surface accurately in .overlay--pause',
+    feature: 'F14',
+    features: ['F14', 'F5', 'F6', 'F4'],
+    timeoutMs: 18_000,
+    name: '[F14+F5+F6+F4] 2-page Co-op distinct Hero x Skin x Attack VFX sync + 1.55x 2P monster HP scaling',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const soloSession = await createIsolatedPage(browser);
+      let soloEnemyHp = 0;
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3114 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
-        await grantItemViaLevelUp(s.page, 'relic', 'clapper', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-
-        await s.page.evaluate(() => {
+        await bootAndStartRun(soloSession.page, baseUrl, { seed: 3014 });
+        soloEnemyHp = await soloSession.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.time = 119.97;
-          window.__e2eStepFrames(4);
+          r.time = 10;
+          r._spawnQueue.push({ type: 'lanternghost', x: r.player.x + 200, y: r.player.y, opts: { elite: false } });
+          window.__e2eStepFrames(1);
+          return r.enemies[0].maxHp;
         });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
-        const chosenBlessingName = await s.page.evaluate(() => window.__wugeng.game.run.choices[0].name);
-        await fastClick(s.page, '.qian');
-
-        await fastClick(s.page, '.pause-btn');
-        await s.page.waitForFunction(() => window.__wugeng.overlay === 'pause');
-        await requireOpenSelector(s.page, '.overlay--pause', 'Expected .overlay--pause');
-        const fullText = await s.page.textContent('.overlay--pause');
-        assert.ok(fullText.includes('五更鸣锣'), 'Pause overlay must display evolved weapon 五更鸣锣');
-        assert.ok(fullText.includes('镇魂'), 'Pause overlay .pause-synergies must display active 镇魂 synergy');
-        assert.ok(fullText.includes(chosenBlessingName), `Pause overlay .pause-blessings must display chosen blessing '${chosenBlessingName}'`);
-        s.assertNoErrors('T3-C14');
       } finally {
-        await s.close();
+        await soloSession.close();
+      }
+
+      const coop = await createCoopPages(browser, 2);
+      try {
+        const { hostSkin, guestSkin } = await discoverCoopHeroSkins(coop.hostPage, baseUrl, 'zhou', 'tiejiang', 'mockTap=1');
+        await launchTwoPageCoopRun(coop, baseUrl, {
+          hostHero: 'zhou',
+          hostSkin,
+          hostVfx: 'gilded_imperial',
+          guestHero: 'tiejiang',
+          guestSkin,
+          guestVfx: 'frost_moon',
+        });
+
+        const synced = await Promise.all([
+          coop.hostPage.evaluate(() => {
+            const r = window.__wugeng.game.run;
+            r.enemies.length = 0;
+            r._spawnAcc = -99999;
+            r.time = 10;
+            r._spawnQueue.push({ type: 'lanternghost', x: r.player.x + 200, y: r.player.y, opts: { elite: false } });
+            window.__e2eStepFrames(1);
+            return {
+              hp2P: r.enemies[0].maxHp,
+              p0: { heroId: r.players[0].heroId, skinId: r.players[0].skinId, attackVfx: r.players[0].attackVfx },
+              p1: { heroId: r.players[1].heroId, skinId: r.players[1].skinId, attackVfx: r.players[1].attackVfx },
+            };
+          }),
+          coop.guestPage.evaluate(() => {
+            const r = window.__wugeng.game.run;
+            return {
+              p0: { heroId: r.players[0].heroId, skinId: r.players[0].skinId, attackVfx: r.players[0].attackVfx },
+              p1: { heroId: r.players[1].heroId, skinId: r.players[1].skinId, attackVfx: r.players[1].attackVfx },
+            };
+          }),
+        ]);
+
+        for (const [tabName, side] of [['hostPage', synced[0]], ['guestPage', synced[1]]]) {
+          assert.equal(side.p0.heroId, 'zhou', `[${tabName}] Expected p0.heroId === 'zhou'`);
+          assert.equal(side.p1.heroId, 'tiejiang', `[${tabName}] Expected p1.heroId === 'tiejiang'`);
+          assert.equal(side.p0.skinId, hostSkin, `[${tabName}] Expected p0.skinId === '${hostSkin}'`);
+          assert.equal(side.p1.skinId, guestSkin, `[${tabName}] Expected p1.skinId === '${guestSkin}'`);
+          assert.notEqual(side.p0.skinId, side.p1.skinId, `[${tabName}] Expected distinct non-default skins`);
+          assert.equal(side.p0.attackVfx, 'gilded_imperial', `[${tabName}] Expected p0.attackVfx === 'gilded_imperial'`);
+          assert.equal(side.p1.attackVfx, 'frost_moon', `[${tabName}] Expected p1.attackVfx === 'frost_moon'`);
+        }
+
+        const expected2P = 1 + COOP_SPEC.hpScalePerExtra; // 1.55x
+        const ratio = synced[0].hp2P / soloEnemyHp;
+        assert.ok(Math.abs(ratio - expected2P) <= 0.12, `Expected ~1.55x 2P monster HP scaling (${soloEnemyHp} -> ${synced[0].hp2P}, ratio=${ratio.toFixed(2)})`);
+        coop.assertNoErrors('T3-C14');
+      } finally {
+        await coop.close();
       }
     },
   },
   {
     id: 'T3-C15',
     tier: 3,
-    feature: 'F4',
-    features: ['F4', 'F5', 'F10'],
-    name: '[F4+F5+F10] Evolved 纸扎仪仗 guards + 乾坤赤阳镜 beam intercept paperbride & umbrella bullet barrages',
+    feature: 'F1',
+    features: ['F1', 'F13', 'F14'],
+    name: '[F1+F13+F14] Cold-boot ?room=AB23CD deep-link through studio splash into Hub .coop-modal in <= 2.5s',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await bootColdIntro(browser, baseUrl, { query: 'mockTap=1&room=AB23CD', waitForTitle: false });
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3115 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'paperman', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'scissors', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-        await grantItemViaLevelUp(s.page, 'weapon', 'bronze_mirror', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'fivecoins', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-
-        const intercepted = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.weapons.find((w) => w.id === 'gong').cd = 9999;
-          r._spawnQueue.push({ type: 'paperbride', x: r.player.x + 150, y: r.player.y, opts: {} });
-          window.__e2eStepFrames(2);
-          r.enemies[0].hp = 99999;
-          for (let i = 0; i < 12; i++) {
-            r.projectiles.push({
-              id: 83000 + i, kind: 'enemyBullet',
-              x: r.player.x + 40 + i * 8, y: r.player.y + ((i % 3) - 1) * 6,
-              r: 8, angle: Math.PI, t: 0, life: 6, vx: -35, vy: 0, dmg: 10,
-            });
-          }
-          r.weapons.find((w) => w.id === 'bronze_mirror').cd = 0;
-          r.player.hp = 100;
-          r.player.invulnT = 0;
-          window.__e2eStepFrames(35);
-          const remaining = r.projectiles.filter((p) => p.id >= 83000 && p.id < 83012 && !p.dead).length;
-          return { remaining, hp: r.player.hp };
-        });
-        assert.ok(intercepted.remaining < 8, `Expected guards + mirrorBeam to destroy incoming enemyBullets (remaining=${intercepted.remaining}/12)`);
+        const t0 = performance.now();
+        await s.page.waitForSelector('.coop-modal', { timeout: 3500 });
+        const totalElapsed = s.elapsedMs + (performance.now() - t0);
+        assert.ok(totalElapsed < 2800, `Expected cold-boot ?room=AB23CD deep-link into .coop-modal in < 2.8s, got ${Math.round(totalElapsed)}ms`);
+        const txt = (await s.page.textContent('.coop-modal')) || '';
+        assert.ok(txt.toUpperCase().includes('AB23CD'), `Expected .coop-modal joined to AB23CD, got '${txt}'`);
         s.assertNoErrors('T3-C15');
       } finally {
         await s.close();
@@ -745,45 +965,41 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C16',
     tier: 3,
-    feature: 'F9',
-    features: ['F5', 'F9', 'F12'],
-    name: '[F5+F9+F12] Fivecoins (五帝钱) coin bonus funds peddler purchase and settles accurate net coins to save',
+    feature: 'F1',
+    features: ['F1', 'F7', 'F11'],
+    name: '[F1+F7+F11] replayIntro() + [data-action="skip-intro"] from Hub preserves v3 save, cosmetics & single game loop',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, { isolated: true });
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3116, savePatch: { coins: 0 } });
-        await grantItemViaLevelUp(s.page, 'relic', 'fivecoins', 3);
-        const ok = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          if (!Array.isArray(r.shrines)) return false;
-          const ped = r.shrines.find((x) => x.kind === 'peddler' && !x.used);
-          if (!ped) return false;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          for (let i = 0; i < 10; i++) {
-            r.pickups.push({ id: 97000 + i, kind: 'coin', x: r.player.x, y: r.player.y, value: 20, tier: 2, mag: true, ms: 9999 });
-          }
-          window.__e2eStepFrames(2);
-          r.player.x = ped.x;
-          r.player.y = ped.y;
-          window.__e2eStepFrames(3);
-          return r.stats.coins > 200;
+        await bootToHub(s.page, baseUrl, {
+          savePatch: {
+            daoName: '青衫打更人',
+            coins: 1357,
+            unlockedHeroes: HERO_IDS,
+            selectedHero: 'nuoxi',
+            cosmetics: {
+              owned: ['frost_moon'],
+              equipped: { lantern: null, outfit: null, attackVfx: 'frost_moon', heroSkins: {} },
+            },
+          },
         });
-        assert.equal(ok, true, 'Expected fivecoins Lv3 to boost collected coin value > 200 and locate peddler');
-
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
-        await fastClick(s.page, '.overlay--shrine [data-shrine-option]:not([disabled])');
-
-        const settled = await s.page.evaluate(() => {
-          const summary = window.__wugeng.game.finish();
-          return {
-            summaryCoins: summary.coins,
-            savedCoins: window.__wugeng.save.coins,
-            hasFivecoinsInCodex: window.__wugeng.save.codex.relics.includes('fivecoins'),
-          };
+        await s.page.evaluate(() => {
+          window.__replay = Promise.resolve(window.__wugeng.replayIntro());
         });
-        assert.ok(settled.summaryCoins >= 0 && settled.savedCoins === settled.summaryCoins);
-        assert.equal(settled.hasFivecoinsInCodex, true);
+        await s.page.waitForSelector('.boot-intro', { timeout: 2000 });
+        await fastClick(s.page, '[data-action="skip-intro"]');
+        await s.page.evaluate(() => window.__replay);
+
+        const after = await readNormalizedSave(s.page);
+        assert.equal(after.coins, 1357);
+        assert.equal(after.selectedHero, 'nuoxi');
+        assert.equal(after.attackVfx, 'frost_moon');
+
+        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+        const t0 = await s.page.evaluate(() => window.__wugeng.game.run.time);
+        await stepFrames(s.page, 15);
+        const t1 = await s.page.evaluate(() => window.__wugeng.game.run.time);
+        assert.ok(Math.abs((t1 - t0) - 15 / 60) < 0.04, 'Single deterministic gameFrameCb loop must stay intact');
         s.assertNoErrors('T3-C16');
       } finally {
         await s.close();
@@ -793,38 +1009,76 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C17',
     tier: 3,
-    feature: 'F11',
-    features: ['F11', 'F4', 'F10'],
-    name: '[F11+F4+F10] Simultaneous Boss spawn + Hero Ult + Weapon Evolve + Cinder explosion runs SFX & VFX cleanly',
+    feature: 'F3',
+    features: ['F3', 'F6', 'F7', 'F15'],
+    timeoutMs: 16_000,
+    name: '[F3+F6+F7+F15] All 16 weapon WebAudio fire_<id> cues + 360x780 narrow-screen 6+6 HUD/pause/levelup zero overflow',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, {
+        isolated: true,
+        viewport: { width: 360, height: 780 },
+        deviceScaleFactor: 2,
+      });
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3117 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
-        await grantItemViaLevelUp(s.page, 'relic', 'clapper', 1);
-        await triggerChest(s.page);
-        await confirmChestModal(s.page);
-
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          window.__wugeng.audio.unlock();
-          r._bossSpawned = { horse: false, umbrella: true, youshen: true };
-          r.time = 240.1;
-          r._spawnQueue.push({ type: 'cinder', x: r.player.x + 35, y: r.player.y, opts: {} });
-          r.player.ult = r.player.ultMax;
-          window.__e2eStepFrames(2);
-          if (r.status === 'levelup') document.querySelector('.qian')?.click();
-          const c = r.enemies.find((e) => e.type === 'cinder');
-          if (c) c.hp = 1;
+        await bootAndStartRun(s.page, baseUrl, {
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: {
+            unlockedWeapons: ALL_WEAPON_IDS,
+            cosmetics: { owned: ATTACK_VFX_IDS, equipped: { attackVfx: 'jade_ghostfire', heroSkins: {} } },
+          },
+          seed: 3017,
         });
-        await s.page.keyboard.press('Space');
-        await stepFrames(s.page, 45);
-        const state = await s.page.evaluate(() => ({
-          audioState: window.__wugeng.audio.state,
-          ultsCast: window.__wugeng.game.run.stats.ultsCast,
-        }));
-        assert.equal(state.audioState, 'running');
-        assert.ok(state.ultsCast >= 1);
+        for (const wid of ['taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum', 'talisman']) {
+          await grantItemViaLevelUp(s.page, 'weapon', wid, 1);
+        }
+        for (const rid of ['leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask', 'clapper', 'cinnabar']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
+
+        const missingAudio = await s.page.evaluate(async (weapons) => {
+          const a = window.__wugeng.audio;
+          a.unlock();
+          a.resume('all');
+          let waited = 0;
+          while (a.state !== 'running' && waited < 800) {
+            await new Promise((r) => setTimeout(r, 20));
+            waited += 20;
+          }
+          a.setMusicMode('off');
+          a.setEnabled({ music: false, sfx: true });
+          const proto = window.BaseAudioContext?.prototype || window.AudioContext?.prototype;
+          const origOsc = proto.createOscillator;
+          const origBuf = proto.createBufferSource;
+          let count = 0;
+          proto.createOscillator = function osc(...args) { count++; return origOsc.apply(this, args); };
+          proto.createBufferSource = function buf(...args) { count++; return origBuf.apply(this, args); };
+          const missing = [];
+          try {
+            await new Promise((r) => setTimeout(r, 240));
+            for (const wid of weapons) {
+              const before = count;
+              a.onEvents([{ type: 'fire', weaponId: wid, evolved: true, x: 0, y: 0 }], null);
+              if (count <= before) missing.push(wid);
+              await new Promise((r) => setTimeout(r, 185));
+            }
+          } finally {
+            proto.createOscillator = origOsc;
+            proto.createBufferSource = origBuf;
+          }
+          return missing;
+        }, ALL_WEAPON_IDS);
+        assert.deepEqual(missingAudio, []);
+
+        // Verify 360x780 pause & levelup zero overflow with 6+6 items
+        await fastClick(s.page, '.pause-btn');
+        await requireOpenSelector(s.page, '.overlay--pause');
+        assert.ok((await s.page.evaluate(() => document.documentElement.scrollWidth)) <= 361);
+        await s.page.evaluate(() => {
+          ([...document.querySelectorAll('.overlay--pause button')].find((b) => b.textContent.includes('接着守')))?.click();
+        });
+
+        await triggerLevelUp(s.page);
+        assert.ok((await s.page.evaluate(() => document.documentElement.scrollWidth)) <= 361);
         s.assertNoErrors('T3-C17');
       } finally {
         await s.close();
@@ -834,63 +1088,70 @@ export const TIER3_TESTS = [
   {
     id: 'T3-C18',
     tier: 3,
-    feature: 'F12',
-    features: ['F12', 'F5', 'F7', 'F9'],
-    name: '[F12+F5+F7+F9] Live DOM characters rendered in F5 level-up, F7 blessing slips & F9 shrine modals have 0 missing font glyphs',
+    feature: 'F15',
+    features: ['F15', 'F1', 'F7', 'F8', 'F9', 'F10', 'F12', 'F14'],
+    timeoutMs: 18_000,
+    name: '[F15+All] Live rendered DOM Zero-Tofu glyph audit harvested across Intro, Hub, Market, Achievements, Leaderboard, Co-op, Inspector & Result',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      let harvested = '';
+
+      // 1) Intro logo hold
+      const sIntro = await bootColdIntro(browser, baseUrl, { query: 'introHold=logo', waitForHold: true });
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 3118 });
-        let collectedDomText = '';
+        harvested += '\n' + ((await sIntro.page.textContent('body')) || '');
+      } finally {
+        await sIntro.close();
+      }
 
-        // 1) F5 level-up cards
-        await grantItemViaLevelUp(s.page, 'weapon', 'compass', 1);
+      // 2) Hub, Market, Achievements, Leaderboard, Co-op, Inspector & Co-op Result
+      const s = await createIsolatedPage(browser, { isolated: true });
+      try {
+        await bootToHub(s.page, baseUrl, {
+          query: 'mockTap=1',
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS },
+        });
+        harvested += '\n' + ((await s.page.textContent('#ui')) || '');
+
+        for (const action of ['open-market', 'open-achievements', 'open-leaderboard', 'open-coop']) {
+          await fastClick(s.page, `[data-action="${action}"]`);
+          await s.page.waitForTimeout(40);
+          harvested += '\n' + ((await s.page.textContent('#ui')) || '');
+          await closeActiveModal(s.page);
+        }
+
+        // Start 2P bot Co-op -> Inspector -> Result
+        await fastClick(s.page, '[data-action="open-coop"]');
+        await fastClick(s.page, '[data-action="coop-create"]');
+        await fastClick(s.page, '[data-action="coop-add-bot"]');
+        await fastClick(s.page, '[data-action="coop-start"]');
+        await s.page.waitForFunction(() => window.__wugeng.game.run?.players?.length === 2);
+
         await triggerLevelUp(s.page);
-        collectedDomText += await s.page.textContent('#ui');
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        harvested += '\n' + ((await s.page.textContent('.veil--inspector')) || '');
+        await fastClick(s.page, '[data-action="close-inspector"]');
         await fastClick(s.page, '.qian');
 
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.time = 119.97;
-          window.__e2eStepFrames(4);
-        });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
-        collectedDomText += await s.page.textContent('#ui');
-        await fastClick(s.page, '.qian');
-
-        const hasShrine = await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          if (!Array.isArray(r.shrines)) return false;
-          const altar = r.shrines.find((x) => x.kind === 'altar' && !x.used);
-          if (!altar) return false;
-          r.player.x = altar.x;
-          r.player.y = altar.y;
-          window.__e2eStepFrames(3);
-          return true;
-        });
-        assert.equal(hasShrine, true, 'Expected starter altar shrine');
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
-        collectedDomText += await s.page.textContent('#ui');
-
-        const fontPath = path.join(ROOT, 'assets', 'fonts', 'wenkai-subset.woff2');
-        const { stdout } = await execFileAsync(
-          VENV_PYTHON,
-          [
-            '-c',
-            'import json, sys; from fontTools.ttLib import TTFont; cmap = set(TTFont(sys.argv[1]).getBestCmap().keys()); txt = sys.argv[2]; miss = sorted({f"U+{ord(c):04X}({c})" for c in txt if not c.isspace() and ord(c) >= 0x20 and ord(c) not in cmap}); print(json.dumps(miss, ensure_ascii=False))',
-            fontPath,
-            collectedDomText,
-          ],
-          { cwd: ROOT, timeout: 10_000 },
-        );
-        const missing = JSON.parse(stdout.trim());
-        assert.deepEqual(missing, [], `Live DOM overlays rendered characters missing from wenkai-subset.woff2: ${missing.join(', ')}`);
+        await s.page.evaluate(() => window.__wugeng.game.finish());
+        await s.page.waitForSelector('.screen--result');
+        harvested += '\n' + ((await s.page.textContent('.screen--result')) || '');
         s.assertNoErrors('T3-C18');
       } finally {
         await s.close();
       }
+
+      const fontPath = path.join(ROOT, 'assets', 'fonts', 'wenkai-subset.woff2');
+      const { stdout } = await execFileAsync(
+        VENV_PYTHON,
+        [
+          '-c',
+          'import json, sys; from fontTools.ttLib import TTFont; cmap = set(TTFont(sys.argv[1]).getBestCmap().keys()); txt = sys.argv[2]; miss = sorted({f"U+{ord(c):04X}({c})" for c in txt if not c.isspace() and ord(c) >= 0x20 and ord(c) not in cmap}); print(json.dumps(miss, ensure_ascii=False))',
+          fontPath,
+          harvested,
+        ],
+        { cwd: ROOT, timeout: 10_000 },
+      );
+      assert.deepEqual(JSON.parse(stdout.trim()), [], 'Every live rendered character across all v3 modals/screens must exist in wenkai-subset.woff2');
     },
   },
 ];

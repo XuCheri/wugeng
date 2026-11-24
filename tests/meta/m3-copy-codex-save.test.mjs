@@ -40,24 +40,24 @@ function makeFakeTarget() {
   };
 }
 
-test('M3 图鉴容量：12 兵刃 + 12 开光 + 12 法器 + 12 百鬼 = 48 项百物核心（含 3 人物共 51 项）', () => {
-  assert.equal(WEAPON_IDS.length, 12);
-  assert.equal(RELIC_IDS.length, 12);
+test('M3 图鉴容量：16 兵刃 + 16 开光 + 16 法器 + 12 百鬼 = 60 项百物核心（含 6 人物共 66 项）', () => {
+  assert.equal(WEAPON_IDS.length, 16);
+  assert.equal(RELIC_IDS.length, 16);
   assert.equal(ENEMY_IDS.length, 12);
-  assert.equal(HERO_IDS.length, 3);
+  assert.equal(HERO_IDS.length, 6);
 
   const s = defaultSave();
   const c0 = getCodexCounts(s);
   assert.equal(c0.coreHave, 1);
-  assert.equal(c0.coreTotal, 48);
+  assert.equal(c0.coreTotal, 60);
   assert.equal(c0.have, 2);
-  assert.equal(c0.total, 51);
-  assert.equal(c0.weapons.total, 12);
-  assert.equal(c0.evolutions.total, 12);
-  assert.equal(c0.relics.total, 12);
+  assert.equal(c0.total, 66);
+  assert.equal(c0.weapons.total, 16);
+  assert.equal(c0.evolutions.total, 16);
+  assert.equal(c0.relics.total, 16);
   assert.equal(c0.enemies.total, 12);
 
-  // 全量收集新旧条目后核对 48 / 48 与 51 / 51
+  // 全量收集新旧条目后核对 60 / 60 与 66 / 66
   const full = migrateSave({
     version: 1,
     unlockedHeroes: [...HERO_IDS],
@@ -69,10 +69,10 @@ test('M3 图鉴容量：12 兵刃 + 12 开光 + 12 法器 + 12 百鬼 = 48 项�
     },
   });
   const cf = getCodexCounts(full);
-  assert.equal(cf.coreHave, 48);
-  assert.equal(cf.coreTotal, 48);
-  assert.equal(cf.have, 51);
-  assert.equal(cf.total, 51);
+  assert.equal(cf.coreHave, 60);
+  assert.equal(cf.coreTotal, 60);
+  assert.equal(cf.have, 66);
+  assert.equal(cf.total, 66);
 });
 
 test('M3 v1 旧档无损迁移与新四器/四宝/三新鬼持久化 + 香案燃血开光同步', () => {
@@ -462,8 +462,8 @@ test('M3 图鉴防护（Defect 5）：ensureCodex/getCodexCounts/recordCodex* �
     assert.equal(recordCodexCharms(badSave, ['soulwick']), false);
     recordCodexSummary(badSave, { killsByType: { suona: 5 } });
     const counts = getCodexCounts(badSave);
-    assert.equal(counts.coreTotal, 48);
-    assert.equal(counts.total, 51);
+    assert.equal(counts.coreTotal, 60);
+    assert.equal(counts.total, 66);
   }
 
   const s = defaultSave();
@@ -578,8 +578,8 @@ test('M3 Iter3 Defect 2：冻结对象（Object.freeze / deepFreeze / 冻结子�
 
   // codex on frozen saves & frozen codex sub-objects
   assert.deepEqual(ensureCodex(Object.freeze({})), { weapons: ['gong'], evolutions: [], relics: [], enemies: {} });
-  assert.equal(getCodexCounts(Object.freeze({})).coreTotal, 48);
-  assert.equal(getCodexCounts(Object.freeze({ codex: Object.freeze({}) })).coreTotal, 48);
+  assert.equal(getCodexCounts(Object.freeze({})).coreTotal, 60);
+  assert.equal(getCodexCounts(Object.freeze({ codex: Object.freeze({}) })).coreTotal, 60);
 
   const deepFrozen = deepFreeze(defaultSave());
   assert.equal(syncCodexFromRun(deepFrozen, { weapons: [{ id: 'compass', evolved: true }], relics: [{ id: 'soulwick' }] }), false);

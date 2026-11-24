@@ -12,6 +12,7 @@ import { hitPropsCircle } from './props.js';
 import { healPlayer } from './player.js';
 import { BLESSING_TUNING } from './blessings.js';
 import { SYNERGY_TUNING } from './synergies.js';
+import { coopPartySize } from './coop.js';
 
 function pushHitEvent(run, x, y, amount, crit, enemyId, weaponId) {
   const sys = run._sys;
@@ -145,8 +146,8 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
   }
 
   const m = run.mods;
-  const wTags = WEAPONS[weaponId]?.tags || null;
-  const isSummon = weaponId === 'paperman' || weaponId === 'paperhorse' || !!(opts && opts.isSummon);
+  const wTags = typeof weaponId === 'string' && Object.hasOwn(WEAPONS, weaponId) ? WEAPONS[weaponId].tags || null : null;
+  const isSummon = weaponId === 'paperman' || weaponId === 'paperhorse' || weaponId === 'zhinian_kite' || !!(opts && opts.isSummon);
   let summonAdd = isSummon ? m.summonDmgPct : 0;
   if (!isSummon && wTags && wTags.includes('zhizha')) {
     summonAdd += m.zhizhaDmgPct || 0;
@@ -208,6 +209,9 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
 
   const st = run.stats;
   st.damageDealt = Math.min(Number.MAX_SAFE_INTEGER, st.damageDealt + dmg);
+  if (run.player?.stats) {
+    run.player.stats.damageDealt = Math.min(Number.MAX_SAFE_INTEGER, (run.player.stats.damageDealt || 0) + dmg);
+  }
   if (dmg > st.maxHit) st.maxHit = dmg;
   run._tele.dmg = Math.min(Number.MAX_SAFE_INTEGER, run._tele.dmg + dmg);
   if (!e.boss) run._tele.dmgNonBoss = Math.min(Number.MAX_SAFE_INTEGER, run._tele.dmgNonBoss + dmg);
@@ -244,11 +248,13 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
       if (m.zhizha6 && wTags.includes('zhizha')) {
         e.bleedT = SYNERGY_TUNING.zhizha6.bleedSec;
         e.bleedDps = Math.max(e.bleedDps || 0, raw * 0.35);
+        e.bleedSlot = run._activeSlot || 0;
         if (!(e._bleedTick > 0)) e._bleedTick = 0.5;
       }
       if (m.yangyan4 && wTags.includes('yangyan')) {
         e.burnT = SYNERGY_TUNING.yangyan4.burnSec;
         e.burnDps = Math.max(e.burnDps || 0, 10 + 3 * run.player.level);
+        e.burnSlot = run._activeSlot || 0;
         if (!(e._burnTick > 0)) e._burnTick = 0.5;
         applySlow(run, e, SYNERGY_TUNING.yangyan4.slowDur);
       }
@@ -267,6 +273,7 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
         id: run._nextId++,
         kind: 'thunderBolt',
         weaponId: 'talisman',
+        ownerSlot: run._activeSlot || 0,
         x: e.x,
         y: e.y,
         r: 10,
@@ -301,12 +308,25 @@ export function killEnemy(run, e, opts) {
   run.events.push({ type: 'kill', x: e.x, y: e.y, enemyType: e.type, elite: e.elite, boss: e.boss });
 
   const p = run.player;
-  // 大招攒气：普通击杀随时间衰减，精英 / Boss 固定
+  if (!(opts && opts.direct) && p?.stats) {
+    p.stats.kills = (p.stats.kills || 0) + 1;
+  }
+  // 大招攒气：普通击杀随时间衰减，精英 / Boss 固定；联机下存活队友共享 35% 灵气
   let charge;
   if (e.boss) charge = ULT.bossCharge;
   else if (e.elite) charge = ULT.eliteCharge;
   else charge = ULT.killCharge / (1 + ULT.decayPerMin * (run.time / 60));
-  if (!e.summoned || e.elite) p.ult = Math.min(p.ultMax, p.ult + charge * run.mods.ultChargeMul);
+  if (!e.summoned || e.elite) {
+    p.ult = Math.min(p.ultMax, p.ult + charge * run.mods.ultChargeMul);
+    if (coopPartySize(run) > 1) {
+      for (let i = 0; i < run.players.length; i++) {
+        const ally = run.players[i];
+        if (ally === p || ally.downed || ally.hp <= 0) continue;
+        const allyMul = ally._rt?.mods?.ultChargeMul || 1;
+        ally.ult = Math.min(ally.ultMax ?? ULT.max, ally.ult + charge * 0.35 * allyMul);
+      }
+    }
+  }
 
   // 糯米法器：累积击杀点数回复气血（不计入吃包子数）
   if (run.mods?.killHeal > 0) {
@@ -413,6 +433,7 @@ export function killEnemy(run, e, opts) {
   }
 
   // 长明灯通用阳炎印记：任意武器击杀带阳炎印记的目标均触发爆裂
+  const activeSlot = run._activeSlot || 0;
   if (e.yangyanMarkT > 0) {
     e.yangyanMarkT = 0;
     run._scheduled.push({
@@ -427,6 +448,7 @@ export function killEnemy(run, e, opts) {
       explosionKind: 'yangyanBurst',
       knock: 95,
       noReburst: true,
+      ownerSlot: activeSlot,
     });
   } else if (opts && opts.burst) {
     run._scheduled.push({
@@ -441,6 +463,7 @@ export function killEnemy(run, e, opts) {
       explosionKind: 'yangyanBurst',
       knock: 95,
       noReburst: true,
+      ownerSlot: activeSlot,
     });
   } else if (run.mods?.yangyan6 && e.burnT > 0 && !(opts && opts.noReburst)) {
     e.burnT = 0;
@@ -456,6 +479,7 @@ export function killEnemy(run, e, opts) {
       explosionKind: 'yangyanBurst',
       knock: 95,
       noReburst: true,
+      ownerSlot: activeSlot,
     });
   }
 
@@ -473,6 +497,7 @@ export function killEnemy(run, e, opts) {
       explosionKind: 'ghostFire',
       knock: 90,
       noReburst: true,
+      ownerSlot: activeSlot,
     });
   }
 }

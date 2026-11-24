@@ -39,7 +39,11 @@ export function chunkProps(seedNum, cx, cy) {
 /** 玩家换区块时重建 run.props */
 export function updateProps(run) {
   const C = PROPS.chunk;
-  const p = run.player;
+  const p0 = run.player;
+  const p =
+    p0?.downed && Array.isArray(run.players) && run.players.length > 1
+      ? run.players.find((pl) => pl && !pl.downed && pl.hp > 0) || p0
+      : p0;
   const cx = Math.floor(p.x / C);
   const cy = Math.floor(p.y / C);
   const key = cx * 100003 + cy;
@@ -54,11 +58,13 @@ export function updateProps(run) {
     }
     run.props = list;
   }
-  // 玩家撞上灯笼柱也能撞碎
-  for (const pr of run.props) {
-    if (pr.kind !== 'lanternpost' || pr.hp <= 0) continue;
-    const rr = pr.r + p.r;
-    if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) breakProp(run, pr);
+  // 存活玩家撞上灯笼柱也能撞碎
+  if (!p0?.downed && p0?.hp > 0) {
+    for (const pr of run.props) {
+      if (pr.kind !== 'lanternpost' || pr.hp <= 0) continue;
+      const rr = pr.r + p0.r;
+      if ((pr.x - p0.x) ** 2 + (pr.y - p0.y) ** 2 <= rr * rr) breakProp(run, pr);
+    }
   }
   if (run._propsDirty) {
     run.props = run.props.filter((pr) => pr.kind !== 'lanternpost' || pr.hp > 0);
@@ -88,8 +94,8 @@ function breakProp(run, pr) {
 }
 
 /** 找一口离玩家距离在 [min,max] 的古井（水鬼出生点） */
-export function findWell(run, min, max) {
-  const p = run.player;
+export function findWell(run, min, max, anchor = null) {
+  const p = anchor || run.player;
   let best = null;
   for (const pr of run.props) {
     if (pr.kind !== 'well') continue;

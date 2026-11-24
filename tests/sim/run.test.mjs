@@ -292,9 +292,8 @@ test('无尽：敌人生命按分钟 ×1.22；溢出签伤害 ×1.12 乘算', ()
   const e2 = spawnEnemy(run, 'lanternghost', 500, 0);
   const ratio = e2.maxHp / e0.maxHp;
   assert.ok(Math.abs(ratio - ENDLESS.hpGrowth ** 2) < 0.05, `ratio=${ratio}`);
-  for (const id of ['gong', 'lantern', 'talisman']) while (addOrUpgradeWeapon(run, id));
-  while (addOrUpgradeWeapon(run, 'bell'));
-  for (const id of ['clapper', 'censer', 'cinnabar', 'redstring']) while (addOrUpgradeRelic(run, id));
+  for (const id of ['gong', 'lantern', 'talisman', 'bell', 'compass', 'taomujian']) while (addOrUpgradeWeapon(run, id));
+  for (const id of ['clapper', 'censer', 'cinnabar', 'redstring', 'soulwick', 'leijimu']) while (addOrUpgradeRelic(run, id));
   recomputeMods(run);
   assert.ok(allMaxed(run));
   forceLevelup(run);

@@ -227,6 +227,7 @@ export function updateSynergyRuntime(run, dt) {
         id: run._nextId++,
         kind: 'gongPulse',
         weaponId: 'gong',
+        ownerSlot: run._activeSlot || 0,
         x: p.x,
         y: p.y,
         r: Math.max(0, R),
@@ -237,7 +238,7 @@ export function updateSynergyRuntime(run, dt) {
         life: 0.38,
         evolved: true,
       });
-      run.events.push({ type: 'fire', weaponId: 'gong', evolved: true, x: p.x, y: p.y, angle: 0 });
+      run.events.push({ type: 'fire', weaponId: 'gong', evolved: true, slot: run._activeSlot || 0, x: p.x, y: p.y, angle: 0 });
     }
   }
 
@@ -254,6 +255,7 @@ export function updateSynergyRuntime(run, dt) {
           id: run._nextId++,
           kind: 'paperman',
           weaponId: 'paperman',
+          ownerSlot: run._activeSlot || 0,
           role: 'imp',
           mode: 'imp',
           persistent: false,

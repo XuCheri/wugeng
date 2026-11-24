@@ -4,16 +4,25 @@
 export const SAVE_KEY = 'wugeng.save';
 export const SAVE_VERSION = 1;
 
-export const HERO_IDS = ['zhou', 'mian', 'daotong'];
-export const HERO_START_WEAPON = { zhou: 'gong', mian: 'paperman', daotong: 'talisman' };
+export const HERO_IDS = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'];
+export const HERO_START_WEAPON = {
+  zhou: 'gong',
+  mian: 'paperman',
+  daotong: 'talisman',
+  yinyang: 'compass',
+  tiejiang: 'suohun_chain',
+  nuoxi: 'nuo_drum',
+};
 export const SHOP_IDS = ['tizhi', 'lidao', 'jiaoli', 'yanli', 'wuxing', 'caiyun', 'jiyuan', 'huchi'];
 export const WEAPON_IDS = [
   'gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell',
   'compass', 'soulbanner', 'bronze_mirror', 'paperhorse',
+  'taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum',
 ];
 export const RELIC_IDS = [
   'clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring',
   'strawshoes', 'glutinous', 'fivecoins', 'soulwick',
+  'leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask',
 ];
 export const ENEMY_IDS = [
   'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',

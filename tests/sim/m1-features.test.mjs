@@ -464,7 +464,7 @@ test('F4 & F5: 全部 12 武器发射 fire 事件、+4 新武器与 +4 新法器
       for (const ev of r.events) if (ev.type === 'fire') seenFire.add(ev.weaponId);
     }
   }
-  assert.equal(seenFire.size, 12, `期望全部 12 把武器均发出 fire 事件，实得: ${[...seenFire]}`);
+  assert.equal(seenFire.size, 16, `期望全部 16 把武器均发出 fire 事件，实得: ${[...seenFire]}`);
 
   // 招魂幡破伞盾 + 魂障免伤、照妖铜镜焚弹叠伤、五帝钱加钱、糯米击杀回血、引魂灯芯返还冷却
   const run = createRun({ seed: 501, heroId: 'zhou' });

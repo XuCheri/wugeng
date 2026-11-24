@@ -9,13 +9,15 @@ import { clamp } from '../core/math.js';
 import { hurtPlayer } from './player.js';
 import { updateBoss } from './bosses.js';
 import { damageEnemy, knockback } from './combat.js';
+import { coopHpScale, coopPartySize, nearestLivingPlayer, hurtTargetPlayer, withPlayerContext } from './coop.js';
 
-/** 当前时刻的敌人血量倍率（主线分钟 + 夜色 + 无尽） */
+/** 当前时刻的敌人血量倍率（主线分钟 + 夜色 + 无尽 + 联机人数缩放） */
 export function currentHpScale(run) {
-  if (run.mode === 'endless') {
-    return enemyHpScale(run._endlessStart / 60, run.nightLevel, (run.time - run._endlessStart) / 60);
-  }
-  return enemyHpScale(run.time / 60, run.nightLevel, 0);
+  const base =
+    run.mode === 'endless'
+      ? enemyHpScale(run._endlessStart / 60, run.nightLevel, (run.time - run._endlessStart) / 60)
+      : enemyHpScale(run.time / 60, run.nightLevel, 0);
+  return base * coopHpScale(run);
 }
 
 /** 写入冲锋 / 扑击 / 挥戟预警线公开字段（供渲染层在夜色遮罩上方绘制朱砂走廊） */
@@ -102,9 +104,11 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     yangyanBurstR: 0,
     burnT: 0,
     burnDps: 0,
+    burnSlot: 0,
     _burnTick: 0,
     bleedT: 0,
     bleedDps: 0,
+    bleedSlot: 0,
     _bleedTick: 0,
     buffedT: 0,
     state: 'move',
@@ -208,8 +212,10 @@ export function compactEnemies(run) {
 }
 
 /** 在玩家周围的屏外圆环上取一个点；若玩家在移动，偏向前方 */
-export function ringPoint(run, min = SPAWN.ringMin, max = SPAWN.ringMax, biasForward = false) {
-  const p = run.player;
+export function ringPoint(run, min = SPAWN.ringMin, max = SPAWN.ringMax, biasForward = false, anchorPlayer = null) {
+  const p =
+    anchorPlayer ||
+    (run.player?.downed && coopPartySize(run) > 1 ? nearestLivingPlayer(run, run.player.x, run.player.y) : run.player);
   let a;
   if (biasForward && p.moving) a = Math.atan2(p.facingY, p.facingX) + run.rng.range(-1.2, 1.2);
   else a = run.rng.range(0, Math.PI * 2);
@@ -218,7 +224,8 @@ export function ringPoint(run, min = SPAWN.ringMin, max = SPAWN.ringMax, biasFor
 }
 
 export function updateEnemies(run, dt) {
-  const p = run.player;
+  const p0 = run.player;
+  const isCoop = coopPartySize(run) > 1;
   const hash = run._sys.hash;
   const sepHash = run._sys.sepHash || hash;
   const near = run._sys.scratchSep;
@@ -227,8 +234,13 @@ export function updateEnemies(run, dt) {
   const sepK = ai.separation;
   const kbKeep = Math.pow(ai.knockbackDecay, dt);
   const despawn2 = SPAWN.despawnDist * SPAWN.despawnDist;
-  const aura2 = (ai.drowned.auraRadius + p.r) ** 2;
+  const aura2 = (ai.drowned.auraRadius + p0.r) ** 2;
   let auraSlow = 1;
+  if (isCoop) {
+    for (let k = 1; k < run.players.length; k++) {
+      if (run.players[k]._rt) run.players[k]._rt.auraSlow = 1;
+    }
+  }
 
   rebuildSepHash(run);
   const arr = run.enemies;
@@ -272,13 +284,20 @@ export function updateEnemies(run, dt) {
     }
     if (e.yangyanMarkT > 0) e.yangyanMarkT = Math.max(0, e.yangyanMarkT - dt);
 
-    // 持续异常结算（阳炎灼烧 & 纸扎流血）
+    // 持续异常结算（阳炎灼烧 & 纸扎流血，按施加者槽位归属伤害与击杀）
     if (e.burnT > 0) {
       e.burnT -= dt;
       e._burnTick -= dt;
       if (e._burnTick <= 0) {
         e._burnTick += 0.5;
-        damageEnemy(run, e, Math.max(2, (e.burnDps || 10) * 0.5), 'lantern', { noCrit: true, noProc: true, knock: 0 });
+        const bOwner = isCoop && e.burnSlot > 0 ? run.players?.[e.burnSlot] : null;
+        if (bOwner) {
+          withPlayerContext(run, bOwner, () => {
+            damageEnemy(run, e, Math.max(2, (e.burnDps || 10) * 0.5), 'lantern', { noCrit: true, noProc: true, knock: 0 });
+          });
+        } else {
+          damageEnemy(run, e, Math.max(2, (e.burnDps || 10) * 0.5), 'lantern', { noCrit: true, noProc: true, knock: 0 });
+        }
         if (e.dead) continue;
       }
     }
@@ -287,11 +306,19 @@ export function updateEnemies(run, dt) {
       e._bleedTick -= dt;
       if (e._bleedTick <= 0) {
         e._bleedTick += 0.5;
-        damageEnemy(run, e, Math.max(2, (e.bleedDps || 8) * 0.5), 'paperman', { noCrit: true, noProc: true, knock: 0 });
+        const blOwner = isCoop && e.bleedSlot > 0 ? run.players?.[e.bleedSlot] : null;
+        if (blOwner) {
+          withPlayerContext(run, blOwner, () => {
+            damageEnemy(run, e, Math.max(2, (e.bleedDps || 8) * 0.5), 'paperman', { noCrit: true, noProc: true, knock: 0 });
+          });
+        } else {
+          damageEnemy(run, e, Math.max(2, (e.bleedDps || 8) * 0.5), 'paperman', { noCrit: true, noProc: true, knock: 0 });
+        }
         if (e.dead) continue;
       }
     }
 
+    const p = isCoop ? nearestLivingPlayer(run, e.x, e.y) : p0;
     let tx = p.x - e.x;
     let ty = p.y - e.y;
     const d2 = tx * tx + ty * ty;
@@ -302,7 +329,7 @@ export function updateEnemies(run, dt) {
     let vx = 0;
     let vy = 0;
     if (e.boss) {
-      const v = updateBoss(run, e, dt, tx, ty, d);
+      const v = isCoop && p !== p0 ? withPlayerContext(run, p, () => updateBoss(run, e, dt, tx, ty, d)) : updateBoss(run, e, dt, tx, ty, d);
       vx = v.x;
       vy = v.y;
     } else if (e.stunT > 0) {
@@ -536,9 +563,9 @@ export function updateEnemies(run, dt) {
     const cdx = p.x - e.x;
     const cdy = p.y - e.y;
     const cd2 = cdx * cdx + cdy * cdy;
-    if (cd2 <= cr * cr && e.atkT <= 0) {
+    if (cd2 <= cr * cr && e.atkT <= 0 && (!isCoop || (!p.downed && p.hp > 0))) {
       const rawContact = (e.boss ? e.dmg * (e.dmgMul || 1) : e.dmg) * (e.buffedT > 0 ? ai.suona.dmgBuff : 1);
-      const dealt = hurtPlayer(run, rawContact);
+      const dealt = isCoop ? hurtTargetPlayer(run, p, rawContact) : hurtPlayer(run, rawContact);
       e.atkT = dealt > 0 ? ai.contactCd : 0.20;
       if (!e.boss && !isCharging) {
         const cd = Math.sqrt(cd2) || 1;
@@ -549,11 +576,14 @@ export function updateEnemies(run, dt) {
     }
 
     // 水鬼减速光环
-    if (e.type === 'drowned' && cd2 <= aura2) auraSlow = ai.drowned.playerSlow;
+    if (e.type === 'drowned' && cd2 <= aura2) {
+      if (!isCoop || p === p0) auraSlow = ai.drowned.playerSlow;
+      else if (p._rt) p._rt.auraSlow = ai.drowned.playerSlow;
+    }
 
-    // 远距离回收：普通敌人挪到玩家前方的圆环上（巡更小头目保留原地附近拉回，防丢失供盒）
+    // 远距离回收：普通敌人挪到最近存活玩家前方的圆环上（防队长倒地时无穷瞬移循环）
     if (!e.boss && cd2 > despawn2) {
-      const pt = ringPoint(run, SPAWN.ringMin, SPAWN.ringMax, true);
+      const pt = ringPoint(run, SPAWN.ringMin, SPAWN.ringMax, true, p);
       e.x = pt.x;
       e.y = pt.y;
       e.kbx = e.kby = 0;

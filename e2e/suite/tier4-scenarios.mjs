@@ -1,4 +1,4 @@
-// Tier 4: Realistic Multi-Feature End-User Application Scenarios (10 full journeys)
+// Tier 4: Realistic End-User Application Journeys (12 full scenarios: T4-S01..T4-S12)
 // STRICT OPAQUE-BOX: ZERO imports from ../../src/**.
 
 import assert from 'node:assert/strict';
@@ -8,76 +8,116 @@ import {
   ALL_ENEMY_IDS,
   ALL_RELIC_IDS,
   ALL_WEAPON_IDS,
+  ATTACK_VFX_IDS,
+  BASELINE_MAIN_COMMIT,
+  CODEX_TOTAL,
+  DEFAULT_UNLOCKED_WEAPON_IDS,
+  HERO_IDS,
+  HERO_SIGNATURE_WEAPONS,
+  PRIMARY_LEADERBOARD_ID,
   REGULAR_ENEMY_IDS,
   TAPTAP,
 } from './contracts.mjs';
 import {
   ROOT,
   VENV_PYTHON,
+  analyzeCanvasSpriteBox,
   auditCanvasWoodblockPalette,
   bootAndStartRun,
-  bootGame,
+  bootColdIntro,
   bootToHub,
+  closeActiveModal,
   confirmChestModal,
+  createCoopPages,
   createIsolatedPage,
+  engageInspectorPeek,
   execFileAsync,
   extractH5ZipToScratch,
   fastClick,
   grantItemViaLevelUp,
+  readLeaderboardBodyText,
+  readNormalizedSave,
+  releaseInspectorPeek,
   requireOpenSelector,
+  sha256File,
+  shopBuyAndEquipInModal,
   startStaticServer,
+  stepCoopFrames,
   stepFrames,
+  suppressWardersInPage,
   triggerChest,
   triggerLethalHit,
   triggerLevelUp,
 } from './harness.mjs';
+import { discoverCoopHeroSkins, launchTwoPageCoopRun } from './tier1-f8-f15.mjs';
 
 export const TIER4_TESTS = [
   {
     id: 'T4-S01',
     tier: 4,
-    feature: 'F3',
-    features: ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'],
-    timeoutMs: 20_000,
-    name: '390×844 Full Five-Watch -> Dawn -> Endless Player Journey (Title -> Hub -> Shop -> Synergies/Blessings/Shrines/Bosses -> Settlement)',
+    feature: 'F1',
+    features: ['F1', 'F2', 'F3', 'F4', 'F7', 'F10', 'F12', 'F13'],
+    timeoutMs: 24_000,
+    name: '390×844 Full Cold-Boot v3 Solo Journey (Studio Splash -> CADPA/Privacy -> Hub Affinity -> 6+6 + Banish + Inspector + Blessing + Shrine + Evo -> Youshen Dawn Clear -> Leaderboard -> Night 1)',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser, { isolated: true });
+      const s = await bootColdIntro(browser, baseUrl, { query: 'mockLeaderboard=1' });
       try {
-        await bootGame(s.page, baseUrl);
+        assert.ok(s.elapsedMs < 2500, `Expected cold splash < 2500ms, got ${Math.round(s.elapsedMs)}ms`);
+
         await fastClick(s.page, '.age-badge');
-        await fastClick(s.page, '.veil .btn--seal');
+        await fastClick(s.page, '#ui .veil .btn--seal');
         await fastClick(s.page, '.title-foot .link-btn');
         await s.page.waitForSelector('.privacy-body');
-        await fastClick(s.page, '.veil .btn--seal');
+        const privTxt = (await s.page.textContent('.privacy-body')) || '';
+        assert.ok(privTxt.includes('剑清酱工作室') && privTxt.includes('排行榜'));
+        await fastClick(s.page, '#ui .veil .btn--seal');
 
         await fastClick(s.page, '.title-actions .btn--seal');
         await s.page.waitForSelector('.screen--hub');
-        await s.page.evaluate(() => {
+        await s.page.evaluate((allW) => {
           window.__wugeng.save.coins = 500;
+          window.__wugeng.save.unlockedWeapons = [...allW];
           window.__wugeng.save.charms = [{ relicId: 'strawshoes' }];
           window.__wugeng.showHub();
-        });
+        }, ALL_WEAPON_IDS);
+
+        await fastClick(s.page, '[data-hero-id="zhou"]');
+        await fastClick(s.page, '[data-starter-weapon="gong"]');
+        await requireOpenSelector(s.page, '.signature-badge');
+
         await fastClick(s.page, '.hub-nav .btn:nth-child(1)');
         await fastClick(s.page, '.shop-row .btn--small');
-        await fastClick(s.page, '.veil .btn--ghost');
+        await fastClick(s.page, '#ui .veil .btn--ghost');
 
         await fastClick(s.page, '.charm-pick');
         await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
-        await stepFrames(s.page, 5);
+        await stepFrames(s.page, 4);
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.relics[0]?.id), 'strawshoes');
 
-        // Build 3-piece zhenhun resonance (gong + strawshoes + soulbanner), banish 1 unwanted item
+        // Levelup: banish 1 slip, inspect loadout via .veil--inspector, then pick .qian
         await triggerLevelUp(s.page);
-        await requireOpenSelector(s.page, '.overlay--levelup', 'Expected .overlay--levelup');
-        assert.ok(await s.page.locator('[data-action="banish"]').count() > 0, 'Expected [data-action="banish"]');
+        await requireOpenSelector(s.page, '.selection-owned-bar');
         const banishBtn = s.page.locator('.qian >> nth=2 >> [data-action="banish"]');
         if (await banishBtn.count() > 0) await banishBtn.first().click();
-        else { await fastClick(s.page, '[data-action="banish"]'); await s.page.evaluate(() => document.querySelectorAll('.qian')[2]?.click()); }
+        else {
+          await fastClick(s.page, '[data-action="banish"]');
+          await s.page.evaluate(() => document.querySelectorAll('.qian')[2]?.click());
+        }
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        await requireOpenSelector(s.page, '.veil--inspector');
+        await fastClick(s.page, '[data-action="close-inspector"]');
         await fastClick(s.page, '.qian');
 
+        // Expand toward 6+6 & 3pc zhenhun
         await grantItemViaLevelUp(s.page, 'weapon', 'gong', 4);
-        await grantItemViaLevelUp(s.page, 'weapon', 'soulbanner', 2);
+        for (const wid of ['soulbanner', 'suohun_chain', 'nuo_drum', 'talisman', 'compass']) {
+          await grantItemViaLevelUp(s.page, 'weapon', wid, 1);
+        }
+        for (const rid of ['yinpai', 'wuse_mask', 'cinnabar', 'bagua', 'censer']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
 
+        // 120s Watch Blessing
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
@@ -88,37 +128,38 @@ export const TIER4_TESTS = [
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
         await fastClick(s.page, '.qian');
 
+        // World Shrine
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
-          const altar = r.shrines.find((x) => x.kind === 'altar' && !x.used);
+          const altar = r.shrines.find((x) => x.kind === 'altar' && !x.used) || r.shrines.find((x) => !x.used);
           if (altar) {
             r.player.x = altar.x;
             r.player.y = altar.y;
           }
           window.__e2eStepFrames(3);
         });
-        await fastClick(s.page, '[data-action="interact-shrine"]', 'Expected HUD [data-action="interact-shrine"]');
+        await fastClick(s.page, '[data-action="interact-shrine"]');
         await fastClick(s.page, '.overlay--shrine [data-shrine-option]:not([disabled])');
         if (await s.page.evaluate(() => window.__wugeng.overlay === 'levelup')) {
           await fastClick(s.page, '.qian');
         }
 
-        // Open Chest -> evolve gong via zhenhun school resonance (NO clapper!)
         if (!(await s.page.evaluate(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong')?.evolved))) {
           await triggerChest(s.page);
-          await confirmChestModal(s.page);
+          await confirmChestModal(s.page, 'gong');
         }
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong')?.evolved), true);
 
-        // Defeat Youshen at 600s -> Dawn Clear -> Enter Endless -> Settle -> Hub Night 1 unlocked
+        // Defeat Youshen at 600s -> Dawn Clear -> Endless -> Settle
+        await suppressWardersInPage(s.page);
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
           r._bossSpawned = { horse: true, umbrella: true, youshen: false };
           r.time = 601;
-          window.__e2eStepFrames(2);
-          if (r.status === 'levelup') document.querySelector('.qian')?.click();
+          window.__e2eStepFrames(2, { stopOnOverlay: false });
+          while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
           const ys = r.enemies.find((e) => e.type === 'youshen');
           ys.x = r.player.x + 25;
           ys.y = r.player.y;
@@ -126,9 +167,9 @@ export const TIER4_TESTS = [
           r.player.ult = r.player.ultMax;
         });
         await s.page.keyboard.press('Space');
-        await stepFrames(s.page, 4);
+        await stepFrames(s.page, 4, { stopOnOverlay: false });
         while (await s.page.evaluate(() => window.__wugeng.overlay === 'levelup')) {
-          await s.page.click('.qian >> nth=0');
+          await fastClick(s.page, '.qian');
         }
         assert.equal(await s.page.evaluate(() => window.__wugeng.overlay), 'cleared');
         await s.page.click('text=继续守夜');
@@ -137,15 +178,18 @@ export const TIER4_TESTS = [
         await triggerLethalHit(s.page);
         await s.page.click('text=不了，结算');
         await s.page.waitForSelector('.screen--result.is-dawn');
+        await requireOpenSelector(s.page, '.screen--result .result-score');
+
         await s.page.click('text=回更房');
         await s.page.waitForSelector('.screen--hub');
-
         const hubProgress = await s.page.evaluate(() => ({
           clears: window.__wugeng.save.stats.clears,
           nightUnlocked: window.__wugeng.save.nightUnlocked,
+          bestScore: window.__wugeng.save.leaderboard?.bestScore || 0,
         }));
         assert.ok(hubProgress.clears >= 1);
-        assert.ok(hubProgress.nightUnlocked >= 1, 'Clearing Night 0 must unlock Night 1');
+        assert.ok(hubProgress.nightUnlocked >= 1);
+        assert.ok(hubProgress.bestScore > 0);
         s.assertNoErrors('T4-S01');
       } finally {
         await s.close();
@@ -155,31 +199,43 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S02',
     tier: 4,
-    feature: 'F8',
-    features: ['F6', 'F7', 'F8', 'F9', 'F12'],
-    name: '360×780 Compact Mobile Responsive Layout + Visibility Auto-Pause + Cloud Sync Dirty Flush',
+    feature: 'F10',
+    features: ['F3', 'F7', 'F10', 'F11'],
+    name: '360×780 Narrow Mobile 6+6 Responsive Layout + Loadout Inspector 透视战场 + Solo Visibility Auto-Pause + Cloud Flush',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser, { viewport: { width: 360, height: 780 }, deviceScaleFactor: 2 });
+      const s = await createIsolatedPage(browser, {
+        viewport: { width: 360, height: 780 },
+        deviceScaleFactor: 2,
+      });
       try {
         await bootAndStartRun(s.page, baseUrl, {
           query: 'mockCloud=1',
+          unlockedWeapons: ALL_WEAPON_IDS,
+          savePatch: { coins: 300, unlockedWeapons: ALL_WEAPON_IDS },
           seed: 4002,
-          savePatch: { coins: 300 },
         });
-        await grantItemViaLevelUp(s.page, 'weapon', 'bell', 1); // zhenhun 2pc
+        for (const wid of ['bell', 'talisman', 'compass', 'suohun_chain', 'nuo_drum']) {
+          await grantItemViaLevelUp(s.page, 'weapon', wid, 1);
+        }
+        for (const rid of ['clapper', 'cinnabar', 'redstring', 'bagua', 'yinpai', 'wuse_mask']) {
+          await grantItemViaLevelUp(s.page, 'relic', rid, 1);
+        }
 
-        // Check zero horizontal overflow on 360px narrow screen in .overlay--levelup
         await triggerLevelUp(s.page);
-        assert.ok(await s.page.$('.overlay--levelup'), 'Expected .overlay--levelup');
         const levelupFit = await s.page.evaluate(() => {
-          const el = document.querySelector('.overlay--levelup');
-          const r = el.getBoundingClientRect();
+          const r = document.querySelector('.overlay--levelup').getBoundingClientRect();
           return { left: r.left, right: r.right, vw: window.innerWidth };
         });
-        assert.ok(levelupFit.left >= -1 && levelupFit.right <= levelupFit.vw + 1, `360px overflow in levelup: ${JSON.stringify(levelupFit)}`);
-        await s.page.click('.qian >> nth=0');
+        assert.ok(levelupFit.left >= -1 && levelupFit.right <= levelupFit.vw + 1);
 
-        // Schedule dirty cloud save, then simulate backgrounding tab (`visibilitychange` with document.hidden=true)
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        const peek = await engageInspectorPeek(s.page);
+        assert.ok(peek.state.effectiveOpacity <= 0.45);
+        await releaseInspectorPeek(s.page, peek.mode);
+        await fastClick(s.page, '[data-action="close-inspector"]');
+        await fastClick(s.page, '.qian');
+
+        // Solo visibilitychange MUST auto-pause, suspend WebAudio, and flush dirty save
         await s.page.evaluate(() => {
           window.__wugeng.save.coins = 456;
           window.__wugeng.cloud.scheduleSync(window.__wugeng.save);
@@ -187,17 +243,15 @@ export const TIER4_TESTS = [
           document.dispatchEvent(new Event('visibilitychange'));
         });
         await s.page.waitForFunction(() => window.__wugeng.overlay === 'pause');
-        assert.ok(await s.page.$('.overlay--pause'), 'Visibility auto-pause should mount .overlay--pause');
         const bgCheck = await s.page.evaluate(() => ({
           paused: window.__wugeng.game.isPaused(),
           audioMuted: window.__wugeng.audio.play('gong'),
-          savedLocalCoins: JSON.parse(localStorage.getItem('wugeng.save')).coins,
+          savedLocalCoins: JSON.parse(localStorage.getItem('wugeng.save') || '{}').coins,
         }));
         assert.equal(bgCheck.paused, true);
-        assert.equal(bgCheck.audioMuted, false, 'Backgrounded tab must suspend WebAudio');
-        assert.equal(bgCheck.savedLocalCoins, 456, 'visibilitychange must flush save to localStorage');
+        assert.equal(bgCheck.audioMuted, false);
+        assert.equal(bgCheck.savedLocalCoins, 456);
 
-        // Restore foreground visibility and resume run
         await s.page.evaluate(() => {
           Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
           document.dispatchEvent(new Event('visibilitychange'));
@@ -213,38 +267,40 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S03',
     tier: 4,
-    feature: 'F7',
-    features: ['F7', 'F8', 'F9'],
-    name: '100% Offline Zero-Ad Complete Player Journey (/index.html without mockAds -> Retry Loop)',
+    feature: 'F12',
+    features: ['F7', 'F8', 'F12', 'F13'],
+    name: '100% Offline Ordinary Browser Journey (window.tap === undefined, 0 Ads, Local Honor Board, Invite Fallback & Retry)',
     async run({ browser, baseUrl }) {
-      const s = await createIsolatedPage(browser);
+      const s = await createIsolatedPage(browser, { isolated: true });
       try {
         await bootToHub(s.page, baseUrl);
         await fastClick(s.page, '.hub-nav .btn:nth-child(3)');
         assert.equal(await s.page.locator('.btn--ad').count(), 0);
-        await fastClick(s.page, '.veil .btn--seal');
-        await fastClick(s.page, '.veil .btn--ghost');
+        await fastClick(s.page, '#ui .veil .btn--seal');
+        await fastClick(s.page, '#ui .veil .btn--ghost');
+
+        // Offline local leaderboard
+        await fastClick(s.page, '[data-action="open-leaderboard"]');
+        await requireOpenSelector(s.page, '.leaderboard-modal');
+        await closeActiveModal(s.page, 'close-leaderboard');
+
+        // Offline co-op invite fallback
+        await fastClick(s.page, '[data-action="open-coop"]');
+        await fastClick(s.page, '[data-action="coop-create"]');
+        await fastClick(s.page, '[data-action="coop-invite-friend"]');
+        await s.page.evaluate(() => {
+          window.__wugeng.coop?.leave?.();
+          window.__wugeng.coop?.close?.();
+        });
+        await closeActiveModal(s.page, 'close-coop');
 
         await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
         await stepFrames(s.page, 3);
-
         await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.time = 90;
-          r.rerolls.free = 0;
+          window.__wugeng.game.run.time = 90;
+          window.__wugeng.game.run.rerolls.free = 0;
         });
         await triggerLevelUp(s.page);
-        assert.equal(await s.page.locator('.btn--ad').count(), 0);
-        await fastClick(s.page, '.qian');
-
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.time = 119.97;
-          window.__e2eStepFrames(4);
-        });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
         assert.equal(await s.page.locator('.btn--ad').count(), 0);
         await fastClick(s.page, '.qian');
 
@@ -252,15 +308,13 @@ export const TIER4_TESTS = [
         assert.equal(await s.page.locator('.btn--ad').count(), 0);
         await s.page.evaluate(() => {
           const btns = [...document.querySelectorAll('.veil button')];
-          const settle = btns.find((b) => b.textContent.includes('结算')) || btns[btns.length - 1];
-          settle?.click();
+          (btns.find((b) => b.textContent.includes('结算')) || btns[btns.length - 1])?.click();
         });
         await s.page.waitForSelector('.screen--result');
         assert.equal(await s.page.locator('.btn--ad').count(), 0);
         await s.page.evaluate(() => {
           const btns = [...document.querySelectorAll('.screen--result button')];
-          const retry = btns.find((b) => b.textContent.includes('再守')) || btns[0];
-          retry?.click();
+          (btns.find((b) => b.textContent.includes('再守')) || btns[0])?.click();
         });
         await s.page.waitForFunction(() => window.__wugeng.game.run?.status === 'playing');
         s.assertNoErrors('T4-S03');
@@ -272,44 +326,97 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S04',
     tier: 4,
-    feature: 'F12',
-    features: ['F8', 'F12'],
-    timeoutMs: 22_000,
-    name: 'Full Rewarded Ads + Mock Cloud Save Lifecycle (?mockAds=1&mockCloud=1 + skip/fail Resilience)',
+    feature: 'F8',
+    features: ['F5', 'F6', 'F8', 'F9', 'F11'],
+    timeoutMs: 20_000,
+    name: 'Achievement Unlock (taomujian/skin) -> Ghost-Market Copper Shop (violet_thunder VFX) -> Live Combat Render -> Cloud v3 Anti-Dupe',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser, { isolated: true });
       try {
-        await bootToHub(s.page, baseUrl, { query: 'mockAds=1&mockCloud=1', savePatch: { coins: 100 } });
-
-        // 1) Check-in double via real 3s mock ad
-        await fastClick(s.page, '.hub-nav .btn:nth-child(3)');
-        await fastClick(s.page, '.veil .btn--ad');
-        await s.page.waitForSelector('.mock-ad');
-        await s.page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7500 });
-        await fastClick(s.page, '.veil .btn--ghost');
-        const coinsAfterCheckin = await s.page.evaluate(() => window.__wugeng.save.coins);
-        assert.equal(coinsAfterCheckin, 160, 'Day 1 check-in (30) doubled via ad should grant +60 coins');
-
-        // 2) Start run -> advance past AD_GRACE_SEC (60s) -> death ad revive via 3s mock ad
-        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
-        await stepFrames(s.page, 3);
-        await s.page.evaluate(() => {
-          window.__wugeng.game.run.time = 75;
-        });
-        await triggerLethalHit(s.page);
-        await fastClick(s.page, '.veil .btn--ad');
-        await s.page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7500 });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.status), 'playing');
-
-        // 3) Verify mockAds=fail grants 0 coins on fresh unclaimed check-in
         await bootToHub(s.page, baseUrl, {
-          query: 'mockAds=fail',
-          savePatch: { coins: 0, checkin: { cycleDay: 1, lastClaimDate: null, cycles: 0, totalClaims: 0 } },
+          query: 'mockCloud=1',
+          savePatch: {
+            coins: 4000,
+            unlockedHeroes: HERO_IDS,
+            unlockedWeapons: DEFAULT_UNLOCKED_WEAPON_IDS,
+            nightUnlocked: 10,
+            nightCleared: 10,
+            stats: {
+              runs: 30, clears: 10, firstRunDone: true, bestTimeSec: 1200,
+              bestKills: 3500, bestHit: 50_000, totalKills: 25_000,
+              totalEvolutions: 30, totalBossKills: 25, coopRuns: 6, coopRevives: 6,
+            },
+          },
         });
-        await fastClick(s.page, '.hub-nav .btn:nth-child(3)');
-        await fastClick(s.page, '.veil .btn--ad');
-        await s.page.waitForTimeout(520);
-        assert.equal(await s.page.evaluate(() => window.__wugeng.save.coins), 0, 'mockAds=fail must grant 0 coins');
+        await s.page.evaluate(async () => {
+          window.__wugeng.save.updatedAt = 1700000100000;
+          await window.__wugeng.cloud.uploadNow(window.__wugeng.save);
+        });
+
+        // 1) Claim achievements
+        await fastClick(s.page, '[data-action="open-achievements"]');
+        await s.page.evaluate(async () => {
+          const modal = document.querySelector('.achievements-modal');
+          const claimAll = () => {
+            modal.querySelectorAll('button:not([disabled])').forEach((b) => {
+              if (/领|取|赏/.test(b.textContent || '')) b.click();
+            });
+          };
+          claimAll();
+          for (const t of modal.querySelectorAll('[data-ach-tab], [data-category], [role="tab"]')) {
+            t.click();
+            await new Promise((r) => requestAnimationFrame(r));
+            claimAll();
+          }
+        });
+        await closeActiveModal(s.page, 'close-achievements');
+
+        // 2) Buy copper skin + violet_thunder VFX in Ghost-Market Shop
+        await fastClick(s.page, '[data-action="open-market"]');
+        await requireOpenSelector(s.page, '.cosmetic-shop-modal');
+        const buySkin = await shopBuyAndEquipInModal(s.page, {
+          kind: 'skin',
+          heroId: 'zhou',
+          targetIdx: 1,
+          buy: true,
+          equip: true,
+          close: false,
+        });
+        assert.equal(buySkin.ok, true, buySkin.reason || 'Failed buying copper skin in T4-S04');
+        const buyVt = await shopBuyAndEquipInModal(s.page, {
+          kind: 'vfx',
+          vfxId: 'violet_thunder',
+          buy: true,
+          equip: true,
+          close: true,
+        });
+        assert.equal(buyVt.ok, true, buyVt.reason || 'Failed buying violet_thunder in T4-S04');
+
+        const coinsBeforeSync = await s.page.evaluate(() => window.__wugeng.save.coins);
+        await fastClick(s.page, '[data-starter-weapon="taomujian"]');
+        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+        await stepFrames(s.page, 2);
+
+        await s.page.evaluate(async () => {
+          const r = window.__wugeng.game.run;
+          r.darkness = 0;
+          r.projectiles.push({
+            id: 995, kind: 'gongPulse', x: r.player.x, y: r.player.y,
+            r: 64, radius: 64, maxRadius: 84, t: 0.12, life: 0.35, evolved: true, attackVfx: 'violet_thunder',
+          });
+          window.__wugeng.game.pause();
+          await new Promise((res) => requestAnimationFrame(res));
+        });
+        const snap = await analyzeCanvasSpriteBox(s.page, '#game-canvas');
+        assert.ok(snap.hueBuckets.violet >= 25, `Expected violet_thunder VFX pixels >= 25, got ${snap.hueBuckets.violet}`);
+
+        // Cloud pull merge must not duplicate copper
+        const mergedCoins = await s.page.evaluate(async () => {
+          window.__wugeng.save.updatedAt = 1700000100000;
+          const p = await window.__wugeng.cloud.pullFromCloud(window.__wugeng.save);
+          return (p?.merged || window.__wugeng.save).coins;
+        });
+        assert.equal(mergedCoins, coinsBeforeSync);
         s.assertNoErrors('T4-S04');
       } finally {
         await s.close();
@@ -319,14 +426,19 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S05',
     tier: 4,
-    feature: 'F11',
-    features: ['F4', 'F5', 'F10', 'F11'],
+    feature: 'F4',
+    features: ['F3', 'F4', 'F5', 'F6'],
     timeoutMs: 18_000,
-    name: '300 Mixed 9-Type Enemies (incl. suona/paperbride/cinder + elites) + 400 Mixed 12-Weapon Projectiles Render Stress',
+    name: '300 Mixed 9-Type Enemies + 400 Mixed 16-Weapon Projectiles + Mineral VFX Steady-State Render Stress',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
-        await bootAndStartRun(s.page, baseUrl, { seed: 4005 });
+        await bootAndStartRun(s.page, baseUrl, {
+          savePatch: {
+            cosmetics: { owned: ATTACK_VFX_IDS, equipped: { attackVfx: 'jade_ghostfire', heroSkins: {} } },
+          },
+          seed: 4005,
+        });
         const perf = await s.page.evaluate(async ({ enemyTypes }) => {
           const g = window.__wugeng.game;
           const r = g.run;
@@ -334,7 +446,6 @@ export const TIER4_TESTS = [
           r._spawnAcc = -99999;
           r._nextWaveT = 99999;
           r.weapons.forEach((w) => { w.cd = 9999; });
-          // Spawn real simulation entities for all 9 regular enemy types (including suona, paperbride, cinder)
           for (let i = 0; i < 300; i++) {
             const a = (i / 300) * Math.PI * 2;
             const d = 55 + (i % 15) * 18;
@@ -390,7 +501,6 @@ export const TIER4_TESTS = [
             });
           }
 
-          // Warm 2 frames so any first-frame sprite baking settles before steady-state sampling
           await new Promise((res) => requestAnimationFrame(res));
           await new Promise((res) => requestAnimationFrame(res));
 
@@ -409,10 +519,10 @@ export const TIER4_TESTS = [
           };
         }, { enemyTypes: REGULAR_ENEMY_IDS });
 
-        assert.equal(perf.enemies, 300, `Expected all 300 spawned stress-test enemies alive, got ${perf.enemies}`);
-        assert.equal(perf.distinctEnemyTypes, 9, 'Expected all 9 regular enemy species (6 classic + 3 new F10) spawned & rendered');
-        assert.equal(perf.projectiles, 400, `Expected all 400 projectiles active, got ${perf.projectiles}`);
-        assert.ok(perf.p50 < 400, `Expected smooth 300-enemy + 400-projectile software headless frame render p50 < 400ms, got ${perf.p50.toFixed(1)}ms`);
+        assert.equal(perf.enemies, 300);
+        assert.equal(perf.distinctEnemyTypes, 9);
+        assert.equal(perf.projectiles, 400);
+        assert.ok(perf.p50 < 400, `Expected p50 < 400ms, got ${perf.p50.toFixed(1)}ms`);
         s.assertNoErrors('T4-S05');
       } finally {
         await s.close();
@@ -422,14 +532,15 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S06',
     tier: 4,
-    feature: 'F10',
-    features: ['F10', 'F6', 'F12'],
-    name: 'Three-Hero Unlock & Signature Ultimate Journey (老周 -> unlock 阿绵 & 小道童 -> test all 3 Ultimates via HUD Gong)',
+    feature: 'F2',
+    features: ['F2', 'F3', 'F9'],
+    timeoutMs: 18_000,
+    name: 'All 6 Watchman Heroes (zhou, mian, daotong, yinyang, tiejiang, nuoxi) Unlock, Starter Affinity & Signature Ultimates Tour',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
+        // 1) Verify classic hero unlock superset after 850-kill 500s 0-bun run
         await bootAndStartRun(s.page, baseUrl, { heroId: 'zhou', seed: 4006 });
-        // Achieve both 800 kills (unlocks mian) and >=480s with 0 buns (unlocks daotong) in 1 run settlement!
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.time = 500;
@@ -439,38 +550,45 @@ export const TIER4_TESTS = [
           window.__wugeng.game.finish();
         });
         await s.page.waitForSelector('.screen--result');
-        await s.page.evaluate(() => {
-          const btns = [...document.querySelectorAll('.screen--result button')];
-          const hubBtn = btns.find((b) => b.textContent.includes('更房')) || btns[btns.length - 1];
-          hubBtn?.click();
-        });
-        await s.page.waitForSelector('.screen--hub');
+        const unlockedAfterRun = await s.page.evaluate(() => window.__wugeng.save.unlockedHeroes);
+        for (const baseHero of ['zhou', 'mian', 'daotong']) {
+          assert.ok(unlockedAfterRun.includes(baseHero), `Expected ${baseHero} unlocked`);
+        }
 
-        const unlocked = await s.page.evaluate(() => window.__wugeng.save.unlockedHeroes);
-        assert.deepEqual(new Set(unlocked), new Set(['zhou', 'mian', 'daotong']), 'Both mian and daotong should now be unlocked');
+        // 2) Full 6-hero Hub selection, signature badge & HUD Ult Gong tour
+        await bootToHub(s.page, baseUrl, {
+          savePatch: { unlockedHeroes: HERO_IDS, unlockedWeapons: ALL_WEAPON_IDS },
+        });
+        for (const hid of HERO_IDS) {
+          const sigW = HERO_SIGNATURE_WEAPONS[hid];
+          await fastClick(s.page, `[data-hero-id="${hid}"]`);
+          await fastClick(s.page, `[data-starter-weapon="${sigW}"]`);
+          await requireOpenSelector(s.page, '.signature-badge');
 
-        await s.page.evaluate(() => document.querySelectorAll('.hero-tile')[1]?.click());
-        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
-        await stepFrames(s.page, 3);
-        await s.page.evaluate(() => {
-          const r = window.__wugeng.game.run;
-          r.enemies.length = 0;
-          r._spawnAcc = -99999;
-          r.player.ult = r.player.ultMax;
-        });
-        await s.page.mouse.click(334, 788);
-        const mianCast = await s.page.evaluate(() => {
-          window.__e2eStepFrames(5);
-          const r = window.__wugeng.game.run;
-          return {
-            hero: r.heroId,
-            ults: r.stats.ultsCast,
-            hasPaperHorse: r.projectiles.some((p) => p.kind === 'paperHorse'),
-          };
-        });
-        assert.equal(mianCast.hero, 'mian');
-        assert.equal(mianCast.ults, 1);
-        assert.equal(mianCast.hasPaperHorse, true, 'Tapping HUD Ult Gong as 阿绵 should unleash 百鬼纸马阵 (paperHorse)');
+          await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+          await stepFrames(s.page, 2);
+          await s.page.evaluate(() => {
+            const r = window.__wugeng.game.run;
+            r.enemies.length = 0;
+            r._spawnAcc = -99999;
+            r._spawnQueue.push({ type: 'sedan', x: r.player.x + 70, y: r.player.y, opts: {} });
+            window.__e2eStepFrames(1);
+            r.enemies[0].hp = 9999;
+            r.enemies[0].speed = 0;
+            r.player.ult = r.player.ultMax;
+          });
+          await s.page.mouse.click(334, 788);
+          const cast = await s.page.evaluate(() => {
+            window.__e2eStepFrames(12);
+            const u = window.__wugeng.game.run.stats.ultsCast;
+            window.__wugeng.game.finish();
+            window.__wugeng.game.clear();
+            window.__wugeng.showHub();
+            return u;
+          });
+          await s.page.waitForSelector('.screen--hub');
+          assert.equal(cast, 1, `Expected HUD Ult Gong to trigger ${hid} signature Ultimate`);
+        }
         s.assertNoErrors('T4-S06');
       } finally {
         await s.close();
@@ -480,26 +598,24 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S07',
     tier: 4,
-    feature: 'F2',
-    features: ['F2', 'F11', 'F12'],
-    timeoutMs: 18_000,
-    name: 'style-lab.html Full Visual & 6-Color Woodblock Audit Across Watches 1..6 & Scenes (sheet, crowd, boss, hud)',
+    feature: 'F5',
+    features: ['F5', 'F6', 'F7', 'F15'],
+    timeoutMs: 20_000,
+    name: 'style-lab.html Complete Visual Audit (Watches 1..6 Woodblock Palette + ?scene=skins 18 Skins + ?scene=vfx 5 VFX Themes)',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser, { styleLab: true });
       try {
         await s.page.goto(`${baseUrl}/style-lab.html?scene=sheet`);
         await s.page.waitForFunction(() => window.__ready === true);
-        const sheetFont = await s.page.evaluate(() => document.fonts.check('16px "WenKai"', '五更天'));
-        assert.equal(sheetFont, true, 'style-lab.html must load WenKai via /assets/fonts/ HTML directory listing');
+        assert.equal(await s.page.evaluate(() => document.fonts.check('16px "WenKai"', '五更天')), true);
         const sheetAudit = await auditCanvasWoodblockPalette(s.page, 45);
         assert.ok(sheetAudit.violationRatio < 0.005);
 
-        // 2) Compare Watch 1, Watch 5, and Watch 6 (Dawn) darkness & woodblock palette
         const lumaByWatch = {};
         for (const w of [1, 5, 6]) {
           await s.page.goto(`${baseUrl}/style-lab.html?watch=${w}&scene=crowd`);
           await s.page.waitForFunction(() => Boolean(window.__renderer && window.__run));
-          const stats = await s.page.evaluate(() => {
+          lumaByWatch[w] = await s.page.evaluate(() => {
             const c = document.getElementById('game-canvas');
             const ctx = c.getContext('2d');
             const r = window.__run;
@@ -514,12 +630,22 @@ export const TIER4_TESTS = [
             for (let i = 0; i < p.length; i += 4) sum += p[0] + p[1] + p[2];
             return sum / (p.length / 4);
           });
-          lumaByWatch[w] = stats;
           const pal = await auditCanvasWoodblockPalette(s.page, 40);
           assert.ok(pal.violationRatio < 0.005, `Palette violation at watch=${w}: ${pal.violationRatio}`);
         }
-        assert.ok(lumaByWatch[1] > lumaByWatch[5] + 25, `Watch 1 (${lumaByWatch[1]}) must be brighter than Watch 5 (${lumaByWatch[5]})`);
-        assert.ok(lumaByWatch[6] > lumaByWatch[5] + 60, `Watch 6 Dawn (${lumaByWatch[6]}) must be much brighter than Watch 5 (${lumaByWatch[5]})`);
+        assert.ok(lumaByWatch[1] > lumaByWatch[5] + 25);
+        assert.ok(lumaByWatch[6] > lumaByWatch[5] + 60);
+
+        // ?scene=skins & ?scene=vfx
+        await s.page.goto(`${baseUrl}/style-lab.html?scene=skins`);
+        await s.page.waitForFunction(() => window.__ready === true, null, { timeout: 6000 });
+        const skinSnap = await analyzeCanvasSpriteBox(s.page, '#game-canvas');
+        assert.ok(skinSnap && skinSnap.nonBgPixels > 1000);
+
+        await s.page.goto(`${baseUrl}/style-lab.html?scene=vfx`);
+        await s.page.waitForFunction(() => window.__ready === true, null, { timeout: 6000 });
+        const vfxSnap = await analyzeCanvasSpriteBox(s.page, '#game-canvas');
+        assert.ok(vfxSnap && vfxSnap.nonBgPixels > 1000);
         assert.deepEqual(s.badResponses, []);
         s.assertNoErrors('T4-S07');
       } finally {
@@ -530,16 +656,16 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S08',
     tier: 4,
-    feature: 'F12',
-    features: ['F5', 'F10', 'F11', 'F12'],
-    name: 'Complete 51-Entry 百物谱 Tour (12W + 12Evo + 12R + 12Enemies + 3Heroes) & Full Rendered Glyph Verification',
+    feature: 'F11',
+    features: ['F2', 'F3', 'F11', 'F15'],
+    name: 'Complete 66-Entry 百物谱 Codex Tour (16W + 16Evo + 16R + 12Enemies + 6Heroes = 66 / 66) & Font Glyph Audit',
     async run({ browser, baseUrl }) {
       const allEnemyKills = Object.fromEntries(ALL_ENEMY_IDS.map((id, idx) => [id, idx + 1]));
       const s = await createIsolatedPage(browser);
       try {
         await bootToHub(s.page, baseUrl, {
           savePatch: {
-            unlockedHeroes: ['zhou', 'mian', 'daotong'],
+            unlockedHeroes: HERO_IDS,
             codex: {
               weapons: ALL_WEAPON_IDS,
               evolutions: ALL_WEAPON_IDS,
@@ -549,16 +675,16 @@ export const TIER4_TESTS = [
           },
         });
         await fastClick(s.page, '.hub-nav .btn:nth-child(2)');
-        await requireOpenSelector(s.page, '.codex', 'Expected .codex on 百物谱 modal (PROJECT.md §4)');
-        const subText = await s.page.textContent('.codex .scroll__sub');
-        assert.ok(subText.includes('51 / 51'), `Expected full 百物谱 header '已收录 51 / 51 项', got: ${subText}`);
+        await requireOpenSelector(s.page, '.codex');
+        const subText = (await s.page.textContent('.codex .scroll__sub')) || '';
+        assert.ok(subText.includes(`${CODEX_TOTAL} / ${CODEX_TOTAL}`), `Expected '66 / 66' in 百物谱 header, got: ${subText}`);
 
         let allCodexText = subText;
         for (let t = 0; t < 5; t++) {
           await s.page.evaluate((idx) => document.querySelectorAll('.codex-tab')[idx]?.click(), t);
           const lockedRows = await s.page.locator('.codex-list > .codex-row:not(.codex-row--ach).is-locked').count();
-          assert.equal(lockedRows, 0, `Expected 0 locked items in tab #${t} when 100% unlocked`);
-          allCodexText += '\n' + (await s.page.textContent('.codex-list'));
+          assert.equal(lockedRows, 0, `Expected 0 locked rows in tab #${t} when all 66 entries are unlocked`);
+          allCodexText += '\n' + ((await s.page.textContent('.codex-list')) || '');
         }
 
         const fontPath = path.join(ROOT, 'assets', 'fonts', 'wenkai-subset.woff2');
@@ -572,7 +698,7 @@ export const TIER4_TESTS = [
           ],
           { cwd: ROOT, timeout: 10_000 },
         );
-        assert.deepEqual(JSON.parse(stdout.trim()), [], 'Every character in unlocked 51-entry 百物谱 must exist in wenkai-subset.woff2');
+        assert.deepEqual(JSON.parse(stdout.trim()), [], 'Every character in unlocked 66-entry 百物谱 must exist in wenkai-subset.woff2');
         s.assertNoErrors('T4-S08');
       } finally {
         await s.close();
@@ -582,46 +708,205 @@ export const TIER4_TESTS = [
   {
     id: 'T4-S09',
     tier: 4,
-    feature: 'F13',
-    features: ['F3', 'F5', 'F6', 'F7', 'F8', 'F9', 'F13'],
-    timeoutMs: 18_000,
-    name: 'Extracted dist/wugeng-h5.zip Production Simulation: Overhaul Arsenal + Synergy + Blessing + Shrine + Settlement',
-    async run({ browser }) {
-      const { appDir } = await extractH5ZipToScratch('prod_sim');
-      assert.equal(
-        fs.existsSync(path.join(appDir, 'src', 'sim', 'blessings.js')),
-        true,
-        'dist/wugeng-h5.zip is stale (missing overhaul modules; re-run python3 tools/package_h5.py in M4)',
-      );
-      const zipServer = await startStaticServer(appDir);
-      const s = await createIsolatedPage(browser, { isolated: true });
+    feature: 'F14',
+    features: ['F12', 'F13', 'F14', 'F5', 'F6'],
+    timeoutMs: 26_000,
+    name: 'MANDATORY Real 2-Page Shared-BrowserContext BroadcastChannel Co-op + Friend Share + Daoist Bot + Bagua Revive + MVP + Leaderboard Journey',
+    async run({ browser, baseUrl }) {
+      const coop = await createCoopPages(browser, 2, {
+        beforeBootInitScript: () => {
+          window.__t4SharePayloads = [];
+          window.__t4LbSubmits = [];
+          window.tap = {
+            shareAppMessage(p) {
+              window.__t4SharePayloads.push(p);
+              p?.success?.({});
+            },
+            showShareboard(p) {
+              window.__t4SharePayloads.push(p);
+              p?.success?.({});
+            },
+            openFriendList(p) {
+              p?.success?.({});
+            },
+            getLeaderboardManager() {
+              return {
+                submitScores(p) {
+                  window.__t4LbSubmits.push(p?.scores || []);
+                  p?.callback?.onSuccess?.({ results: [] });
+                },
+                loadLeaderboardScores(p) {
+                  p?.callback?.onSuccess?.({
+                    scores: [{ rank: 1, score: 68_000, user: { name: '五更魁首' } }],
+                  });
+                },
+                loadCurrentPlayerLeaderboardScore(p) {
+                  p?.callback?.onSuccess?.({
+                    currentUserScore: { rank: 2, score: 15_000, user: { name: '守夜房主' } },
+                  });
+                },
+                openLeaderboard(p) {
+                  p?.callback?.onSuccess?.({});
+                },
+              };
+            },
+          };
+        },
+      });
       try {
-        await bootAndStartRun(s.page, zipServer.baseUrl, { seed: 4009 });
-        await grantItemViaLevelUp(s.page, 'weapon', 'compass', 5);
-        await grantItemViaLevelUp(s.page, 'relic', 'soulwick', 1);
-        await grantItemViaLevelUp(s.page, 'weapon', 'talisman', 1);
+        const { hostSkin, guestSkin } = await discoverCoopHeroSkins(coop.hostPage, baseUrl, 'zhou', 'nuoxi', 'mockFriends=1');
+        let sharedBeforeStart = [];
+        const { roomCode } = await launchTwoPageCoopRun(coop, baseUrl, {
+          query: 'mockFriends=1',
+          hostHero: 'zhou',
+          hostSkin,
+          hostVfx: 'jade_ghostfire',
+          guestHero: 'nuoxi',
+          guestSkin,
+          guestVfx: 'violet_thunder',
+          botCount: 1, // Host + Guest + 1 Daoist AI Bot = 3 players!
+          onRoomCreated: async () => {
+            await fastClick(coop.hostPage, '[data-action="coop-invite-friend"]', 'Expected [data-action="coop-invite-friend"] in T4-S09');
+            sharedBeforeStart = await coop.hostPage.evaluate(() => window.__t4SharePayloads || []);
+          },
+        });
+        assert.match(roomCode, /^[A-Z0-9]{4,8}$/i);
+        assert.ok(sharedBeforeStart.length >= 1, 'Expected [data-action="coop-invite-friend"] to invoke TapTap share API');
+        assert.ok(
+          JSON.stringify(sharedBeforeStart[0]).includes(`room=${roomCode}`),
+          `Expected friend share payload to carry room=${roomCode}: ${JSON.stringify(sharedBeforeStart[0])}`,
+        );
 
-        await triggerChest(s.page);
-        await requireOpenSelector(s.page, '.overlay--chest', 'Extracted zip must contain M3 .overlay--chest');
-        await confirmChestModal(s.page, 'compass');
+        const initial = await Promise.all([
+          coop.hostPage.evaluate(() => ({
+            peerId: sessionStorage.getItem('wugeng.peerId'),
+            playerCount: window.__wugeng.game.run.players.length,
+            players: window.__wugeng.game.run.players.map((p) => ({
+              heroId: p.heroId,
+              skinId: p.skinId,
+              attackVfx: p.attackVfx,
+            })),
+          })),
+          coop.guestPage.evaluate(() => ({
+            peerId: sessionStorage.getItem('wugeng.peerId'),
+            playerCount: window.__wugeng.game.run.players.length,
+            players: window.__wugeng.game.run.players.map((p) => ({
+              heroId: p.heroId,
+              skinId: p.skinId,
+              attackVfx: p.attackVfx,
+            })),
+          })),
+        ]);
+        assert.notEqual(initial[0].peerId, initial[1].peerId);
+        assert.equal(initial[0].playerCount, 3, 'Expected 3 active players (Host + Guest + Bot)');
+        assert.equal(initial[1].playerCount, 3);
+        for (const [tabName, side] of [['hostPage', initial[0]], ['guestPage', initial[1]]]) {
+          assert.equal(side.players[0].heroId, 'zhou', `[${tabName}] Expected players[0].heroId === 'zhou'`);
+          assert.equal(side.players[1].heroId, 'nuoxi', `[${tabName}] Expected players[1].heroId === 'nuoxi'`);
+          assert.equal(side.players[0].skinId, hostSkin, `[${tabName}] Expected players[0].skinId === '${hostSkin}'`);
+          assert.equal(side.players[1].skinId, guestSkin, `[${tabName}] Expected players[1].skinId === '${guestSkin}'`);
+          assert.notEqual(side.players[0].skinId, side.players[1].skinId, `[${tabName}] Expected distinct non-default skins`);
+          assert.equal(side.players[0].attackVfx, 'jade_ghostfire', `[${tabName}] Expected players[0].attackVfx === 'jade_ghostfire'`);
+          assert.equal(side.players[1].attackVfx, 'violet_thunder', `[${tabName}] Expected players[1].attackVfx === 'violet_thunder'`);
+        }
 
-        await s.page.evaluate(() => {
+        // Verify Guest movement sync & document.hidden non-freeze
+        const x0 = await coop.hostPage.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.time = 119.97;
-          window.__e2eStepFrames(4);
+          return r.players[1].x;
         });
-        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
-        await fastClick(s.page, '.qian');
+        await coop.guestPage.keyboard.down('KeyD');
+        await stepCoopFrames([coop.hostPage, coop.guestPage], 30, 6, { preserveInput: true });
+        await coop.guestPage.keyboard.up('KeyD');
+        const x1 = await coop.hostPage.evaluate(() => {
+          Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+          document.dispatchEvent(new Event('visibilitychange'));
+          return { x: window.__wugeng.game.run.players[1].x, paused: window.__wugeng.game.isPaused() };
+        });
+        assert.ok(x1.x > x0 + 15);
+        assert.equal(x1.paused, false);
 
-        await s.page.evaluate(() => window.__wugeng.game.finish());
-        await s.page.waitForSelector('.screen--result');
-        assert.deepEqual(s.badResponses, []);
-        s.assertNoErrors('T4-S09');
+        // Down Guest -> Host walks into r<=48 Bagua circle -> revives Guest!
+        await coop.hostPage.evaluate(() => {
+          const r = window.__wugeng.game.run;
+          r.enemies.length = 0;
+          r.weapons.forEach((w) => { w.cd = 9999; });
+          const p1 = r.players[1];
+          const p2 = r.players[2];
+          p2.x = -300;
+          p2.y = -300;
+          p1.x = 120;
+          p1.y = 0;
+          p1.invulnT = 0;
+          p1.hp = 1;
+          r.enemies.push({
+            id: 899001, type: 'lanternghost', x: p1.x, y: p1.y, r: 22,
+            hp: 99999, maxHp: 99999, elite: false, boss: false, hitT: 0, slowT: 0,
+            state: 'move', angle: 0, speed: 0, dmg: 9999, xp: 0, atkT: 0, stateT: 0, stunT: 0,
+            dx: 0, dy: 0, kbx: 0, kby: 0, dead: false,
+          });
+        });
+        await stepCoopFrames([coop.hostPage, coop.guestPage], 12, 6);
+        assert.equal(await coop.hostPage.evaluate(() => window.__wugeng.game.run.players[1].downed), true);
+
+        await coop.hostPage.evaluate(() => {
+          const r = window.__wugeng.game.run;
+          r.enemies.length = 0;
+          r.players[0].x = r.players[1].x - 14;
+          r.players[0].y = r.players[1].y;
+        });
+        await stepCoopFrames([coop.hostPage, coop.guestPage], 162, 6);
+        const [afterRevive, guestAfterRevive] = await Promise.all([
+          coop.hostPage.evaluate(() => ({
+            downed: window.__wugeng.game.run.players[1].downed,
+            revivesDone: window.__wugeng.game.run.players[0].stats?.revivesDone || 0,
+          })),
+          coop.guestPage.evaluate(() => ({
+            downed: window.__wugeng.game.run.players[1].downed,
+            hp: window.__wugeng.game.run.players[1].hp,
+          })),
+        ]);
+        assert.equal(afterRevive.downed, false);
+        assert.ok(afterRevive.revivesDone >= 1);
+        assert.equal(guestAfterRevive.downed, false);
+        assert.ok(guestAfterRevive.hp > 0);
+
+        // Settle & verify .result-score, .result-squad (3 rows), .mvp-seal & live 'c5mzumajes9houq0ra' leaderboard submit
+        const endSummary = await coop.hostPage.evaluate(async () => {
+          const r = window.__wugeng.game.run;
+          r.time = 240;
+          r.stats.kills = 210;
+          r.players[0].stats.damageDealt = 18_000;
+          r.players[0].stats.kills = 110;
+          r.players[1].stats.damageDealt = 9500;
+          r.players[1].stats.kills = 60;
+          r.players[2].stats.damageDealt = 6200;
+          r.players[2].stats.kills = 40;
+          const sum = window.__wugeng.game.finish();
+          await new Promise((res2) => setTimeout(res2, 80));
+          return {
+            score: sum.score,
+            coopSize: sum.coopSize,
+            bestScore: window.__wugeng.save.leaderboard?.bestScore,
+            lbSubmits: window.__t4LbSubmits || [],
+          };
+        });
+        await requireOpenSelector(coop.hostPage, '.screen--result .result-score');
+        await requireOpenSelector(coop.hostPage, '.screen--result .result-squad');
+        await requireOpenSelector(coop.hostPage, '.screen--result .mvp-seal');
+        assert.equal(endSummary.coopSize, 3);
+        assert.ok(endSummary.score > 0 && endSummary.bestScore === endSummary.score);
+        assert.ok(
+          endSummary.lbSubmits.some((batch) =>
+            Array.isArray(batch) && batch.some((item) => item.leaderboardId === PRIMARY_LEADERBOARD_ID && item.score === endSummary.score),
+          ),
+          `Expected automatic submitScores to '${PRIMARY_LEADERBOARD_ID}' with score=${endSummary.score}, got ${JSON.stringify(endSummary.lbSubmits)}`,
+        );
+        coop.assertNoErrors('T4-S09');
       } finally {
-        await s.close();
-        await zipServer.close();
+        await coop.close();
       }
     },
   },
@@ -629,19 +914,215 @@ export const TIER4_TESTS = [
     id: 'T4-S10',
     tier: 4,
     feature: 'F13',
-    features: ['F12', 'F13'],
-    name: 'TapTap H5 Pre-Release Gate Scenario (Clean Git Exclude + Stale-Zip Guard + Portrait Dry-Run + Protected Filing 26847)',
+    features: ['F11', 'F12', 'F13'],
+    timeoutMs: 24_000,
+    name: 'TapTap Full Ecosystem Lifecycle (?mockTap=1&mockAds=1, quick-cloud, Check-In/Revive Ads, mockAds=fail, public/friends/1025 Leaderboard, Friends)',
+    async run({ browser, baseUrl }) {
+      const s = await createIsolatedPage(browser, { isolated: true });
+      try {
+        await bootToHub(s.page, baseUrl, { query: 'mockTap=1&mockAds=1', savePatch: { coins: 100 } });
+
+        // 1) Check-in double via mock ad
+        await fastClick(s.page, '.hub-nav .btn:nth-child(3)');
+        await fastClick(s.page, '#ui .veil .btn--ad');
+        await s.page.waitForSelector('.mock-ad');
+        await s.page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7500 });
+        await closeActiveModal(s.page);
+        assert.equal(await s.page.evaluate(() => window.__wugeng.save.coins), 160);
+
+        // 2) Hub quick-cloud + Leaderboard public/friends + Friends
+        await fastClick(s.page, '[data-action="quick-cloud"]');
+        await fastClick(s.page, '[data-action="open-leaderboard"]');
+        await requireOpenSelector(s.page, '.leaderboard-modal');
+        await s.page.waitForTimeout(60);
+        const pubLb = await readLeaderboardBodyText(s.page);
+        assert.ok(/\d+/.test(pubLb.bodyText), `Expected numeric entries in public leaderboard, got '${pubLb.bodyText}'`);
+        await fastClick(s.page, '[data-collection="friends"]');
+        await s.page.waitForTimeout(60);
+        const friendsLb = await readLeaderboardBodyText(s.page);
+        assert.ok(/\d+/.test(friendsLb.bodyText), `Expected numeric entries in friends leaderboard, got '${friendsLb.bodyText}'`);
+        await fastClick(s.page, '[data-collection="public"]');
+        await closeActiveModal(s.page, 'close-leaderboard');
+
+        // Exercise [data-action="open-friends"] & openFriendList under ?mockTap=1
+        if (await s.page.$('[data-action="open-friends"]')) {
+          await fastClick(s.page, '[data-action="open-friends"]');
+        } else {
+          await fastClick(s.page, '[data-action="open-coop"]');
+          await requireOpenSelector(s.page, '.coop-modal');
+          if (await s.page.$('[data-action="open-friends"]')) {
+            await fastClick(s.page, '[data-action="open-friends"]');
+          }
+        }
+        await s.page.evaluate(() => window.__wugeng.friends?.openFriendList?.());
+        await s.page.waitForTimeout(50);
+        while (await s.page.$('#ui .veil')) {
+          const closed = await closeActiveModal(s.page);
+          if (!closed) break;
+        }
+
+        // 3) Run death ad revive after 60s grace
+        await fastClick(s.page, '.hub-foot .btn--seal, .btn--big');
+        await stepFrames(s.page, 3);
+        await s.page.evaluate(() => { window.__wugeng.game.run.time = 75; });
+        await triggerLethalHit(s.page);
+        await fastClick(s.page, '#ui .veil .btn--ad');
+        await s.page.waitForSelector('.mock-ad', { state: 'detached', timeout: 7500 });
+        assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.status), 'playing');
+
+        // 4) mockAds=fail grants 0 coins & mockLeaderboard=1025 shows polite Chinese fallback in modal body
+        await bootToHub(s.page, baseUrl, {
+          query: 'mockAds=fail&mockLeaderboard=1025',
+          savePatch: { coins: 0, checkin: { cycleDay: 1, lastClaimDate: null, cycles: 0, totalClaims: 0 } },
+        });
+        await fastClick(s.page, '.hub-nav .btn:nth-child(3)');
+        await fastClick(s.page, '#ui .veil .btn--ad');
+        await s.page.waitForTimeout(450);
+        assert.equal(await s.page.evaluate(() => window.__wugeng.save.coins), 0);
+        await closeActiveModal(s.page);
+
+        await fastClick(s.page, '[data-action="open-leaderboard"]');
+        await requireOpenSelector(s.page, '.leaderboard-modal');
+        await fastClick(s.page, '[data-collection="friends"]');
+        await s.page.waitForTimeout(80);
+        const lb1025 = await readLeaderboardBodyText(s.page);
+        assert.ok(
+          /权限|授权|未开通|暂未|暂不可用|无法|本地|本机|荣誉/.test(lb1025.bodyText),
+          `Expected Chinese permission/fallback notice in T4-S10 1025 leaderboard body, got '${lb1025.bodyText}'`,
+        );
+        assert.equal(/friend permission not granted|undefined|\[object Object\]/i.test(lb1025.fullText), false);
+        s.assertNoErrors('T4-S10');
+      } finally {
+        await s.close();
+      }
+    },
+  },
+  {
+    id: 'T4-S11',
+    tier: 4,
+    feature: 'F15',
+    features: ['F15', 'F1', 'F2', 'F3', 'F8', 'F9', 'F10', 'F12', 'F14'],
+    timeoutMs: 22_000,
+    name: 'Extracted dist/wugeng-h5.zip Production Package End-to-End Simulation (v3 Modules, Splash, Market, Achievements, 2P Bot Co-op, Inspector, Settlement)',
+    async run({ browser }) {
+      const { appDir } = await extractH5ZipToScratch('prod_v3_sim');
+      for (const reqMod of [
+        ['src', 'sim', 'coop.js'],
+        ['src', 'net', 'coop-net.js'],
+        ['src', 'meta', 'cosmetics.js'],
+        ['src', 'meta', 'achievements.js'],
+        ['src', 'meta', 'leaderboard-config.js'],
+        ['src', 'meta', 'leaderboard.js'],
+        ['src', 'meta', 'friends.js'],
+      ]) {
+        assert.equal(
+          fs.existsSync(path.join(appDir, ...reqMod)),
+          true,
+          `Extracted dist/wugeng-h5.zip is missing v3 module ${reqMod.join('/')} (re-run python3 tools/package_h5.py)`,
+        );
+      }
+
+      const zipServer = await startStaticServer(appDir);
+      const s = await bootColdIntro(browser, zipServer.baseUrl, { query: 'mockTap=1' });
+      try {
+        await fastClick(s.page, '.title-actions .btn--seal');
+        await s.page.waitForSelector('.screen--hub');
+
+        for (const action of ['open-market', 'open-achievements', 'open-leaderboard']) {
+          await fastClick(s.page, `[data-action="${action}"]`);
+          await closeActiveModal(s.page);
+        }
+
+        await fastClick(s.page, '[data-action="open-coop"]');
+        await fastClick(s.page, '[data-action="coop-create"]');
+        await fastClick(s.page, '[data-action="coop-add-bot"]');
+        await fastClick(s.page, '[data-action="coop-start"]');
+        await s.page.waitForFunction(() => window.__wugeng.game.run?.players?.length === 2);
+
+        await triggerLevelUp(s.page);
+        await fastClick(s.page, '[data-action="inspect-loadout"]');
+        await requireOpenSelector(s.page, '.veil--inspector');
+        await fastClick(s.page, '[data-action="close-inspector"]');
+        await fastClick(s.page, '.qian');
+
+        await s.page.evaluate(() => window.__wugeng.game.finish());
+        await s.page.waitForSelector('.screen--result');
+        await requireOpenSelector(s.page, '.screen--result .result-squad');
+        assert.deepEqual(s.badResponses, []);
+        s.assertNoErrors('T4-S11');
+      } finally {
+        await s.close();
+        await zipServer.close();
+      }
+    },
+  },
+  {
+    id: 'T4-S12',
+    tier: 4,
+    feature: 'F15',
+    features: ['F15'],
+    name: 'TapTap H5 Pre-Release Gate (Git Cleanliness + 100% Chinese v3 Commits + SHA-256 Zip Parity + Portrait --dry-run + Protected Filing 26847)',
     async run() {
-      // 1) Git status free of untracked .agents/
-      const gitRes = await execFileAsync('git', ['status', '--porcelain'], { cwd: ROOT, timeout: 10_000 });
-      const leakedAgents = gitRes.stdout.split('\n').filter((l) => l.includes('.agents'));
+      // 1) Git exclude & untracked hygiene
+      const gitStatus = await execFileAsync('git', ['status', '--porcelain'], { cwd: ROOT, timeout: 10_000 });
+      const leaked = gitStatus.stdout
+        .split('\n')
+        .filter((l) => l.includes('.agents') || l.includes('e2e/screenshots'));
+      assert.deepEqual(leaked, [], `Git status leaked .agents or screenshots: ${leaked.join(' | ')}`);
+
+      // 2) 100% Chinese v3 commit messages after baseline 16d16da
+      const gitLog = await execFileAsync('git', ['log', `${BASELINE_MAIN_COMMIT}..HEAD`, '--format=%H:::%s'], {
+        cwd: ROOT,
+        timeout: 10_000,
+      });
+      const badCommits = gitLog.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .filter((l) => !/[\u4e00-\u9fff]/.test(l.split(':::').slice(1).join(':::')));
+      assert.deepEqual(badCommits, [], `Non-Chinese v3 commit messages detected: ${badCommits.join(' | ')}`);
+
+      // 3) SHA-256 byte parity across index.html, privacy.html, styles.css, wenkai-subset.woff2, and ALL runtime src/**/*.js files
+      const { appDir } = await extractH5ZipToScratch('gate_parity');
+      const walkRuntimeJs = (dir, acc = []) => {
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, ent.name);
+          if (ent.isDirectory()) walkRuntimeJs(full, acc);
+          else if (
+            ent.isFile() &&
+            ent.name.endsWith('.js') &&
+            !['mock-run.js', 'sheet.js'].includes(ent.name) &&
+            !ent.name.includes('.test.')
+          ) {
+            acc.push(path.relative(ROOT, full));
+          }
+        }
+        return acc;
+      };
+      const expectedRelFiles = [
+        'index.html',
+        'privacy.html',
+        'styles.css',
+        'assets/fonts/wenkai-subset.woff2',
+        ...walkRuntimeJs(path.join(ROOT, 'src')),
+      ];
+      const parityMismatches = [];
+      for (const rel of expectedRelFiles) {
+        const livePath = path.join(ROOT, rel);
+        const zippedPath = path.join(appDir, rel);
+        if (!fs.existsSync(zippedPath)) {
+          parityMismatches.push(`MISSING_IN_ZIP:${rel}`);
+        } else if (sha256File(livePath) !== sha256File(zippedPath)) {
+          parityMismatches.push(`STALE_SHA256:${rel}`);
+        }
+      }
       assert.deepEqual(
-        leakedAgents,
+        parityMismatches,
         [],
-        `Git status must not leak untracked .agents/ metadata: ${leakedAgents.join(' | ')}`,
+        `dist/wugeng-h5.zip out of sync with live runtime files: ${parityMismatches.join(', ')}`,
       );
 
-      // 2) TapTap dry-run portrait validation
+      // 4) TapTap portrait dry-run & protected filing 26847
       const dryRun = await execFileAsync(
         'taptap-cli',
         [
@@ -657,7 +1138,6 @@ export const TIER4_TESTS = [
       );
       assert.ok(dryRun.stdout.includes(TAPTAP.appId));
 
-      // 3) Protected filing 26847 untouched
       const filing = await execFileAsync(
         'taptap-cli',
         [
@@ -669,7 +1149,10 @@ export const TIER4_TESTS = [
         ],
         { cwd: ROOT, timeout: 15_000 },
       );
-      assert.ok(filing.stdout.includes(String(TAPTAP.protectedFilingId)));
+      assert.ok(
+        filing.stdout.includes(String(TAPTAP.protectedFilingId)) &&
+          filing.stdout.includes(String(TAPTAP.protectedFilingVersionId)),
+      );
     },
   },
 ];

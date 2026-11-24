@@ -3,7 +3,7 @@
 
 只用标准库。用法（在仓库根目录）：
     python3 assets/fonts/collect_chars.py > "${TMPDIR:-$HOME/.cache}/wenkai/chars.txt"
-扫描范围：src/**/*.js、根目录 *.html、根目录 *.css、docs/PLAN.md、ARCHITECTURE.md，
+扫描范围：src/**/*.js、根目录 *.html、根目录 *.css，
 再加上 ASCII、常用中文与界面符号标点和 assets/fonts/common-hanzi.txt（约 600 个常用字缓冲，
 给以后改文案留余地）。
 """
@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 HERE = pathlib.Path(__file__).resolve().parent
 
 PUNCT = (
-    "，。、；：？！…—～·「」『』（）《》〈〉【】“”‘’﹁﹂﹃﹄︽︾︵︶"
+    "，。、；：？！…—～·‹›「」『』（）《》〈〉【】“”‘’﹁﹂﹃﹄︽︾︵︶"
     "＋－×÷＝％→←↑↓−·•○●□■△▲◇◆★☆°±①②③④⑤⑥⑦⑧⑨⑩☰☱☲☳☴☵☶☷"
     "０１２３４５６７８９"
     "\u3000"
@@ -23,20 +23,7 @@ PUNCT = (
 
 def is_wanted(ch: str) -> bool:
     cp = ord(ch)
-    return (
-        0x4E00 <= cp <= 0x9FFF  # CJK 统一表意
-        or 0x3400 <= cp <= 0x4DBF  # 扩展 A
-        or 0x3000 <= cp <= 0x303F  # CJK 标点
-        or 0xFF00 <= cp <= 0xFFEF  # 全角
-        or 0x00A0 <= cp <= 0x00FF  # Latin-1 符号（°、§、±、²、·、×、÷）
-        or 0x0370 <= cp <= 0x03FF  # 希腊字母（Σ、π）
-        or 0x2000 <= cp <= 0x206F  # 通用标点
-        or 0x2070 <= cp <= 0x218F  # 上下标 / 类字母符号（ℓ）
-        or 0x2190 <= cp <= 0x21FF  # 箭头
-        or 0x2200 <= cp <= 0x22FF  # 数学符号（−）
-        or 0x2460 <= cp <= 0x27BF  # 带圈数字 ①-⑳ / 制表符 / 几何图形 / 八卦与杂项装饰符
-        or 0xFE10 <= cp <= 0xFE4F  # 竖排标点
-    )
+    return cp >= 0xA0 and not ch.isspace() and not (0xD800 <= cp <= 0xDFFF)
 
 
 def main() -> None:
@@ -45,7 +32,7 @@ def main() -> None:
     files = sorted((ROOT / "src").rglob("*.js"))
     files += sorted(ROOT.glob("*.html"))
     files += sorted(ROOT.glob("*.css"))
-    files += [ROOT / "docs" / "PLAN.md", ROOT / "ARCHITECTURE.md", HERE / "common-hanzi.txt"]
+    files += [HERE / "common-hanzi.txt"]
     for f in files:
         if not f.exists():
             continue

@@ -1,15 +1,22 @@
-// 解锁与结算入账（PLAN §4.7）。
+// 解锁与结算入账（PLAN §4.7 + v3 六角色）。
 // - 阿绵：单局打败 ≥ 800 只敌人
 // - 小道童：一个包子都不吃，守到五更（撑到 8:00 = 480 秒）
+// - 沈观星：单局敕封开光 ≥ 2 把神兵
+// - 石敢当：累计打败 ≥ 2500 只敌人
+// - 柳青衣：单局激活任意流派 6 件羁绊
 // - 夜色 N+1：通关夜色 N
 import {
   HERO_IDS, NIGHT_MAX, markAchievement, toFiniteNumber,
   isPlainObj, canMutateObj, canWriteProp, canMutateArray,
 } from './save.js';
 import { recordCodexSummary, canMutateCodex } from './codex.js';
+import { WEAPONS, RELICS, SCHOOL_TAG_IDS } from '../sim/balance.js';
 
 export const MIAN_KILLS = 800;
 export const DAOTONG_TIME = 480;
+export const YINYANG_EVOLVES = 2;
+export const TIEJIANG_TOTAL_KILLS = 2500;
+export const NUOXI_SYNERGY_TIER = 6;
 
 const STAT_KEYS = [
   'runs', 'clears', 'firstRunDone', 'totalPlaySec',
@@ -108,6 +115,45 @@ export function isNoBunDawn(summary) {
   return Number.isFinite(buns) && buns >= 0 && Math.floor(buns) === 0;
 }
 
+function summaryEvolvedCount(summary) {
+  let fromArr = 0;
+  if (Array.isArray(summary.weapons)) {
+    for (const w of summary.weapons) {
+      if (isPlainObj(w) && w.evolved === true) fromArr++;
+    }
+  }
+  return Math.max(safeInt(summary.evolvedCount, 99), fromArr);
+}
+
+function maxTagCountFromSummary(summary) {
+  const counts = { zhenhun: 0, daofa: 0, zhizha: 0, yangyan: 0 };
+  if (Array.isArray(summary.weapons)) {
+    const seenW = new Set();
+    for (const w of summary.weapons) {
+      const id = isPlainObj(w) ? w.id : null;
+      if (!id || seenW.has(id) || !WEAPONS[id]) continue;
+      seenW.add(id);
+      for (const t of WEAPONS[id].tags || []) if (counts[t] !== undefined) counts[t]++;
+    }
+  }
+  if (Array.isArray(summary.relics)) {
+    const seenR = new Set();
+    for (const r of summary.relics) {
+      const id = isPlainObj(r) ? r.id : null;
+      if (!id || seenR.has(id) || !RELICS[id]) continue;
+      seenR.add(id);
+      for (const t of RELICS[id].tags || []) if (counts[t] !== undefined) counts[t]++;
+    }
+  }
+  let best = 0;
+  for (const t of SCHOOL_TAG_IDS) if (counts[t] > best) best = counts[t];
+  return best;
+}
+
+function summaryMaxSynergy(summary) {
+  return Math.max(safeInt(summary.maxSynergyTier, 99), maxTagCountFromSummary(summary));
+}
+
 /** 判定并写入 save，返回本次新解锁的列表 [{ kind: 'hero'|'night', id }]。 */
 export function evaluateUnlocks(save, summary) {
   const out = [];
@@ -121,6 +167,9 @@ export function evaluateUnlocks(save, summary) {
   };
   if (safeInt(summary.kills) >= MIAN_KILLS) unlockHero('mian');
   if (isNoBunDawn(summary)) unlockHero('daotong');
+  if (summaryEvolvedCount(summary) >= YINYANG_EVOLVES) unlockHero('yinyang');
+  if (Math.max(safeInt(save.stats?.totalKills), safeInt(summary.kills)) >= TIEJIANG_TOTAL_KILLS) unlockHero('tiejiang');
+  if (summaryMaxSynergy(summary) >= NUOXI_SYNERGY_TIER) unlockHero('nuoxi');
 
   if (summary.cleared) {
     const rawNight = toFiniteNumber(summary.nightLevel);
@@ -139,7 +188,7 @@ export function evaluateUnlocks(save, summary) {
 export function heroUnlockProgress(save, heroId) {
   const s = isPlainObj(save) && isPlainObj(save.stats) ? save.stats : {};
   if (heroId === 'mian') return { have: Math.min(MIAN_KILLS, safeInt(s.bestKills, MIAN_KILLS)), need: MIAN_KILLS };
-  if (heroId === 'daotong') return null;
+  if (heroId === 'tiejiang') return { have: Math.min(TIEJIANG_TOTAL_KILLS, safeInt(s.totalKills, TIEJIANG_TOTAL_KILLS)), need: TIEJIANG_TOTAL_KILLS };
   return null;
 }
 

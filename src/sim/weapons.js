@@ -1,7 +1,8 @@
-// 武器（PLAN §3.3 + F3/F4/F5）：12 把武器的多路径开光判定、冷却、发射与神兵质变。
+// 武器（PLAN §3.3 + F3/F4/F5 + v3 16 兵刃与本命亲和）：多路径开光判定、冷却、发射与神兵质变。
 
 import {
   WEAPONS, WEAPON_IDS, RELICS, MAX_WEAPON_LEVEL, MAX_RELIC_LEVEL, MAX_WEAPONS, FX, EVOLUTION,
+  HERO_AFFINITY, isHeroSignatureWeapon,
 } from './balance.js';
 import { damageCircle, damageEnemy, knockback, applyStun, applyVuln } from './combat.js';
 import { hasRelic } from './relics.js';
@@ -10,7 +11,8 @@ import { wrapAngle } from '../core/math.js';
 
 /** 取武器某项属性在 level 级时的数值（数组按级取，标量直接返回） */
 export function wstat(id, key, level) {
-  const v = WEAPONS[id]?.[key];
+  if (typeof id !== 'string' || !Object.hasOwn(WEAPONS, id)) return undefined;
+  const v = WEAPONS[id][key];
   return Array.isArray(v) ? v[Math.min(level, MAX_WEAPON_LEVEL) - 1] : v;
 }
 
@@ -18,8 +20,20 @@ export function getWeapon(run, id) {
   return run.weapons.find((w) => w.id === id) || null;
 }
 
+export function isWeaponSignature(w, run = null, owner = null) {
+  if (!w) return false;
+  if (typeof w.signature === 'boolean') return w.signature;
+  const hid = owner?.heroId || run?.player?.heroId || run?.heroId || null;
+  return hid ? isHeroSignatureWeapon(hid, w.id) : false;
+}
+
+export function weaponAreaMul(run, w, owner = null) {
+  const base = run?.mods?.areaMul || 1;
+  return isWeaponSignature(w, run, owner) ? base * (1 + HERO_AFFINITY.areaBonus) : base;
+}
+
 /** 获得新武器或升一级；返回新等级，失败返回 0 */
-export function addOrUpgradeWeapon(run, id) {
+export function addOrUpgradeWeapon(run, id, owner = null) {
   if (!WEAPON_IDS.includes(id)) return 0;
   const w = getWeapon(run, id);
   if (w) {
@@ -28,7 +42,16 @@ export function addOrUpgradeWeapon(run, id) {
     return w.level;
   }
   if (run.weapons.length >= MAX_WEAPONS) return 0;
-  run.weapons.push({ id, level: 1, evolved: false, evolvedRecipe: null, altarReady: false, cd: FX.firstFireDelay });
+  const heroId = owner?.heroId || run?.player?.heroId || run?.heroId || 'zhou';
+  run.weapons.push({
+    id,
+    level: 1,
+    evolved: false,
+    evolvedRecipe: null,
+    altarReady: false,
+    signature: isHeroSignatureWeapon(heroId, id),
+    cd: FX.firstFireDelay,
+  });
   return 1;
 }
 
@@ -36,8 +59,8 @@ export function addOrUpgradeWeapon(run, id) {
 export function countOwnedTag(run, tag) {
   if (!run) return 0;
   let n = 0;
-  for (const w of run.weapons) if (WEAPONS[w.id]?.tags?.includes(tag)) n++;
-  for (const r of run.relics) if (RELICS[r.id]?.tags?.includes(tag)) n++;
+  for (const w of run.weapons) if (typeof w?.id === 'string' && Object.hasOwn(WEAPONS, w.id) && WEAPONS[w.id]?.tags?.includes(tag)) n++;
+  for (const r of run.relics) if (typeof r?.id === 'string' && Object.hasOwn(RELICS, r.id) && RELICS[r.id]?.tags?.includes(tag)) n++;
   if (n > 0 || run.weapons.length + run.relics.length > 0) {
     n += run._allSchoolBonus || 0;
   }
@@ -53,7 +76,7 @@ export function countOwnedTag(run, tag) {
  */
 export function getEvolutionRecipe(run, w) {
   if (!run || !w || w.level < MAX_WEAPON_LEVEL || w.evolved) return null;
-  const def = WEAPONS[w.id];
+  const def = typeof w.id === 'string' && Object.hasOwn(WEAPONS, w.id) ? WEAPONS[w.id] : null;
   if (!def) return null;
 
   if (def.pair && hasRelic(run, def.pair)) {
@@ -100,11 +123,14 @@ export function evolveWeapon(run, id, forcedRecipe = null) {
   return true;
 }
 
-/** 本武器本次发射的基础伤害（含开光倍率、巧匠开物加成及本命法器 ×1.18 精通） */
-function baseDmg(w, run = null) {
-  const def = WEAPONS[w.id];
+/** 本武器本次发射的基础伤害（含本命武器 ×1.25 亲和、开光倍率、巧匠开物加成及本命法器 ×1.18 精通） */
+function baseDmg(w, run = null, owner = null) {
+  const def = w && typeof w.id === 'string' && Object.hasOwn(WEAPONS, w.id) ? WEAPONS[w.id] : null;
   if (!def) return 0;
   let d = wstat(w.id, 'dmg', w.level);
+  if (isWeaponSignature(w, run, owner)) {
+    d *= HERO_AFFINITY.dmgMul;
+  }
   if (w.evolved) {
     const evoMult = def.evoMult + (run?.mods?.evoMultBonus || 0);
     d *= evoMult;
@@ -114,15 +140,21 @@ function baseDmg(w, run = null) {
   return d;
 }
 
-/** 武器当前完整冷却时长（开光神兵享全局 ×0.82 急速；亦供引魂灯芯返还冷却使用） */
-export function weaponFullCooldown(run, w) {
+/** 武器当前完整冷却时长（本命武器享 ×0.90 急速；开光神兵享全局 ×0.82 急速；亦供引魂灯芯返还冷却使用） */
+export function weaponFullCooldown(run, w, owner = null) {
+  if (!w || typeof w.id !== 'string' || !Object.hasOwn(WEAPONS, w.id)) return 0;
+  const sigMul = isWeaponSignature(w, run, owner) ? HERO_AFFINITY.cdMul : 1;
+  const cdMul = run?.mods?.cdMul ?? 1;
   const cd = wstat(w.id, 'cd', w.level);
   if (typeof cd === 'number' && cd > 0) {
-    return cd * run.mods.cdMul * (w.evolved ? EVOLUTION.evoCdMul : 1);
+    return cd * cdMul * sigMul * (w.evolved ? EVOLUTION.evoCdMul : 1);
   }
   const def = WEAPONS[w.id];
   if (def && typeof def.tick === 'number' && def.tick > 0) {
-    return (w.evolved && def.evo?.tick ? def.evo.tick : def.tick) * run.mods.cdMul;
+    return (w.evolved && def.evo?.tick ? def.evo.tick : def.tick) * cdMul * sigMul;
+  }
+  if (def && typeof def.atkCd === 'number' && def.atkCd > 0) {
+    return def.atkCd * sigMul;
   }
   return 0;
 }
@@ -136,6 +168,7 @@ export function emitFire(run, w, x = run.player.x, y = run.player.y, angle = 0, 
     type: 'fire',
     weaponId: w.id,
     evolved: !!w.evolved,
+    slot: run._activeSlot || 0,
     x,
     y,
     angle,
@@ -145,7 +178,20 @@ export function emitFire(run, w, x = run.player.x, y = run.player.y, angle = 0, 
 
 function newProj(run, kind, x, y, r, angle, life, extra) {
   const safeR = Math.max(0, Number.isFinite(r) ? r : 0);
-  const pr = { id: run._nextId++, kind, x, y, r: safeR, angle, t: 0, life, weaponId: null, ...extra };
+  const pr = {
+    id: run._nextId++,
+    kind,
+    x,
+    y,
+    r: safeR,
+    angle,
+    t: 0,
+    life,
+    weaponId: null,
+    ownerSlot: run._activeSlot || 0,
+    attackVfx: run.player?.attackVfx || null,
+    ...extra,
+  };
   run.projectiles.push(pr);
   return pr;
 }
@@ -175,9 +221,10 @@ function gongPulse(run, w, waveIdx = 1) {
   const def = WEAPONS.gong;
   const evo = def.evo;
   const dmg = baseDmg(w, run);
+  const areaMul = weaponAreaMul(run, w);
 
   if (!w.evolved) {
-    const R = wstat('gong', 'radius', w.level) * run.mods.areaMul;
+    const R = wstat('gong', 'radius', w.level) * areaMul;
     damageCircle(run, p.x, p.y, R, dmg, 'gong', { knock: def.knockback });
     newProj(run, 'gongPulse', p.x, p.y, R, 0, def.pulseLife, {
       weaponId: 'gong',
@@ -191,7 +238,7 @@ function gongPulse(run, w, waveIdx = 1) {
   }
 
   if (waveIdx < 3) {
-    const R = evo.waveRadius * run.mods.areaMul;
+    const R = evo.waveRadius * areaMul;
     const list = run._sys.hash.queryCircle(p.x, p.y, R, run._sys.scratchW);
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
@@ -216,7 +263,7 @@ function gongPulse(run, w, waveIdx = 1) {
     });
     emitFire(run, w, p.x, p.y, 0, { waveIdx });
   } else {
-    const R = evo.finalRadius * run.mods.areaMul;
+    const R = evo.finalRadius * areaMul;
     damageCircle(run, p.x, p.y, R, dmg * evo.finalDmgMul, 'gong', {
       knock: evo.finalKnock,
       stun: evo.finalStun,
@@ -271,13 +318,15 @@ function updateLantern(run, w, dt) {
   const def = WEAPONS.lantern;
   const evo = def.evo;
   const p = run.player;
+  const activeSlot = run._activeSlot || 0;
   w.cd -= dt;
   if (w.cd > 0) return;
-  w.cd = (w.evolved ? evo.tick : def.tick) * run.mods.cdMul;
+  w.cd = cooldown(run, w);
 
+  const areaMul = weaponAreaMul(run, w);
   const dmg = baseDmg(w, run);
-  const hitR = def.hitR * (w.evolved ? 1.25 : 1) * run.mods.areaMul;
-  const burstR = evo.burstRadius * run.mods.areaMul;
+  const hitR = def.hitR * (w.evolved ? 1.25 : 1) * areaMul;
+  const burstR = evo.burstRadius * areaMul;
   const burstDmg = dmg * evo.burstDmgMul;
   let totalHits = 0;
   const bossTouched = new Set();
@@ -297,7 +346,7 @@ function updateLantern(run, w, dt) {
 
   for (let i = 0; i < run.projectiles.length; i++) {
     const pr = run.projectiles[i];
-    if (pr.dead) continue;
+    if (pr.dead || (pr.ownerSlot || 0) !== activeSlot) continue;
     if (pr.kind === 'lantern') {
       stampMark(pr.x, pr.y, hitR);
       totalHits += damageCircle(run, pr.x, pr.y, hitR, dmg, 'lantern', { knock: def.knockback });
@@ -321,12 +370,13 @@ function updateLantern(run, w, dt) {
           type: 'explosion',
           x: b.x,
           y: b.y,
-          radius: evo.bossFlareRadius * run.mods.areaMul,
+          radius: evo.bossFlareRadius * areaMul,
           dmg: dmg * evo.bossFlareDmgMul,
           weaponId: 'lantern',
           evolved: true,
           explosionKind: 'lanternFlare',
           knock: 110,
+          ownerSlot: activeSlot,
         });
       }
     }
@@ -344,7 +394,9 @@ function updateTalisman(run, w, dt) {
   if (w.cd > 0) return;
   const def = WEAPONS.talisman;
   const p = run.player;
-  const rawList = run._sys.hash.queryCircle(p.x, p.y, def.seekRange, run._sys.scratchW);
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = def.seekRange * sigScale;
+  const rawList = run._sys.hash.queryCircle(p.x, p.y, seekR, run._sys.scratchW);
   const targets = [];
   for (let i = 0; i < rawList.length; i++) if (!rawList[i].dead) targets.push(rawList[i]);
   if (!targets.length) {
@@ -357,6 +409,7 @@ function updateTalisman(run, w, dt) {
   const spd = def.speed * run.mods.durMul;
   const dmg = baseDmg(w, run);
   const pierce = (w.evolved ? def.evo.pierce : 0) + (run.mods.bonusPierce || 0);
+  const projR = def.r * sigScale;
   const volleyId = run._nextId++;
   let mainAngle = 0;
 
@@ -365,13 +418,14 @@ function updateTalisman(run, w, dt) {
     const baseA = Math.atan2(t.y - p.y, t.x - p.x);
     if (i === 0) mainAngle = baseA;
     const a = baseA + (i - (n - 1) / 2) * FX.talismanFan;
-    newProj(run, 'talisman', p.x, p.y, def.r, a, def.life * run.mods.durMul, {
+    newProj(run, 'talisman', p.x, p.y, projR, a, def.life * run.mods.durMul, {
       weaponId: 'talisman',
       vx: Math.cos(a) * spd,
       vy: Math.sin(a) * spd,
       speed: spd,
       pierce,
       dmg,
+      seekRange: seekR,
       evolved: w.evolved,
       volleyId,
       _tgt: t,
@@ -410,9 +464,10 @@ function updateBrush(run, w, dt) {
   const def = WEAPONS.brush;
   const p = run.player;
   const dmg = baseDmg(w, run);
+  const areaMul = weaponAreaMul(run, w);
 
   if (!w.evolved) {
-    const R = wstat('brush', 'radius', w.level) * run.mods.areaMul;
+    const R = wstat('brush', 'radius', w.level) * areaMul;
     const spread = (wstat('brush', 'spread', w.level) * Math.PI) / 180;
     const base = Math.atan2(p.facingY, p.facingX);
     damageSector(run, p.x, p.y, R, base, spread, dmg, 'brush', { knock: def.knockback });
@@ -428,7 +483,7 @@ function updateBrush(run, w, dt) {
 
   // 泼墨山河：周天满圆挥砍 + 360px 贯穿墨浪 + 镇邪墨河
   const evo = def.evo;
-  const R = (wstat('brush', 'radius', w.level) + evo.slashRadiusBonus) * run.mods.areaMul;
+  const R = (wstat('brush', 'radius', w.level) + evo.slashRadiusBonus) * areaMul;
   const pri = findPriorityTarget(run, p.x, p.y, 380, run._sys.scratchW);
   const aimAngle = pri ? Math.atan2(pri.y - p.y, pri.x - p.x) : Math.atan2(p.facingY, p.facingX);
 
@@ -441,7 +496,7 @@ function updateBrush(run, w, dt) {
   });
 
   const waveCount = 1 + Math.min(2, run.mods.amount);
-  const waveHitR = evo.waveRadius * run.mods.areaMul;
+  const waveHitR = evo.waveRadius * areaMul;
   const waveRange = evo.waveRange * run.mods.durMul;
   const waveLife = waveRange / evo.waveSpeed;
   for (let i = 0; i < waveCount; i++) {
@@ -459,7 +514,7 @@ function updateBrush(run, w, dt) {
     });
   }
 
-  const poolR = evo.poolRadius * run.mods.areaMul;
+  const poolR = evo.poolRadius * areaMul;
   for (const dist of [95, 225]) {
     newProj(
       run,
@@ -591,7 +646,7 @@ function updateFirecracker(run, w, dt) {
   }));
   scored.sort((a, b) => b.n - a.n);
 
-  const R = wstat('firecracker', 'radius', w.level) * run.mods.areaMul;
+  const R = wstat('firecracker', 'radius', w.level) * weaponAreaMul(run, w);
   const flight = w.evolved ? def.evo.flight : def.flight;
   const dmg = baseDmg(w, run);
   const firstT = scored[0].e;
@@ -621,6 +676,7 @@ function updateBell(run, w, dt) {
   const def = WEAPONS.bell;
   const p = run.player;
   const hash = run._sys.hash;
+  const areaMul = weaponAreaMul(run, w);
   const first = hash.nearest(p.x, p.y, def.range, run._sys.scratchW, (e) => !e.dead);
   if (!first) {
     w.cd = FX.retryDelay;
@@ -629,7 +685,7 @@ function updateBell(run, w, dt) {
   w.cd = cooldown(run, w);
   const bounces = wstat('bell', 'bounces', w.level) + run.mods.amount;
   const dmg = baseDmg(w, run);
-  const range = def.chainRange * run.mods.areaMul;
+  const range = def.chainRange * areaMul;
   const life = def.chainLife;
   const hit = new Set();
 
@@ -684,6 +740,7 @@ function updateBell(run, w, dt) {
           dmg: dmg * (1 + evo.echoStepPct * k),
           echoIdx: k,
           range,
+          ownerSlot: run._activeSlot || 0,
         });
       }
     }
@@ -699,7 +756,9 @@ function updateCompass(run, w, dt) {
   const def = WEAPONS.compass;
   const p = run.player;
   const hash = run._sys.hash;
-  const rawCands = hash.queryCircle(p.x, p.y, def.range, run._sys.scratchW);
+  const areaMul = weaponAreaMul(run, w);
+  const seekR = def.range * (isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1);
+  const rawCands = hash.queryCircle(p.x, p.y, seekR, run._sys.scratchW);
   const cands = [];
   for (let i = 0; i < rawCands.length; i++) if (!rawCands[i].dead) cands.push(rawCands[i]);
   if (!cands.length) {
@@ -720,7 +779,7 @@ function updateCompass(run, w, dt) {
 
   const evo = def.evo;
   const n = 1 + Math.min(2, run.mods.amount);
-  const baseR = wstat('compass', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * run.mods.areaMul;
+  const baseR = wstat('compass', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
   const life = (w.evolved ? evo.fieldLife : def.fieldLife) * run.mods.durMul;
   const tick = w.evolved ? evo.tick : def.tick;
   const pullForce = w.evolved ? evo.pullForce : def.pullForce;
@@ -801,7 +860,7 @@ function updateSoulbanner(run, w, dt) {
   const def = WEAPONS.soulbanner;
   const evo = def.evo;
   const p = run.player;
-  const R = wstat('soulbanner', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * run.mods.areaMul;
+  const R = wstat('soulbanner', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * weaponAreaMul(run, w);
   const spreadDeg = w.evolved ? evo.spread : wstat('soulbanner', 'spread', w.level);
   const spreadRad = (spreadDeg * Math.PI) / 180;
   const pri = findPriorityTarget(run, p.x, p.y, R * 1.35, run._sys.scratchW);
@@ -817,6 +876,7 @@ function updateSoulbanner(run, w, dt) {
       spread: spreadRad,
       angle: aimAngle,
       dmg: dmg * evo.secondDmgMul,
+      ownerSlot: run._activeSlot || 0,
     });
   }
   emitFire(run, w, p.x, p.y, aimAngle);
@@ -830,8 +890,9 @@ function updateBronzeMirror(run, w, dt) {
   const def = WEAPONS.bronze_mirror;
   const evo = def.evo;
   const p = run.player;
-  const L = wstat('bronze_mirror', 'length', w.level) * (w.evolved ? evo.lengthMul : 1) * run.mods.areaMul;
-  const W = wstat('bronze_mirror', 'width', w.level) * (w.evolved ? evo.widthMul : 1) * run.mods.areaMul;
+  const areaMul = weaponAreaMul(run, w);
+  const L = wstat('bronze_mirror', 'length', w.level) * (w.evolved ? evo.lengthMul : 1) * areaMul;
+  const W = wstat('bronze_mirror', 'width', w.level) * (w.evolved ? evo.widthMul : 1) * areaMul;
   const pri = findPriorityTarget(run, p.x, p.y, Math.max(305, L * 1.15), run._sys.scratchW);
   if (!pri) {
     w.cd = FX.retryDelay;
@@ -885,7 +946,7 @@ function updatePaperhorse(run, w, dt) {
   const n = wstat('paperhorse', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
   const spd = (w.evolved ? evo.speed : def.speed) * run.mods.durMul;
   const span = (w.evolved ? evo.span : def.span) * run.mods.durMul;
-  const hitR = (w.evolved ? evo.r : def.r) * run.mods.areaMul;
+  const hitR = (w.evolved ? evo.r : def.r) * weaponAreaMul(run, w);
   const dmg = baseDmg(w, run);
   const cosA = Math.cos(mainAngle);
   const sinA = Math.sin(mainAngle);
@@ -914,15 +975,261 @@ function updatePaperhorse(run, w, dt) {
   emitFire(run, w, p.x, p.y, mainAngle);
 }
 
+// ───────────────────────── 13. 桃木飞剑 → 天罡雷木剑阵 ─────────────────────────
+
+function updateTaomujian(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.taomujian;
+  const evo = def.evo;
+  const p = run.player;
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = (w.evolved ? evo.seekRange : def.seekRange) * sigScale;
+  const rawList = run._sys.hash.queryCircle(p.x, p.y, seekR, run._sys.scratchW);
+  const targets = [];
+  for (let i = 0; i < rawList.length; i++) if (!rawList[i].dead) targets.push(rawList[i]);
+  if (!targets.length) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+  targets.sort((a, b) => {
+    const sa = a.boss ? 2 : a.elite ? 1 : 0;
+    const sb = b.boss ? 2 : b.elite ? 1 : 0;
+    if (sb !== sa) return sb - sa;
+    return (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
+  });
+
+  w.cd = cooldown(run, w);
+  const n = wstat('taomujian', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
+  const spd = (w.evolved ? evo.speed : def.speed) * run.mods.durMul;
+  const dmg = baseDmg(w, run);
+  const pierce = (w.evolved ? evo.pierce : def.pierce) + (run.mods.bonusPierce || 0);
+  const hitR = def.r * weaponAreaMul(run, w);
+  let mainAngle = 0;
+
+  for (let i = 0; i < n; i++) {
+    const t = targets[i % targets.length];
+    const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+    if (i === 0) mainAngle = baseA;
+    const a = baseA + (i - (n - 1) / 2) * 0.14;
+    newProj(run, 'flyingSword', p.x, p.y, hitR, a, def.life * run.mods.durMul, {
+      weaponId: 'taomujian',
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd,
+      speed: spd,
+      turnRate: w.evolved ? evo.turnRate : def.turnRate,
+      seekRange: seekR,
+      pierce,
+      dmg,
+      evolved: w.evolved,
+      _tgt: t,
+      _hit: [],
+    });
+  }
+  emitFire(run, w, p.x, p.y, mainAngle);
+}
+
+// ───────────────────────── 14. 无常锁魂链 → 黑白无常夺魄索 ─────────────────────────
+
+function segDist2(px, py, ax, ay, bx, by) {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const l2 = vx * vx + vy * vy;
+  if (l2 < 1e-6) return (px - ax) ** 2 + (py - ay) ** 2;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2));
+  return (px - (ax + vx * t)) ** 2 + (py - (ay + vy * t)) ** 2;
+}
+
+function updateSuohunChain(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.suohun_chain;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const L = wstat('suohun_chain', 'length', w.level) * (w.evolved ? evo.lengthMul : 1) * areaMul;
+  const W = def.width * (w.evolved ? evo.widthMul : 1) * areaMul;
+  const pri = findPriorityTarget(run, p.x, p.y, L * 1.35, run._sys.scratchW);
+  if (!pri) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+
+  w.cd = cooldown(run, w);
+  const baseAngle = Math.atan2(pri.y - p.y, pri.x - p.x);
+  const n = wstat('suohun_chain', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + Math.min(2, run.mods.amount);
+  const dmg = baseDmg(w, run);
+  const pullForce = w.evolved ? evo.pullForce : def.pullForce;
+  const stunDur = w.evolved ? evo.stunDur : def.stunDur;
+  const activeSlot = run._activeSlot || 0;
+
+  for (let i = 0; i < n; i++) {
+    const a = n === 1 ? baseAngle : baseAngle + (i - (n - 1) / 2) * (w.evolved ? 0.34 : 0.42);
+    const endX = p.x + Math.cos(a) * L;
+    const endY = p.y + Math.sin(a) * L;
+    const mx = (p.x + endX) * 0.5;
+    const my = (p.y + endY) * 0.5;
+    const cands = run._sys.hash.queryCircle(mx, my, L * 0.5 + W, run._sys.scratchW2);
+    for (let j = 0; j < cands.length; j++) {
+      const e = cands[j];
+      if (e.dead) continue;
+      const rr = W * 0.5 + e.r;
+      if (segDist2(e.x, e.y, p.x, p.y, endX, endY) > rr * rr) continue;
+      if (w.evolved) applyVuln(e, evo.vulnDur, evo.vulnPct);
+      if (!e.boss) {
+        applyStun(run, e, stunDur);
+        const dist = Math.hypot(e.x - p.x, e.y - p.y);
+        if (dist > p.r + e.r + 22) {
+          knockback(e, p.x - e.x, p.y - e.y, pullForce);
+        }
+      }
+      damageEnemy(run, e, dmg, 'suohun_chain', { armorBreak: true, knock: 0 });
+    }
+    hitPropsCircle(run, mx, my, L * 0.5);
+
+    if (w.evolved) {
+      run._scheduled.push({
+        delay: 0.14,
+        type: 'explosion',
+        x: p.x + Math.cos(a) * (L * 0.62),
+        y: p.y + Math.sin(a) * (L * 0.62),
+        radius: evo.burstRadius * areaMul,
+        dmg: dmg * evo.burstDmgMul,
+        weaponId: 'suohun_chain',
+        evolved: true,
+        explosionKind: 'chainBurst',
+        knock: 85,
+        stun: 0.35,
+        vuln: evo.vulnDur,
+        vulnPct: evo.vulnPct,
+        ownerSlot: activeSlot,
+      });
+    }
+
+    newProj(run, 'soulChain', endX, endY, Math.max(6, W * 0.5), a, def.life, {
+      weaponId: 'suohun_chain',
+      fromX: p.x,
+      fromY: p.y,
+      endX,
+      endY,
+      width: W,
+      length: L,
+      evolved: w.evolved,
+    });
+  }
+  emitFire(run, w, p.x, p.y, baseAngle);
+}
+
+// ───────────────────────── 15. 纸鸢火鸦 → 金乌焚天火鸦阵 ─────────────────────────
+
+function updateZhinianKite(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.zhinian_kite;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = def.seekRange * sigScale;
+  const rawList = run._sys.hash.queryCircle(p.x, p.y, seekR, run._sys.scratchW);
+  const targets = [];
+  for (let i = 0; i < rawList.length; i++) if (!rawList[i].dead) targets.push(rawList[i]);
+  if (!targets.length) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+  targets.sort((a, b) => {
+    const sa = a.boss ? 2 : a.elite ? 1 : 0;
+    const sb = b.boss ? 2 : b.elite ? 1 : 0;
+    if (sb !== sa) return sb - sa;
+    return (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
+  });
+
+  w.cd = cooldown(run, w);
+  const n = wstat('zhinian_kite', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
+  const spd = (w.evolved ? evo.speed : def.speed) * run.mods.durMul;
+  const blastR = wstat('zhinian_kite', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const dmg = baseDmg(w, run);
+  let mainAngle = 0;
+
+  for (let i = 0; i < n; i++) {
+    const t = targets[i % targets.length];
+    const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+    if (i === 0) mainAngle = baseA;
+    const a = baseA + (i - (n - 1) / 2) * 0.22;
+    newProj(run, 'fireCrow', p.x, p.y, def.r * sigScale, a, def.life * run.mods.durMul, {
+      weaponId: 'zhinian_kite',
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd,
+      speed: spd,
+      turnRate: def.turnRate,
+      seekRange: seekR,
+      blastR,
+      radius: blastR,
+      dmg,
+      evolved: w.evolved,
+      _tgt: t,
+      _trailT: evo.trailInterval,
+    });
+  }
+  emitFire(run, w, p.x, p.y, mainAngle);
+}
+
+// ───────────────────────── 16. 傩神战鼓 → 太古百相傩坛 ─────────────────────────
+
+function updateNuoDrum(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  w.cd = cooldown(run, w);
+  const def = WEAPONS.nuo_drum;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const R = wstat('nuo_drum', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const beats = w.evolved ? evo.beats : wstat('nuo_drum', 'beats', w.level);
+  const beatInterval = w.evolved ? evo.beatInterval : def.beatInterval;
+  const dmg = baseDmg(w, run);
+
+  const pri = findPriorityTarget(run, p.x, p.y, def.placeRange + R, run._sys.scratchW);
+  let tx = p.x;
+  let ty = p.y;
+  let aimAngle = Math.atan2(p.facingY, p.facingX);
+  if (pri) {
+    const dx = pri.x - p.x;
+    const dy = pri.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 1) {
+      aimAngle = Math.atan2(dy, dx);
+      const stepD = Math.min(d, def.placeRange);
+      tx = p.x + (dx / d) * stepD;
+      ty = p.y + (dy / d) * stepD;
+    }
+  }
+
+  const totalLife = beats * beatInterval + 0.16;
+  newProj(run, 'nuoDrum', tx, ty, 16, 0, totalLife, {
+    weaponId: 'nuo_drum',
+    radius: R,
+    dmg,
+    beatsTotal: beats,
+    beatsLeft: beats,
+    beatInterval,
+    _beatT: 0.02,
+    evolved: w.evolved,
+  });
+  emitFire(run, w, tx, ty, aimAngle);
+}
+
 // ───────────────────────── 持续弹体同步（灯笼、火环、纸扎仪仗）─────────────────────────
 
 function summonKey(run, w) {
+  const sigBit = isWeaponSignature(w, run) ? 1 : 0;
   if (w.id === 'lantern') {
     const cnt = (wstat('lantern', 'count', w.level) + run.mods.amount) & 0xff;
-    return (cnt << 20) | ((w.evolved ? 1 : 0) << 19) | ((run.mods.areaMul * 1000) & 0x7ffff);
+    return (cnt << 21) | ((w.evolved ? 1 : 0) << 20) | (sigBit << 19) | ((Math.round(weaponAreaMul(run, w) * 1000)) & 0x7ffff);
   }
   if (w.id === 'paperman') {
-    return ((wstat('paperman', 'count', w.level) & 0xff) << 12) | (((run.mods.amount + 32) & 0xff) << 2) | (w.evolved ? 1 : 0);
+    return ((wstat('paperman', 'count', w.level) & 0xff) << 13) | (((run.mods.amount + 32) & 0xff) << 3) | (sigBit << 1) | (w.evolved ? 1 : 0);
   }
   return 0;
 }
@@ -932,11 +1239,17 @@ function syncSummons(run, w) {
   if (w._key === key) return;
   w._key = key;
   const p = run.player;
+  const activeSlot = run._activeSlot || 0;
+  const areaMul = weaponAreaMul(run, w);
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+
   if (w.id === 'lantern') {
-    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'lantern' && pr.kind !== 'flameRing');
+    run.projectiles = run.projectiles.filter(
+      (pr) => (pr.ownerSlot || 0) !== activeSlot || (pr.kind !== 'lantern' && pr.kind !== 'flameRing'),
+    );
     const n = wstat('lantern', 'count', w.level) + run.mods.amount;
     for (let i = 0; i < n; i++) {
-      newProj(run, 'lantern', p.x, p.y, WEAPONS.lantern.hitR, 0, 1, {
+      newProj(run, 'lantern', p.x, p.y, WEAPONS.lantern.hitR * sigScale, 0, 1, {
         weaponId: 'lantern',
         orbitIndex: i,
         orbitCount: n,
@@ -946,8 +1259,8 @@ function syncSummons(run, w) {
     }
     if (w.evolved) {
       const evo = WEAPONS.lantern.evo;
-      const R = evo.ringRadius * run.mods.areaMul;
-      const innerR = evo.innerLotusRadius * run.mods.areaMul;
+      const R = evo.ringRadius * areaMul;
+      const innerR = evo.innerLotusRadius * areaMul;
       newProj(run, 'flameRing', p.x, p.y, R, 0, 1, {
         weaponId: 'lantern',
         radius: R,
@@ -958,14 +1271,17 @@ function syncSummons(run, w) {
       });
     }
   } else if (w.id === 'paperman') {
-    // 保留非常驻的纸扎羁绊自爆红纸童（persistent === false）
-    run.projectiles = run.projectiles.filter((pr) => !(pr.kind === 'paperman' && pr.persistent));
+    // 保留非常驻的纸扎羁绊自爆红纸童（persistent === false）与其他队友的纸人
+    run.projectiles = run.projectiles.filter(
+      (pr) => (pr.ownerSlot || 0) !== activeSlot || !(pr.kind === 'paperman' && pr.persistent),
+    );
     const def = WEAPONS.paperman;
+    const sigCdMul = isWeaponSignature(w, run) ? HERO_AFFINITY.cdMul : 1;
     if (!w.evolved) {
       const n = wstat('paperman', 'count', w.level) + run.mods.amount;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * FX.summonOffset, p.y + Math.sin(a) * FX.summonOffset, def.r, a, 1, {
+        newProj(run, 'paperman', p.x + Math.cos(a) * FX.summonOffset, p.y + Math.sin(a) * FX.summonOffset, def.r * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'seeker',
           targetId: null,
@@ -973,6 +1289,8 @@ function syncSummons(run, w) {
           orbitIndex: i,
           orbitCount: n,
           atkT: 0,
+          sigScale,
+          sigCdMul,
           persistent: true,
           evolved: false,
         });
@@ -981,13 +1299,15 @@ function syncSummons(run, w) {
       const evo = def.evo;
       for (let g = 0; g < evo.guards; g++) {
         const a = (g / evo.guards) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * evo.guardR, p.y + Math.sin(a) * evo.guardR, def.r, a, 1, {
+        newProj(run, 'paperman', p.x + Math.cos(a) * evo.guardR * areaMul, p.y + Math.sin(a) * evo.guardR * areaMul, def.r * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'guard',
           mode: 'guard',
           orbitIndex: g,
           orbitCount: evo.guards,
           atkT: 0,
+          sigScale,
+          sigCdMul,
           persistent: true,
           evolved: true,
         });
@@ -995,7 +1315,7 @@ function syncSummons(run, w) {
       const cN = evo.cavalry + run.mods.amount;
       for (let c = 0; c < cN; c++) {
         const a = (c / cN) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * 84, p.y + Math.sin(a) * 84, def.r + 1, a, 1, {
+        newProj(run, 'paperman', p.x + Math.cos(a) * 84, p.y + Math.sin(a) * 84, (def.r + 1) * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'cavalry',
           mode: 'follow',
@@ -1005,6 +1325,8 @@ function syncSummons(run, w) {
           chargeT: 0,
           vx: 0,
           vy: 0,
+          sigScale,
+          sigCdMul,
           persistent: true,
           evolved: true,
           _hitUntil: new Map(),
@@ -1027,6 +1349,10 @@ const UPDATERS = {
   soulbanner: updateSoulbanner,
   bronze_mirror: updateBronzeMirror,
   paperhorse: updatePaperhorse,
+  taomujian: updateTaomujian,
+  suohun_chain: updateSuohunChain,
+  zhinian_kite: updateZhinianKite,
+  nuo_drum: updateNuoDrum,
 };
 
 export function updateWeapons(run, dt) {
