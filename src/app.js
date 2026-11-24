@@ -16,8 +16,10 @@ import { renderTitle } from './ui/title.js';
 import { renderHub } from './ui/hub.js';
 import { renderResult } from './ui/result.js';
 import { createRunUI } from './ui/run-ui.js';
+import { runBootIntro } from './ui/boot-intro.js';
+import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 
-export async function startApp() {
+export async function startApp(bootOpts = {}) {
   const root = document.getElementById('ui');
   const canvas = document.getElementById('game-canvas');
   if (!root || !canvas) throw new Error('缺少 #ui 或 #game-canvas');
@@ -57,11 +59,20 @@ export async function startApp() {
     },
   });
 
+  function buildCosmeticsSnapshot() {
+    const eq = save.cosmetics?.equipped || {};
+    return {
+      ...eq,
+      attackVfx: getEquippedAttackVfx(save),
+      heroSkins: eq.heroSkins ? { ...eq.heroSkins } : {},
+    };
+  }
+
   function applySettings(s) {
     audio.setEnabled({ sfx: s.sfx, music: s.music });
     game.applySettings({
       shake: s.shake, dmgText: s.dmgText, lowQuality: s.lowQuality,
-      cosmetics: { ...save.cosmetics.equipped },
+      cosmetics: buildCosmeticsSnapshot(),
     });
   }
   function onSettings(s) {
@@ -167,6 +178,7 @@ export async function startApp() {
   function showHub() {
     game.clear();
     runUI.teardown();
+    applySettings(save.settings);
     audio.setMusicMode('menu');
     hub = renderHub(root, {
       save,
@@ -183,17 +195,43 @@ export async function startApp() {
     setScreen(hub.el);
   }
 
-  function startRun({ heroId = 'zhou', nightLevel = 0, charm = null, seed } = {}) {
+  function startRun({
+    heroId = 'zhou',
+    startWeapon = null,
+    unlockedWeapons = null,
+    nightLevel = 0,
+    charm = null,
+    seed,
+    coop = null,
+  } = {}) {
     audio.unlock();
     if (charm) {
       const i = save.charms.findIndex((c) => c.relicId === charm.relicId);
       if (i >= 0) save.charms.splice(i, 1); else charm = null;
       persist(false);
     }
-    lastStart = { heroId, nightLevel };
+    const chosenStart = startWeapon
+      ?? save.starterWeaponByHero?.[heroId]
+      ?? save.selectedStarterWeapon
+      ?? null;
+    const chosenPool = unlockedWeapons
+      ?? (Array.isArray(save.unlockedWeapons) ? save.unlockedWeapons : null);
+    lastStart = { heroId, startWeapon: chosenStart, nightLevel };
     setScreen(null);
     finished = false;
-    const r = game.start({ heroId, nightLevel, meta: getMetaBonuses(save), charm, seed });
+    applySettings(save.settings);
+    const r = game.start({
+      heroId,
+      startWeapon: chosenStart,
+      unlockedWeapons: chosenPool,
+      nightLevel,
+      meta: getMetaBonuses(save),
+      charm,
+      seed,
+      coop,
+      skinId: getEquippedHeroSkin(save, heroId),
+      attackVfx: getEquippedAttackVfx(save),
+    });
     if (syncCodexFromRun(save, r)) persist(false);
     runUI.mountHud();
     runUI.syncHud(r);
@@ -227,6 +265,10 @@ export async function startApp() {
     setScreen(el);
   }
 
+  function replayIntro(opts = {}) {
+    return runBootIntro({ ...opts, replay: true, audio });
+  }
+
   window.addEventListener('pagehide', () => { saveSave(save); cloud.flushDirty(); });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { saveSave(save); cloud.flushDirty(); }
@@ -235,13 +277,17 @@ export async function startApp() {
   // 调试 / e2e 钩子（不影响正式流程）
   window.__wugeng = {
     get save() { return save; }, game, audio, cloud,
-    showHub, startRun, persist,
+    showHub, startRun, persist, replayIntro,
     get hub() { return hub; },
     get screen() { return screen?.className || null; },
     get overlay() { return runUI.overlay; },
   };
 
   preloadIcons();   // 兼容旧调用；静态导入已同步可用
+  bootOpts?.onIntroMounted?.();
+  if (!bootOpts?.skipBootIntro) {
+    await runBootIntro({ audio });
+  }
   showTitle();
   if (cloud.isAvailable()) handleCloudPull(true);
 }

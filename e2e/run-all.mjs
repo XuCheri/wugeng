@@ -391,6 +391,8 @@ async function main() {
       executablePath: CHROME_EXECUTABLE,
       args: [
         '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
         '--autoplay-policy=no-user-gesture-required',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',

@@ -2,6 +2,8 @@
 import { INK, VERM, PAPER, LANTERN, RGB, FONT_CN, vermA, paperA } from './palette.js';
 import { makeRng, makeCanvas, brushStroke } from './ink.js';
 import { dotSprite, scrapSprite, inkPoolSprite, puffSprite, blit } from './sprites.js';
+import { normalizeAttackVfxId } from '../meta/cosmetics.js';
+import { getVfxPalette } from './vfx-themes.js';
 
 const TAU = Math.PI * 2;
 const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'paperbride', 'suona', 'horse', 'umbrella']);
@@ -31,6 +33,7 @@ const HITSTOP_MIN_GAP = 0.26;
 
 export function createFx(opts = {}) {
   let low = !!opts.lowQuality;
+  let activeVfx = normalizeAttackVfxId(opts.attackVfx || 'default');
   const rng = makeRng(opts.seed || 12345);
   const parts = [];
   const decals = [];
@@ -52,7 +55,7 @@ export function createFx(opts = {}) {
     parts.push(p);
   }
 
-  function drops(x, y, n, speed, color = 'ink', dir = null, spread = TAU) {
+  function drops(x, y, n, speed, color = 'ink', dir = null, spread = TAU, vfxTheme = 'default') {
     for (let i = 0; i < n; i++) {
       const a = dir == null ? rng() * TAU : dir + (rng() - 0.5) * spread;
       const v = speed * (0.35 + rng() * 0.85);
@@ -66,12 +69,13 @@ export function createFx(opts = {}) {
         life: 0.22 + rng() * 0.28,
         size: 0.9 + rng() * 2.3,
         color,
-        stain: color === 'ink' && rng() < 0.25,
+        vfxTheme,
+        stain: vfxTheme === 'default' && color === 'ink' && rng() < 0.25,
       });
     }
   }
-  function slashSpark(x, y, crit = false) {
-    // 宣纸留白斩击花火 + 暴击朱砂十字星芒
+  function slashSpark(x, y, crit = false, vfxTheme = 'default') {
+    // 宣纸留白斩击花火 + 暴击朱砂十字星芒（非默认主题切换专属几何芒花）
     const a0 = rng() * Math.PI;
     part({
       k: 3,
@@ -84,6 +88,7 @@ export function createFx(opts = {}) {
       rot: a0,
       size: crit ? 15 : 9,
       crit,
+      vfxTheme,
     });
   }
   function scraps(x, y, n, color = 'paper') {
@@ -172,6 +177,9 @@ export function createFx(opts = {}) {
       maxParts = low ? 220 : 650;
       maxDecals = low ? 20 : 56;
     },
+    setAttackVfx(vfxId) {
+      activeVfx = normalizeAttackVfxId(vfxId);
+    },
     setViewport(w, h, s) {
       vw = w;
       vh = h;
@@ -203,14 +211,15 @@ export function createFx(opts = {}) {
     /** 处理一条 sim 事件（注意：hit 为对象池复用，严禁保留 e 引用！） */
     onEvent(e) {
       if (!e || typeof e !== 'object') return;
+      const evTheme = e.attackVfx ? normalizeAttackVfxId(e.attackVfx) : activeVfx;
       switch (e.type) {
         case 'hit': {
           const hx = Number.isFinite(e.x) ? e.x : 0;
           const hy = Number.isFinite(e.y) ? e.y : 0;
           const crit = !!e.crit;
           const n = low ? 2 : crit ? 8 : 3;
-          drops(hx, hy - 8, n, crit ? 185 : 115, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink');
-          if (!low || crit) slashSpark(hx, hy, crit);
+          drops(hx, hy - 8, n, crit ? 185 : 115, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink', null, TAU, evTheme);
+          if (!low || crit) slashSpark(hx, hy, crit, evTheme);
           if (crit) {
             this.addHitstop(0.03);
             this.addShake(0.16);
@@ -245,11 +254,12 @@ export function createFx(opts = {}) {
           const rawRad = Number.isFinite(e.radius) && e.radius > 0 ? e.radius : 60;
           const rad = Math.max(24, Math.min(180, rawRad));
           const scaleK = Math.min(1.5, rad / 65);
+          const expTheme = e.enemyOwned ? 'default' : evTheme;
           if (!low) {
             scraps(ex, ey, Math.round((e.evolved ? 7 : 4) * scaleK), 'verm');
-            drops(ex, ey - 4, Math.round((e.evolved ? 8 : 5) * scaleK), 175, rng() < 0.5 ? 'lantern' : 'verm');
+            drops(ex, ey - 4, Math.round((e.evolved ? 8 : 5) * scaleK), 175, rng() < 0.5 ? 'lantern' : 'verm', null, TAU, expTheme);
           } else {
-            drops(ex, ey - 4, 3, 140, 'verm');
+            drops(ex, ey - 4, 3, 140, 'verm', null, TAU, expTheme);
           }
           this.addShake((e.evolved ? 0.34 : 0.22) * scaleK);
           break;
@@ -421,38 +431,65 @@ export function createFx(opts = {}) {
       for (const p of parts) {
         const k = p.t / p.life;
         if (p.k === 0) {
-          const spr = dotSprite(p.size, p.color);
-          const sp = Math.hypot(p.vx, p.vy);
-          if (sp > 60) {
-            const a = Math.atan2(p.vy, p.vx);
-            blit(ctx, spr, p.x, p.y, 1 + sp / 160, 0.8, a, 1 - k * k);
-          } else blit(ctx, spr, p.x, p.y, 1, 1, 0, 1 - k * k);
+          if (p.vfxTheme && p.vfxTheme !== 'default') {
+            const pal = getVfxPalette(p.vfxTheme);
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, 1 - k * k);
+            ctx.fillStyle = p.color === 'ink' ? pal.primary : pal.bright;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.max(1.2, p.size * 1.15), 0, TAU);
+            ctx.fill();
+            ctx.restore();
+          } else {
+            const spr = dotSprite(p.size, p.color);
+            const sp = Math.hypot(p.vx, p.vy);
+            if (sp > 60) {
+              const a = Math.atan2(p.vy, p.vx);
+              blit(ctx, spr, p.x, p.y, 1 + sp / 160, 0.8, a, 1 - k * k);
+            } else blit(ctx, spr, p.x, p.y, 1, 1, 0, 1 - k * k);
+          }
         } else if (p.k === 1) {
           const spr = scrapSprite(p.idx, p.color);
           blit(ctx, spr, p.x, p.y, p.size, p.size * Math.abs(Math.cos(p.rot * 0.7)) + 0.2, p.rot, k > 0.7 ? (1 - k) / 0.3 : 1);
         } else if (p.k === 3) {
-          // 留白斩击花火 / 暴击星芒
+          // 留白斩击花火 / 暴击星芒（或五系专属矿物重彩命中芒花）
           ctx.save();
           ctx.translate(p.x, p.y);
           ctx.rotate(p.rot);
           ctx.globalAlpha = 1 - k;
           const len = p.size * (0.65 + 0.55 * k);
-          ctx.strokeStyle = p.crit ? VERM : PAPER;
-          ctx.lineWidth = p.crit ? 2.4 : 1.8;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(-len, 0);
-          ctx.lineTo(len, 0);
-          if (p.crit) {
-            ctx.moveTo(0, -len * 0.78);
-            ctx.lineTo(0, len * 0.78);
-          }
-          ctx.stroke();
-          if (p.crit) {
-            ctx.fillStyle = LANTERN;
+          if (p.vfxTheme && p.vfxTheme !== 'default') {
+            const pal = getVfxPalette(p.vfxTheme);
+            ctx.strokeStyle = pal.deep;
+            ctx.lineWidth = p.crit ? 4.2 : 3.2;
+            ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.arc(0, 0, 2.4 * (1 - k), 0, TAU);
-            ctx.fill();
+            ctx.moveTo(-len, 0);
+            ctx.lineTo(len, 0);
+            ctx.moveTo(0, -len * 0.85);
+            ctx.lineTo(0, len * 0.85);
+            ctx.stroke();
+            ctx.strokeStyle = p.crit ? pal.bright : pal.primary;
+            ctx.lineWidth = p.crit ? 2.4 : 1.8;
+            ctx.stroke();
+          } else {
+            ctx.strokeStyle = p.crit ? VERM : PAPER;
+            ctx.lineWidth = p.crit ? 2.4 : 1.8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-len, 0);
+            ctx.lineTo(len, 0);
+            if (p.crit) {
+              ctx.moveTo(0, -len * 0.78);
+              ctx.lineTo(0, len * 0.78);
+            }
+            ctx.stroke();
+            if (p.crit) {
+              ctx.fillStyle = LANTERN;
+              ctx.beginPath();
+              ctx.arc(0, 0, 2.4 * (1 - k), 0, TAU);
+              ctx.fill();
+            }
           }
           ctx.restore();
         } else {

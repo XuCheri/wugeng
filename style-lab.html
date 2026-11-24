@@ -15,10 +15,6 @@
 <canvas id="game-canvas"></canvas>
 <div id="fps"></div>
 <script type="module">
-import { createRenderer } from './src/render/renderer.js';
-import { createMockRun, stepMock } from './src/render/mock-run.js';
-import { drawSheet } from './src/render/sheet.js';
-
 const q = new URLSearchParams(location.search);
 const watch = parseInt(q.get('watch') || '3', 10);
 const scene = q.get('scene') || 'crowd';
@@ -31,9 +27,15 @@ const settings = {
 const low = q.get('low') === '1';
 const showFps = q.get('fps') === '1';
 
-// 尝试加载 UI 工程师放进 assets/fonts/ 的霞鹜文楷（名为 WenKai）；拿不到就用系统衬线字体
+// 优先直连加载 assets/fonts/wenkai-subset.woff2，仅在缺失时回退目录枚举
 async function loadFont() {
-  const candidates = ['assets/fonts/wenkai-subset.woff2'];
+  try {
+    const primary = new FontFace('WenKai', 'url(assets/fonts/wenkai-subset.woff2)');
+    await primary.load();
+    document.fonts.add(primary);
+    return 'assets/fonts/wenkai-subset.woff2';
+  } catch {}
+  const candidates = [];
   try {
     const r = await fetch('assets/fonts/');
     if (r.ok) {
@@ -59,10 +61,24 @@ const canvas = document.getElementById('game-canvas');
 await Promise.race([loadFont(), new Promise((r) => setTimeout(r, 1500))]);
 await document.fonts.ready;
 
-if (scene === 'sheet') {
-  drawSheet(canvas, { low });
+if (scene === 'sheet' || scene === 'skins' || scene === 'vfx') {
+  const { drawSheet, drawSkinsShowcase, drawVfxShowcase } = await import('./src/render/sheet.js');
+  if (scene === 'sheet') {
+    drawSheet(canvas, { low });
+    addEventListener('resize', () => drawSheet(canvas, { low }));
+  } else if (scene === 'skins') {
+    drawSkinsShowcase(canvas, { low });
+    addEventListener('resize', () => drawSkinsShowcase(canvas, { low }));
+  } else {
+    drawVfxShowcase(canvas, { low });
+    addEventListener('resize', () => drawVfxShowcase(canvas, { low }));
+  }
   window.__ready = true;
 } else {
+  const [{ createRenderer }, { createMockRun, stepMock }] = await Promise.all([
+    import('./src/render/renderer.js'),
+    import('./src/render/mock-run.js'),
+  ]);
   const renderer = createRenderer(canvas, { lowQuality: low });
   const run = createMockRun({
     watch,

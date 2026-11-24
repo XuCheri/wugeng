@@ -28,7 +28,19 @@ import {
   inkWaveSprite,
   dotSprite,
   scrapSprite,
+  isNonDefaultSkin,
+  drawHeroWithSkin,
 } from './sprites.js';
+import { normalizeAttackVfxId } from '../meta/cosmetics.js';
+import {
+  getVfxPalette,
+  vfxRingSprite,
+  vfxSlashSprite,
+  vfxArraySprite,
+  vfxBurstSprite,
+  vfxPoolSprite,
+  drawThemedProjectileAccent,
+} from './vfx-themes.js';
 import { createGround } from './ground.js';
 import { createFx } from './fx.js';
 import { createDamageTexts } from './damage-text.js';
@@ -503,9 +515,41 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
+    const rawSkin = p.skinId || cosmetics?.heroSkins?.[heroId] || null;
+    const lean = moving ? 0.05 * flip : 0;
+    const swing = Math.sin(clock * 3.1) * 0.12 + (moving ? -0.32 * flip : 0) + Math.sin(clock * 10) * (moving ? 0.06 : 0);
+
+    if (isNonDefaultSkin(heroId, rawSkin)) {
+      blit(ctx, shadowSprite(11), x, feetY, 1, 1, 0, alpha);
+      const lanPos = drawHeroWithSkin(ctx, {
+        heroId,
+        skinId: rawSkin,
+        x,
+        y: feetY + bob,
+        frame,
+        flip,
+        lean,
+        swing,
+        scale: 1,
+        flash: p.hurtT > 0,
+        alpha,
+        auraRot: clock,
+        showAura: true,
+        legacyOutfit: cosmetics?.outfit || null,
+        legacyLantern: cosmetics?.lantern || null,
+      });
+      const barrier = p.soulBarrier || 0;
+      if (barrier > 0) {
+        for (let i = 0; i < barrier; i++) {
+          const ba = clock * 2.8 + (i / barrier) * TAU;
+          blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 20, y - 6 + Math.sin(ba) * 11, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
+        }
+      }
+      return lanPos;
+    }
+
     blit(ctx, shadowSprite(10), x, feetY, 1, 1, 0, alpha);
     const spr = heroSprite(heroId, frame, p.hurtT > 0, cosmetics?.outfit || null);
-    const lean = moving ? 0.05 * flip : 0;
     blit(ctx, spr, x, feetY + bob, flip, 1, lean, alpha);
 
     // 无常勾魂幡：护体魂障环绕符纸
@@ -521,7 +565,6 @@ export function createRenderer(canvas, opts = {}) {
     const hand = heroHand();
     const hx = x + hand.x * flip;
     const hy = feetY + bob + hand.y;
-    const swing = Math.sin(clock * 3.1) * 0.12 + (moving ? -0.32 * flip : 0) + Math.sin(clock * 10) * (moving ? 0.06 : 0);
     blit(ctx, handLanternSprite(cosmetics?.lantern || null), hx, hy, 1, 1, swing, alpha);
     return { lx: hx - Math.sin(swing) * 7, ly: hy + Math.cos(swing) * 7 };
   }
@@ -569,10 +612,221 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
-  function drawProjectile(p, evo, run, playerPos) {
+  function drawThemedPlayerProjectile(p, themeId, k, id, evolved, playerPos) {
+    const pal = getVfxPalette(themeId);
+    switch (p.kind) {
+      case 'gongPulse':
+      case 'gongWave':
+      case 'ultPulse':
+      case 'nuoBeat':
+      case 'nuoDrumWave': {
+        const maxR = Math.max(10, p.maxRadius || p.radius || p.r || 80);
+        const r = Math.max(8, p.radius > 0 ? p.radius : maxR * Math.max(0.2, k));
+        const a = Math.max(0, Math.pow(1 - k, 0.95) * 0.95);
+        blit(ctx, vfxRingSprite(themeId, id % 3), p.x, p.y, r / 100, (r / 100) * 0.94, id * 0.55, a);
+        if (evolved || p.kind === 'ultPulse') {
+          blit(ctx, vfxRingSprite(themeId, (id + 1) % 3), p.x, p.y, (r * 0.62) / 100, (r * 0.62 * 0.94) / 100, -clock * 0.9, a * 0.78);
+        }
+        return true;
+      }
+      case 'brushArc':
+      case 'soulSweep': {
+        const R = p.radius || (p.kind === 'soulSweep' ? 115 : 70);
+        const spread = p.kind === 'soulSweep'
+          ? Math.min(TAU * 0.94, p.spread ?? p.arc ?? 2.1)
+          : (p.spread || Math.PI / 2);
+        const spr = vfxSlashSprite(themeId, R, spread, evolved || p.kind === 'soulSweep');
+        const sc = R / Math.max(30, Math.round(R / 8) * 8);
+        const a = k < 0.18 ? 1 : 1 - Math.pow((k - 0.18) / 0.82, 1.9);
+        blit(ctx, spr, p.x, p.y, sc * (0.95 + 0.05 * k), sc * (0.95 + 0.05 * k) * (p.reverse ? -1 : 1), p.angle || 0, a);
+        return true;
+      }
+      case 'talismanArray':
+      case 'compassField':
+      case 'qimenArray': {
+        const R = Math.max(12, p.radius || 88);
+        const a = Math.min(1, (p.t + 0.03) / 0.14) * (k > 0.82 ? (1 - k) / 0.18 : 1);
+        blit(ctx, vfxArraySprite(themeId, p.kind), p.x, p.y, R / 100, R / 100, clock * 0.95 + id * 0.3, a * 0.95);
+        if (p.kind !== 'talismanArray') {
+          blit(ctx, projSprite('compass'), p.x, p.y, evolved ? 1.1 : 0.92, evolved ? 1.1 : 0.92, -clock * 1.4, a);
+        }
+        return true;
+      }
+      case 'inkPool':
+      case 'moltenZone': {
+        const r = Math.max(6, p.radius || p.r || 42);
+        const a = Math.min(1, (p.t + 0.04) / 0.15) * (k > 0.75 ? (1 - k) / 0.25 : 1);
+        blit(ctx, vfxPoolSprite(themeId, id), p.x, p.y, r / 50, r / 50, (id % 4) * 0.7, a);
+        return true;
+      }
+      case 'explosion': {
+        const r = p.radius || p.r || 50;
+        const e = 1 - (1 - k) * (1 - k);
+        const fa = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;
+        blit(ctx, vfxBurstSprite(themeId, id), p.x, p.y, (r / 50) * (0.58 + 0.48 * e), (r / 50) * (0.58 + 0.48 * e) * 0.9, id, fa);
+        blit(ctx, vfxRingSprite(themeId, id % 3), p.x, p.y, (r * (0.8 + 0.4 * e)) / 100, (r * (0.8 + 0.4 * e) * 0.9) / 100, 0, (1 - k) * 0.7);
+        return true;
+      }
+      case 'talismanChain':
+      case 'bellChain': {
+        const pts = p.points || (p.x1 != null ? [{ x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 }] : []);
+        if (pts.length < 2) return true;
+        const a = 1 - k;
+        const seed = Math.floor(clock * 28) + id;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = pal.deep;
+        ctx.lineWidth = 4.6;
+        drawLightningPath(pts, 0, seed, 14);
+        ctx.stroke();
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = 2.8;
+        drawLightningPath(pts, 0, seed, 14);
+        ctx.stroke();
+        ctx.strokeStyle = pal.bright;
+        ctx.lineWidth = 1.4;
+        drawLightningPath(pts, low ? 0 : 0.7, seed + 3, 9);
+        ctx.stroke();
+        ctx.restore();
+        if (p.kind === 'bellChain') {
+          const bell = projSprite('bell');
+          const step = pts.length > 10 ? Math.ceil(pts.length / 10) : 1;
+          for (let i = 0; i < pts.length; i += step) {
+            blit(ctx, bell, pts[i].x, pts[i].y - 4, 1, 1, Math.sin(clock * 20 + pts[i].x) * 0.3, a);
+          }
+        }
+        return true;
+      }
+      case 'thunderBolt': {
+        const R = p.radius || 56;
+        const a = 1 - k;
+        blit(ctx, vfxRingSprite(themeId, id % 3), p.x, p.y, R / 100, (R / 100) * 0.74, id, a * 0.92);
+        const boltPts = [
+          { x: p.x + ((id % 5) - 2) * 8, y: p.y - 230 },
+          { x: p.x - 10, y: p.y - 140 },
+          { x: p.x + 9, y: p.y - 68 },
+          { x: p.x, y: p.y },
+        ];
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = pal.deep;
+        ctx.lineWidth = 7 * (1 - k * 0.4);
+        drawLightningPath(boltPts, 0, id + 11, 12);
+        ctx.stroke();
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = 4 * (1 - k * 0.3);
+        drawLightningPath(boltPts, 0, id + 11, 8);
+        ctx.stroke();
+        ctx.strokeStyle = pal.bright;
+        ctx.lineWidth = 1.8;
+        drawLightningPath(boltPts, 0, id + 11, 4);
+        ctx.stroke();
+        ctx.restore();
+        return true;
+      }
+      case 'mirrorBeam': {
+        const len = p.length || p.radius || 220;
+        const ang = p.angle || 0;
+        const x0 = p.x;
+        const y0 = p.y;
+        const x1 = Number.isFinite(p.endX) ? p.endX : x0 + Math.cos(ang) * len;
+        const y1 = Number.isFinite(p.endY) ? p.endY : y0 + Math.sin(ang) * len;
+        const w = p.width || (evolved ? 30 : 18);
+        const fade = Math.min(1, (p.t + 0.03) / 0.08) * (k > 0.86 ? (1 - k) / 0.14 : 1);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = pal.glowRgba(0.45);
+        ctx.lineWidth = w * 1.25;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = w * 0.62;
+        ctx.stroke();
+        ctx.strokeStyle = pal.bright;
+        ctx.lineWidth = Math.max(2, w * 0.25);
+        ctx.stroke();
+        ctx.restore();
+        blit(ctx, projSprite('bronzeMirror'), x0 + Math.cos(ang) * 14, y0 + Math.sin(ang) * 14, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        return true;
+      }
+      case 'soulChain':
+      case 'suohunChain': {
+        const x0 = Number.isFinite(p.fromX) ? p.fromX : playerPos.x;
+        const y0 = Number.isFinite(p.fromY) ? p.fromY : playerPos.y;
+        const x1 = Number.isFinite(p.endX) ? p.endX : p.x;
+        const y1 = Number.isFinite(p.endY) ? p.endY : p.y;
+        const ang = p.angle ?? Math.atan2(y1 - y0, x1 - x0);
+        const fade = Math.max(0, 1 - k * 0.75);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = pal.deep;
+        ctx.lineWidth = evolved ? 6.2 : 4.8;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+        ctx.restore();
+        blit(ctx, projSprite(evolved ? 'soulHookEvo' : 'soulHook'), x1, y1, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        return true;
+      }
+      case 'flameRing':
+      case 'lanternRing':
+      case 'nuoDanceRing': {
+        const R = Math.max(16, p.radius || 68);
+        const cx = p.x ?? playerPos.x;
+        const cy = p.y ?? playerPos.y;
+        ctx.save();
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, 0, TAU);
+        ctx.stroke();
+        const cnt = p.kind === 'nuoDanceRing' ? 4 : Math.max(8, Math.round((TAU * R) / (low ? 28 : 18)));
+        for (let i = 0; i < cnt; i++) {
+          const a = clock * 1.4 + (i / cnt) * TAU;
+          ctx.fillStyle = i % 2 === 0 ? pal.bright : pal.primary;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(a) * R, cy + Math.sin(a) * R, 4.2, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+        return true;
+      }
+      default:
+        // 其余飞行我方弹体（符箓、飞剑、铜钱剑、纸鸢火鸦、纸马、泼墨气刃等）：叠加专属矿物尾迹灵光后继续绘制本体
+        drawThemedProjectileAccent(ctx, themeId, p, evolved, clock, low);
+        return false;
+    }
+  }
+
+  function drawProjectile(p, evo, run, playerPos, settingsCosmetics = null) {
     const k = p.life > 0 ? Math.max(0, Math.min(1, p.t / p.life)) : 0;
     const id = p.id || 0;
     const evolved = p.evolved !== undefined ? !!p.evolved : evo.has(p.weaponId || KIND_WEAPON[p.kind]);
+
+    // 安全铁律：敌方弹幕（enemyBullet）与烬鬼自爆核（cinderCore）严守 #C23B26 朱砂红，绝不套用玩家攻击特效！
+    if (p.kind !== 'enemyBullet' && p.kind !== 'cinderCore') {
+      const rawTheme = p.attackVfx
+        || (p.ownerSlot != null && run.players?.[p.ownerSlot]?.attackVfx)
+        || run.player?.attackVfx
+        || settingsCosmetics?.attackVfx
+        || 'default';
+      const themeId = normalizeAttackVfxId(rawTheme);
+      if (themeId !== 'default' && drawThemedPlayerProjectile(p, themeId, k, id, evolved, playerPos)) {
+        return;
+      }
+    }
 
     switch (p.kind) {
       case 'gongPulse':
@@ -1506,6 +1760,7 @@ export function createRenderer(canvas, opts = {}) {
     frameNo++;
     const dt = Math.min(0.1, Math.max(0, realDt));
     clock += dt;
+    fx.setAttackVfx(run.player.attackVfx || settings.cosmetics?.attackVfx || 'default');
     fx.update(dt);
     if (groundSeed !== run.seed) {
       groundSeed = run.seed;
@@ -1560,7 +1815,7 @@ export function createRenderer(canvas, opts = {}) {
       const q = projs[i];
       if (!GROUND_KINDS.has(q.kind)) continue;
       const gm = Math.max(150, (q.radius || q.maxRadius || 60) + 40);
-      if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos);
+      if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
     }
 
     // 联机倒地八卦救援阵（地面层绘制）
@@ -1649,7 +1904,7 @@ export function createRenderer(canvas, opts = {}) {
       const q = projs[i];
       if (GROUND_KINDS.has(q.kind)) continue;
       const am = Math.max(150, (q.radius || q.length || q.maxRadius || 0) + 56);
-      if (inView(q.x ?? pxI, q.y ?? pyI, am)) drawProjectile(q, evo, run, ppos);
+      if (inView(q.x ?? pxI, q.y ?? pyI, am)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
     }
     fx.drawParticles(ctx);
 

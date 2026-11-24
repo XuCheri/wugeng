@@ -583,8 +583,16 @@ export async function createWarmWorkerSlot(browser, baseUrl) {
         slot.pageErrors.length = 0;
         slot.consoleErrors.length = 0;
         slot.badResponses.length = 0;
-        await slot.page.goto(targetUrl);
-        await slot.page.waitForSelector('.screen--title');
+        try {
+          await slot.page.goto(targetUrl);
+          await slot.page.waitForSelector('.screen--title');
+        } catch (err) {
+          if (!/crashed/i.test(err?.message || '')) throw err;
+          try { await slot.context.close(); } catch {}
+          slot.context = null;
+          slot.page = null;
+          return slot.ensureHealthy();
+        }
         await slot.page.evaluate(() => document.fonts.ready);
         await slot.page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));
         await slot.page.evaluate(() => {
@@ -958,12 +966,22 @@ export async function bootColdIntro(browser, baseUrl, opts = {}) {
         }
       };
       const obs = new MutationObserver(sample);
-      obs.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['data-intro-phase', 'style', 'class'],
-      });
+      let obsAttached = false;
+      const attachObs = () => {
+        if (obsAttached || !document.documentElement) return;
+        obsAttached = true;
+        obs.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['data-intro-phase', 'style', 'class'],
+        });
+      };
+      attachObs();
+      if (!obsAttached) {
+        document.addEventListener('readystatechange', attachObs);
+        window.addEventListener('DOMContentLoaded', attachObs, { once: true });
+      }
       window.addEventListener('DOMContentLoaded', sample, { once: true });
       const poll = setInterval(() => {
         sample();
@@ -975,24 +993,33 @@ export async function bootColdIntro(browser, baseUrl, opts = {}) {
   });
 
   const rawQ = opts.query ? `?${String(opts.query).replace(/^\?/, '')}` : '';
-  const t0 = performance.now();
-  await s.page.goto(`${baseUrl}/index.html${rawQ}`);
+  try {
+    const t0 = performance.now();
+    await s.page.goto(`${baseUrl}/index.html${rawQ}`);
 
-  if (opts.waitForHold) {
-    await s.page.waitForFunction(() => window.__wugengIntro?.ready === true, null, { timeout: 4500 });
-    await s.page.evaluate(() => document.fonts.ready);
+    if (opts.waitForHold) {
+      await s.page.waitForFunction(() => window.__wugengIntro?.ready === true, null, { timeout: 4500 });
+      await s.page.evaluate(() => document.fonts.ready);
+      return { ...s, elapsedMs: performance.now() - t0 };
+    }
+
+    if (opts.waitForTitle !== false) {
+      await s.page.waitForSelector('.screen--title', { timeout: opts.titleTimeoutMs ?? 4500 });
+      const elapsedMs = performance.now() - t0;
+      await s.page.evaluate(() => document.fonts.ready);
+      await s.page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));
+      return { ...s, elapsedMs };
+    }
+
     return { ...s, elapsedMs: performance.now() - t0 };
+  } catch (err) {
+    if (!opts._retriedCrash && /crashed/i.test(err?.message || '')) {
+      try { await s.close(); } catch {}
+      return bootColdIntro(browser, baseUrl, { ...opts, _retriedCrash: true });
+    }
+    try { await s.close(); } catch {}
+    throw err;
   }
-
-  if (opts.waitForTitle !== false) {
-    await s.page.waitForSelector('.screen--title', { timeout: opts.titleTimeoutMs ?? 4500 });
-    const elapsedMs = performance.now() - t0;
-    await s.page.evaluate(() => document.fonts.ready);
-    await s.page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));
-    return { ...s, elapsedMs };
-  }
-
-  return { ...s, elapsedMs: performance.now() - t0 };
 }
 
 /**

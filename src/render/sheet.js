@@ -1,5 +1,5 @@
 // sheet.js —— 民俗木版画全图鉴总览（style-lab ?scene=sheet）：12凡器、12开光神兵、12法器、12邪祟夜主、3英雄、3奇遇神龛
-import { INK, VERM, PAPER, PAPER_SHADE, LANTERN, FONT_CN, inkA, lanternA } from './palette.js';
+import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, LANTERN, FONT_CN, inkA, paperA, vermA, lanternA } from './palette.js';
 import { getPaperTile, setMisregistration } from './ink.js';
 import {
   setSpriteScale,
@@ -10,8 +10,24 @@ import {
   enemySprite,
   shrineSprite,
   shadowSprite,
+  projSprite,
+  ringSprite,
+  brushArcSprite,
+  baguaArraySprite,
+  burstSprite,
   drawIcon,
+  drawHeroWithSkin,
 } from './sprites.js';
+import {
+  getVfxPalette,
+  vfxRingSprite,
+  vfxSlashSprite,
+  vfxArraySprite,
+  vfxBurstSprite,
+  drawThemedProjectileAccent,
+} from './vfx-themes.js';
+import { HERO_IDS } from '../meta/save.js';
+import { getHeroSkins, ATTACK_VFX_LIST } from '../meta/cosmetics.js';
 import { drawStamp } from './glyphs.js';
 
 const WEAPONS_12 = [
@@ -199,4 +215,336 @@ export function drawSheet(canvas, { low = false } = {}) {
     blit(g, enemySprite(id, 0, false, stVariant), cx, cy, sc, sc);
     label(bName, lx, cy + 14, VERM, 9);
   });
+}
+
+const HERO_SHORT_NAMES = {
+  zhou: '周更夫',
+  mian: '巧手阿绵',
+  daotong: '玄真道童',
+  yinyang: '沈观星',
+  tiejiang: '石敢当',
+  nuoxi: '柳青衣',
+};
+
+/**
+ * ?scene=skins —— 6 角色 × 3 套 = 18 套明显差异重彩木刻皮肤全景陈列室
+ * 同步写入物理像素坐标表 window.__skinCells 供自动化像素/剪影检验。
+ */
+export function drawSkinsShowcase(canvas, { low = false } = {}) {
+  const W = Math.max(320, window.innerWidth || 390);
+  const H = Math.max(640, window.innerHeight || 844);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  setSpriteScale(dpr);
+  setMisregistration(!low);
+
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = INK;
+  g.fillRect(0, 0, W, H);
+
+  const spanW = Math.min(W - 8, 420);
+  const ox = Math.floor((W - spanW) / 2);
+
+  // 顶部朱金卷首匾额
+  const topH = 42;
+  g.fillStyle = INK;
+  g.fillRect(0, 0, W, topH);
+  g.strokeStyle = LANTERN;
+  g.lineWidth = 1.4;
+  g.beginPath();
+  g.moveTo(ox + 4, topH - 2);
+  g.lineTo(ox + spanW - 4, topH - 2);
+  g.stroke();
+
+  drawStamp(g, '衣冠', ox + 22, 19, 10.5, { rot: -0.04 });
+  g.font = `15px ${FONT_CN}`;
+  g.fillStyle = PAPER;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('守夜百相衣冠录 · 六脉十八装', ox + spanW * 0.5 + 14, 15);
+  g.font = `9.5px ${FONT_CN}`;
+  g.fillStyle = LANTERN;
+  g.fillText('原装木刻 · 鬼市重彩 · 功绩典藏（冠冕/披风/背饰/提灯/灵阵）', ox + spanW * 0.5 + 16, 31);
+
+  const rows = HERO_IDS.length; // 6
+  const cols = 3;
+  const usableH = H - topH - 6;
+  const rowH = Math.floor(usableH / rows);
+  const colW = Math.floor(spanW / cols);
+
+  const skinCells = [];
+
+  for (let r = 0; r < rows; r++) {
+    const heroId = HERO_IDS[r];
+    const skins = getHeroSkins(heroId);
+    for (let c = 0; c < cols; c++) {
+      const skin = skins[c];
+      const cellX = ox + c * colW;
+      const cellY = topH + 2 + r * rowH;
+      const cardX = cellX + 2.5;
+      const cardY = cellY + 2;
+      const cardW = colW - 5;
+      const cardH = rowH - 4;
+
+      // 卡片底框
+      g.fillStyle = PAPER_SHADE;
+      g.fillRect(cardX, cardY, cardW, cardH);
+      g.strokeStyle = c === 0 ? PAPER_SHADE : c === 1 ? LANTERN : VERM;
+      g.lineWidth = c === 0 ? 1.1 : 1.6;
+      g.strokeRect(cardX, cardY, cardW, cardH);
+
+      // 卡片顶栏（角色名 + 获取途径）
+      const headH = 15;
+      g.fillStyle = c === 0 ? INK : c === 1 ? '#1E3A34' : VERM_DARK;
+      g.fillRect(cardX + 1, cardY + 1, cardW - 2, headH);
+      g.font = `9.5px ${FONT_CN}`;
+      g.textBaseline = 'middle';
+      g.textAlign = 'left';
+      g.fillStyle = PAPER;
+      g.fillText(HERO_SHORT_NAMES[heroId] || heroId, cardX + 5, cardY + 1 + headH * 0.52);
+
+      g.textAlign = 'right';
+      const tagTxt = skin.unlock === 'default' ? '原装' : skin.unlock === 'achievement' ? '功绩' : `${skin.price}钱`;
+      g.fillStyle = skin.unlock === 'default' ? PAPER_SHADE : LANTERN;
+      g.fillText(tagTxt, cardX + cardW - 5, cardY + 1 + headH * 0.52);
+
+      // 纯净宣纸舞台区（内部零杂线、零噪点，确保外轮廓剪影检测 100% 精确）
+      const footBarH = 18;
+      const stageX = cardX + 2;
+      const stageY = cardY + headH + 2;
+      const stageW = cardW - 4;
+      const stageH = cardH - headH - footBarH - 4;
+
+      g.fillStyle = PAPER;
+      g.fillRect(stageX, stageY, stageW, stageH);
+
+      const sprScale = Math.min(1.18, Math.max(0.95, stageH / 76));
+      const heroAnchorX = stageX + stageW * 0.47;
+      const heroAnchorY = stageY + stageH * 0.76;
+
+      drawHeroWithSkin(g, {
+        heroId,
+        skinId: skin.id,
+        x: heroAnchorX,
+        y: heroAnchorY,
+        frame: 0,
+        flip: 1,
+        lean: 0,
+        swing: 0.06,
+        scale: sprScale,
+        flash: false,
+        alpha: 1,
+        auraRot: 0.4,
+        showAura: true,
+      });
+
+      // 底部皮肤名牌匾
+      const footY = stageY + stageH + 1;
+      g.fillStyle = INK;
+      g.fillRect(cardX + 1, footY, cardW - 2, footBarH);
+      g.font = `10.5px ${FONT_CN}`;
+      g.fillStyle = c === 0 ? PAPER : LANTERN;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(skin.name, cardX + cardW * 0.5, footY + footBarH * 0.52);
+
+      const insetX = stageX + 3;
+      const insetY = stageY + 2;
+      const insetW = Math.max(16, stageW - 6);
+      const insetH = Math.max(16, stageH - 4);
+      skinCells.push({
+        heroId,
+        skinId: skin.id,
+        name: skin.name,
+        tier: skin.tier,
+        x: Math.round(cardX * dpr),
+        y: Math.round(cardY * dpr),
+        width: Math.round(cardW * dpr),
+        height: Math.round(cardH * dpr),
+        spriteRect: {
+          x: Math.round(insetX * dpr),
+          y: Math.round(insetY * dpr),
+          width: Math.round(insetW * dpr),
+          height: Math.round(insetH * dpr),
+        },
+      });
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__skinCells = skinCells;
+  }
+  return skinCells;
+}
+
+/**
+ * ?scene=vfx —— 5 套明显差异重彩攻击特效实战演武对比图
+ * 同步写入 window.__vfxPanels 与 window.__vfxCells。
+ */
+export function drawVfxShowcase(canvas, { low = false } = {}) {
+  const W = Math.max(320, window.innerWidth || 390);
+  const H = Math.max(640, window.innerHeight || 844);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  setSpriteScale(dpr);
+  setMisregistration(!low);
+
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = INK;
+  g.fillRect(0, 0, W, H);
+
+  const spanW = Math.min(W - 12, 500);
+  const ox = Math.floor((W - spanW) / 2);
+  const topH = 44;
+
+  drawStamp(g, '锋芒', ox + 26, 22, 12, { rot: -0.04 });
+  g.font = `15px ${FONT_CN}`;
+  g.fillStyle = PAPER;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('五更天 · 五系重彩攻击特效演武录', ox + spanW * 0.5 + 10, 16);
+  g.font = `10px ${FONT_CN}`;
+  g.fillStyle = LANTERN;
+  g.fillText('我方刀光·震波·法阵·飞剑五系异构 ｜ 敌方弹幕预警恒守朱砂红', ox + spanW * 0.5 + 6, 32);
+
+  const demoPairings = [
+    { heroId: 'zhou', skinId: 'zhou_default', enemyA: 'paperkid', enemyB: 'lanternghost' },
+    { heroId: 'tiejiang', skinId: 'tiejiang_jade_taotie', enemyA: 'lanternghost', enemyB: 'suona' },
+    { heroId: 'daotong', skinId: 'daotong_violet_thunder', enemyA: 'paperbride', enemyB: 'weasel' },
+    { heroId: 'nuoxi', skinId: 'nuoxi_gold_nuo_god', enemyA: 'sedan', enemyB: 'drowned' },
+    { heroId: 'yinyang', skinId: 'yinyang_frost_astrolabe', enemyA: 'cinder', enemyB: 'shade' },
+  ];
+
+  const usableH = H - topH - 8;
+  const rowH = Math.floor(usableH / 5);
+  const panels = [];
+
+  for (let i = 0; i < ATTACK_VFX_LIST.length; i++) {
+    const theme = ATTACK_VFX_LIST[i];
+    const vfxId = theme.id;
+    const pal = getVfxPalette(vfxId);
+    const pair = demoPairings[i];
+
+    const lx = ox + 2;
+    const ly = topH + 2 + i * rowH;
+    const lw = spanW - 4;
+    const lh = rowH - 5;
+
+    // 演武巷道石板底衬（宣纸暖灰街面，让五系几何与矿物重彩清晰跳脱）
+    g.fillStyle = PAPER;
+    g.fillRect(lx, ly, lw, lh);
+    g.fillStyle = paperA(0.55);
+    g.fillRect(lx, ly + lh * 0.68, lw, lh * 0.32);
+    g.strokeStyle = vfxId === 'default' ? VERM : pal.primary;
+    g.lineWidth = 2;
+    g.strokeRect(lx, ly, lw, lh);
+
+    // 左侧竖匾标题栏
+    const tagW = 68;
+    g.fillStyle = INK;
+    g.fillRect(lx + 1, ly + 1, tagW, lh - 2);
+    g.fillStyle = vfxId === 'default' ? VERM : pal.bright;
+    g.font = `13px ${FONT_CN}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(theme.name, lx + tagW * 0.5, ly + lh * 0.34);
+    g.fillStyle = PAPER_SHADE;
+    g.font = `9.5px ${FONT_CN}`;
+    g.fillText(theme.subtitle, lx + tagW * 0.5, ly + lh * 0.58);
+    g.fillStyle = LANTERN;
+    g.font = `9px ${FONT_CN}`;
+    g.fillText(theme.price > 0 ? `鬼市 ${theme.price}钱` : '默认免费', lx + tagW * 0.5, ly + lh * 0.80);
+
+    // 战场演武区
+    const stageLeft = lx + tagW + 8;
+    const stageW = lw - tagW - 12;
+    const cy = ly + lh * 0.56;
+    const heroX = stageLeft + stageW * 0.16;
+    const midX = stageLeft + stageW * 0.50;
+    const enemyX = stageLeft + stageW * 0.82;
+
+    // 1) 地面符阵
+    if (vfxId === 'default') {
+      blit(g, baguaArraySprite('talisman'), midX + 18, cy + 4, 0.36, 0.34, 0.3, 0.9);
+    } else {
+      blit(g, vfxArraySprite(vfxId, 'talismanArray'), midX + 18, cy + 4, 0.36, 0.34, 0.3, 0.92);
+    }
+
+    // 2) 震波环（围绕守夜人与演武中场）
+    if (vfxId === 'default') {
+      blit(g, ringSprite('verm', i % 3), heroX + 26, cy - 2, 0.44, 0.40, 0.2, 0.92);
+    } else {
+      blit(g, vfxRingSprite(vfxId, i % 3), heroX + 26, cy - 2, 0.42, 0.39, 0.2, 0.95);
+    }
+
+    // 3) 守夜人出招姿态
+    blit(g, shadowSprite(10), heroX, cy + 16, 1, 1, 0, 0.8);
+    drawHeroWithSkin(g, {
+      heroId: pair.heroId,
+      skinId: pair.skinId,
+      x: heroX,
+      y: cy + 16,
+      frame: 1,
+      flip: 1,
+      lean: 0.06,
+      swing: -0.2,
+      scale: 0.95,
+      showAura: true,
+    });
+
+    // 4) 扇形重彩刀光
+    if (vfxId === 'default') {
+      blit(g, brushArcSprite(48, 1.5, true), heroX + 24, cy - 4, 0.92, 0.92, -0.05, 0.95);
+    } else {
+      blit(g, vfxSlashSprite(vfxId, 48, 1.5, true), heroX + 24, cy - 4, 0.92, 0.92, -0.05, 0.96);
+    }
+
+    // 5) 飞剑与符箓拖尾 + 命中重彩爆点
+    const swordP = { id: 10 + i, x: midX + 8, y: cy - 16, angle: 0.06 };
+    const talP = { id: 20 + i, x: midX - 6, y: cy + 12, angle: -0.08 };
+    if (vfxId !== 'default') {
+      drawThemedProjectileAccent(g, vfxId, swordP, true, 1.2 + i, false);
+      drawThemedProjectileAccent(g, vfxId, talP, true, 2.4 + i, false);
+    } else {
+      g.strokeStyle = vermA(0.65);
+      g.lineWidth = 2.4;
+      g.beginPath();
+      g.moveTo(swordP.x - 24, swordP.y - 2);
+      g.lineTo(swordP.x, swordP.y);
+      g.stroke();
+    }
+    blit(g, projSprite('taomujianEvo'), swordP.x, swordP.y, 1.0, 1.0, swordP.angle);
+    blit(g, projSprite('talismanEvo'), talP.x, talP.y, 0.95, 0.95, Math.PI / 2);
+
+    // 右侧靶标百鬼 + 命中爆裂火花
+    blit(g, shadowSprite(10), enemyX, cy + 16, 0.9, 0.9);
+    blit(g, enemySprite(pair.enemyA, 0, false), enemyX, cy + 16, pair.enemyA === 'sedan' ? 0.72 : 0.92, pair.enemyA === 'sedan' ? 0.72 : 0.92);
+    if (vfxId === 'default') {
+      blit(g, burstSprite(i), enemyX - 18, cy - 6, 0.46, 0.44, 0.4, 0.92);
+    } else {
+      blit(g, vfxBurstSprite(vfxId, i), enemyX - 18, cy - 6, 0.46, 0.44, 0.4, 0.94);
+    }
+
+    // 右上角敌方纸钱弹（恒定朱砂红 #C23B26 安全不变量对照）
+    blit(g, projSprite('paperMoney'), enemyX + 18, cy - 26, 0.95, 0.95, 0.3);
+
+    panels.push({
+      vfxId,
+      name: theme.name,
+      x: Math.round((lx + tagW + 4) * dpr),
+      y: Math.round((ly + 3) * dpr),
+      width: Math.round((lw - tagW - 8) * dpr),
+      height: Math.round((lh - 6) * dpr),
+    });
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__vfxPanels = panels;
+    window.__vfxCells = panels;
+  }
+  return panels;
 }

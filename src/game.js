@@ -140,9 +140,31 @@ export function createGame({
   const game = {
     get run() { return run; },
     settings,
-    start({ heroId = 'zhou', nightLevel = 0, meta = {}, charm = null, seed } = {}) {
+    start({
+      heroId = 'zhou',
+      startWeapon = null,
+      unlockedWeapons = null,
+      nightLevel = 0,
+      meta = {},
+      charm = null,
+      seed,
+      coop = null,
+      skinId = null,
+      attackVfx = null,
+    } = {}) {
       const s = seed ?? ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
-      run = createRun({ seed: s, heroId, nightLevel, meta, charm });
+      run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, meta, charm, coop });
+      const eq = settings.cosmetics || {};
+      const resolvedSkin = skinId || eq.heroSkins?.[run.heroId] || null;
+      const resolvedVfx = attackVfx || eq.attackVfx || null;
+      if (run.player) {
+        if (!run.player.skinId && resolvedSkin) run.player.skinId = resolvedSkin;
+        if (!run.player.attackVfx && resolvedVfx) run.player.attackVfx = resolvedVfx;
+      }
+      if (Array.isArray(run.players) && run.players[0]) {
+        if (!run.players[0].skinId && resolvedSkin) run.players[0].skinId = resolvedSkin;
+        if (!run.players[0].attackVfx && resolvedVfx) run.players[0].attackVfx = resolvedVfx;
+      }
       lastStatus = run.status;
       acc = 0; lastTs = 0;
       paused = false;

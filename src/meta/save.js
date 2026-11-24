@@ -211,6 +211,25 @@ export function migrateSave(raw) {
     for (const slot of ['lantern', 'outfit']) {
       out.cosmetics.equipped[slot] = owned.includes(eq[slot]) ? eq[slot] : null;
     }
+    if (eq.attackVfx !== undefined) {
+      if (eq.attackVfx === null) {
+        out.cosmetics.equipped.attackVfx = null;
+      } else if (eq.attackVfx === 'default' || (typeof eq.attackVfx === 'string' && owned.includes(eq.attackVfx))) {
+        out.cosmetics.equipped.attackVfx = eq.attackVfx;
+      } else {
+        out.cosmetics.equipped.attackVfx = 'default';
+      }
+    }
+    if (isObj(eq.heroSkins)) {
+      const hs = {};
+      for (const h of HERO_IDS) {
+        const sid = eq.heroSkins[h];
+        if (typeof sid === 'string' && sid.length > 0 && sid.length < 40 && !FORBIDDEN_KEYS.has(sid)) {
+          if (sid === `${h}_default` || owned.includes(sid)) hs[h] = sid;
+        }
+      }
+      out.cosmetics.equipped.heroSkins = hs;
+    }
   }
 
   if (Array.isArray(src.charms)) {
@@ -357,6 +376,24 @@ export function mergeSaves(localRaw, remoteRaw) {
   for (const slot of ['lantern', 'outfit']) {
     const pick = primary.cosmetics.equipped[slot] || secondary.cosmetics.equipped[slot];
     merged.cosmetics.equipped[slot] = merged.cosmetics.owned.includes(pick) ? pick : null;
+  }
+  if (primary.cosmetics.equipped.attackVfx !== undefined || secondary.cosmetics.equipped.attackVfx !== undefined) {
+    const pickVfx = (primary.cosmetics.equipped.attackVfx && primary.cosmetics.equipped.attackVfx !== 'default'
+      ? primary.cosmetics.equipped.attackVfx
+      : secondary.cosmetics.equipped.attackVfx) || primary.cosmetics.equipped.attackVfx || 'default';
+    merged.cosmetics.equipped.attackVfx = pickVfx === 'default' || merged.cosmetics.owned.includes(pickVfx) ? pickVfx : 'default';
+  }
+  if (isObj(primary.cosmetics.equipped.heroSkins) || isObj(secondary.cosmetics.equipped.heroSkins)) {
+    const hs = {};
+    const pHs = isObj(primary.cosmetics.equipped.heroSkins) ? primary.cosmetics.equipped.heroSkins : {};
+    const sHs = isObj(secondary.cosmetics.equipped.heroSkins) ? secondary.cosmetics.equipped.heroSkins : {};
+    for (const h of HERO_IDS) {
+      const pickSkin = (pHs[h] && pHs[h] !== `${h}_default` ? pHs[h] : sHs[h]) || pHs[h];
+      if (pickSkin && (pickSkin === `${h}_default` || merged.cosmetics.owned.includes(pickSkin))) {
+        hs[h] = pickSkin;
+      }
+    }
+    merged.cosmetics.equipped.heroSkins = hs;
   }
 
   // 图鉴并集

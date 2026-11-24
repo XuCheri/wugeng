@@ -4,6 +4,24 @@
 import { INK, VERM, VERM_DARK, PAPER, PAPER_SHADE, LANTERN, inkA, paperA, vermA, lanternA } from './palette.js';
 import { makeCanvas, makeRng, hashStr, withMisreg, printSpeckle, brushStroke, arcPoints, blobPath, splatter } from './ink.js';
 import { setGlyphScale } from './glyphs.js';
+import {
+  setSkinScale,
+  clearSkinCache,
+  isNonDefaultSkin,
+  heroSkinSprite,
+  skinLanternSprite,
+  skinFootAuraSprite,
+  drawHeroWithSkin,
+} from './skins.js';
+import { setVfxScale, clearVfxCache } from './vfx-themes.js';
+
+export {
+  isNonDefaultSkin,
+  heroSkinSprite,
+  skinLanternSprite,
+  skinFootAuraSprite,
+  drawHeroWithSkin,
+};
 
 const TAU = Math.PI * 2;
 const LW = 1.4; // 统一描边粗细（普通敌人）
@@ -19,9 +37,13 @@ export function setSpriteScale(s) {
     cache.clear();
   }
   setGlyphScale(v);
+  setSkinScale(v);
+  setVfxScale(v);
 }
 export function clearSpriteCache() {
   cache.clear();
+  clearSkinCache();
+  clearVfxCache();
 }
 
 /* ------------------------------------------------------------------ */
@@ -456,8 +478,11 @@ const HEROES = {
   nuoxi: drawNuoxi,
 };
 
-export function heroSprite(heroId, frame = 0, flash = false, outfit = null) {
+export function heroSprite(heroId, frame = 0, flash = false, outfit = null, skinId = null) {
   const safeId = typeof heroId === 'string' && Object.hasOwn(HEROES, heroId) ? heroId : 'zhou';
+  if (skinId && isNonDefaultSkin(safeId, skinId)) {
+    return heroSkinSprite(safeId, skinId, frame, flash, outfit);
+  }
   const fn = HEROES[safeId];
   return bake(`hero_${safeId}|${outfit || ''}|${frame}|${flash ? 1 : 0}`, 36, 46, 18, 42, (g, r) => fn(g, r, frame, outfit), { flash, speckle: 0.003 });
 }
