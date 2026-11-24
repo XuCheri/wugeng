@@ -24,7 +24,12 @@ export function spawnBoss(run, type, opts = {}) {
     BOSS_AI.hpMul *
     (BOSS_AI[type]?.hpMul || 1) *
     coopHpScale(run);
-  if (run.mode === 'endless') hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - run._endlessStart) / 60));
+  if (run.mode === 'endless') {
+    const es = Number.isFinite(run._endlessStart) && run._endlessStart > 0
+      ? run._endlessStart
+      : Math.min(Math.max(0, run.time || 0), 600);
+    hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - es) / 60));
+  }
   e.hp = e.maxHp = Math.round(hp);
   e.chest = !!opts.chest;
   e.final = !!opts.final;

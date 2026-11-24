@@ -11,11 +11,18 @@ import { updateBoss } from './bosses.js';
 import { damageEnemy, knockback } from './combat.js';
 import { coopHpScale, coopPartySize, nearestLivingPlayer, hurtTargetPlayer, withPlayerContext } from './coop.js';
 
+function resolveEndlessStartSec(run) {
+  return Number.isFinite(run._endlessStart) && run._endlessStart > 0
+    ? run._endlessStart
+    : Math.min(Math.max(0, run.time || 0), 600);
+}
+
 /** 当前时刻的敌人血量倍率（主线分钟 + 夜色 + 无尽 + 联机人数缩放） */
 export function currentHpScale(run) {
+  const es = resolveEndlessStartSec(run);
   const base =
     run.mode === 'endless'
-      ? enemyHpScale(run._endlessStart / 60, run.nightLevel, (run.time - run._endlessStart) / 60)
+      ? enemyHpScale(es / 60, run.nightLevel, Math.max(0, run.time - es) / 60)
       : enemyHpScale(run.time / 60, run.nightLevel, 0);
   return base * coopHpScale(run);
 }
@@ -51,7 +58,8 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     affix = opts.affix !== undefined ? opts.affix : opts.mirrorClone ? null : run.rng.pick(ELITE_AFFIX_IDS);
   }
 
-  const m = run.mode === 'endless' ? run._endlessStart / 60 : run.time / 60;
+  const m = run.mode === 'endless' ? resolveEndlessStartSec(run) / 60 : run.time / 60;
+  const speedMin = Math.max(0, run.time || 0) / 60;
   let hp;
   if (opts.fixedHp !== undefined) {
     hp = opts.fixedHp;
@@ -61,7 +69,7 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     if (affix === 'treasure_bearer') hp *= ELITE_AFFIXES.treasure_bearer.hpMul;
   }
 
-  let speed = def.speed * night.enemySpeedMul * (def.boss ? 1 : enemySpeedScale(m));
+  let speed = def.speed * night.enemySpeedMul * (def.boss ? 1 : enemySpeedScale(speedMin));
   let dmg = def.dmg * night.contactDmgMul * (def.boss ? 1 : enemyDmgScale(m));
   let r = def.r * (opts.rMul || 1);
   let xp = opts.mirrorClone ? 0 : def.xp;
@@ -159,9 +167,17 @@ export function queueSpawn(run, type, x, y, opts) {
 
 export function flushSpawnQueue(run) {
   const q = run._spawnQueue;
+  if (!q.length) return;
+  let alive = 0;
+  for (let k = 0; k < run.enemies.length; k++) {
+    if (!run.enemies[k].dead) alive++;
+  }
   for (let i = 0; i < q.length; i++) {
-    if (run.enemies.length >= SPAWN.cap + q.length) break;
-    spawnEnemy(run, q[i].type, q[i].x, q[i].y, q[i].opts);
+    const item = q[i];
+    const isPriority = Boolean(ENEMIES[item.type]?.boss || item.opts?.warder || item.opts?.chest);
+    if (!isPriority && alive >= SPAWN.cap) continue;
+    spawnEnemy(run, item.type, item.x, item.y, item.opts);
+    alive++;
   }
   q.length = 0;
 }

@@ -1,4 +1,4 @@
-// 应用外壳：屏幕流转（标题 → 更房 → 局内 → 结算 → 更房）、存档 v3、云存档、鬼市外观、守夜功绩、广告、音频串联。
+// 应用外壳：屏幕流转（标题 → 更房 → 局内 → 结算 → 更房）、存档 v3、云存档、鬼市外观、守夜功绩、五更守夜总榜、好友与多人同守五更联机串联。
 // main.js 只做 startApp()。
 import { createGame } from './game.js';
 import * as Run from './sim/run.js';
@@ -15,6 +15,10 @@ import {
   reconcileAchievements,
 } from './meta/achievements.js';
 import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
+import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
+import { createLeaderboard } from './meta/leaderboard.js';
+import { createFriends } from './meta/friends.js';
+import { createCoopManager } from './net/coop-net.js';
 import { adsEnabled, watchAd } from './ads/ads.js';
 import { adResultMessage } from './ads/ad-policy.js';
 import { createAudio } from './audio/synth.js';
@@ -26,6 +30,8 @@ import { renderHub } from './ui/hub.js';
 import { renderResult } from './ui/result.js';
 import { createRunUI } from './ui/run-ui.js';
 import { runBootIntro } from './ui/boot-intro.js';
+import { openLeaderboardModal } from './ui/leaderboard.js';
+import { openCoopLobbyModal } from './ui/coop-lobby.js';
 
 export async function startApp(bootOpts = {}) {
   const root = document.getElementById('ui');
@@ -48,8 +54,73 @@ export async function startApp(bootOpts = {}) {
   let hub = null;
   let runUI = null;
   let menuScene = null;
+  let activeCoopModal = null;
   let achBannerEl = null;
   let achBannerTimer = 0;
+
+  const leaderboard = createLeaderboard({
+    getSave: () => save,
+    persistSave: (s) => saveSave(s),
+  });
+
+  const coop = createCoopManager({
+    getSave: () => save,
+    onStartCoopRun: ({ seed, nightLevel, party }) => {
+      activeCoopModal?.close?.();
+      activeCoopModal = null;
+      const p0 = party?.[0] || {};
+      startRun({
+        heroId: p0.heroId || save.selectedHero || 'zhou',
+        startWeapon: p0.startWeapon || null,
+        nightLevel: nightLevel ?? save.selectedNight ?? 0,
+        seed,
+        coop: { party },
+      });
+    },
+  });
+
+  function openLeaderboard(initialCollection = 'public') {
+    return openLeaderboardModal(root, {
+      save,
+      leaderboard,
+      initialCollection,
+    });
+  }
+
+  function openCoop(opts = {}) {
+    if (activeCoopModal && document.querySelector('.coop-modal')) {
+      if (opts.autoJoinCode) {
+        coop.joinRoom(opts.autoJoinCode);
+      }
+      activeCoopModal.refresh?.();
+      return activeCoopModal;
+    }
+    activeCoopModal = openCoopLobbyModal(root, {
+      save,
+      coop,
+      friends,
+      autoJoinCode: opts.autoJoinCode || null,
+      openFriendsFirst: Boolean(opts.openFriendsFirst),
+      onClose: () => {
+        activeCoopModal = null;
+      },
+    });
+    return activeCoopModal;
+  }
+
+  const friends = createFriends({
+    getActiveRoomCode: () => coop.roomCode || null,
+    onRoomInviteJoin: (roomCode) => {
+      // 局内战斗进行中收到空事件不打断；收到明确有效房号时进入更房并加入对应房间
+      if (game.run && game.run.status === 'playing' && !coop.isInRun()) {
+        return;
+      }
+      if (!document.querySelector('.screen--hub')) {
+        showHub();
+      }
+      openCoop({ autoJoinCode: roomCode });
+    },
+  });
 
   function showAchBanner(achId) {
     const def = ACHIEVEMENTS_BY_ID[achId];
@@ -90,6 +161,9 @@ export async function startApp(bootOpts = {}) {
     },
     onAutoPause: () => runUI?.showPause(),
     onHudSync: (run) => runUI?.syncHud(run),
+    transformInput: (sampled, run) => coop.buildStepInputs(sampled, run),
+    onAfterStep: (run) => coop.broadcastRunSnapshot(run),
+    shouldSkipAutoPause: (run) => coop.isActive() || (Array.isArray(run?.players) && run.players.length > 1),
     onStart: (run) => {
       menuScene?.stop();
       finished = false;
@@ -226,6 +300,7 @@ export async function startApp(bootOpts = {}) {
       hub.teardown?.();
     }
     screen?.remove();
+    activeCoopModal = null;
     root.querySelectorAll('.veil').forEach((v) => v.remove());
     screen = el;
   }
@@ -258,12 +333,18 @@ export async function startApp(bootOpts = {}) {
       now: () => new Date(),
       onStart: (opts) => startRun(opts),
       onSettings,
-      onCosmeticChange: () => applySettings(save.settings),
+      onCosmeticChange: () => {
+        applySettings(save.settings);
+        coop.syncLocalProfile();
+      },
+      onProfileChange: () => coop.syncLocalProfile(),
       cloudState: () => cloud.getState(),
       onCloudUpload: () => handleCloudUpload(),
       onCloudPull: () => handleCloudPull(false),
       onQuickCloud: () => handleQuickCloud(),
       onCloudFlush: () => cloud.flushDirty(),
+      onOpenLeaderboard: () => openLeaderboard('public'),
+      onOpenCoop: () => openCoop(),
     });
     setScreen(hub.el);
     menuScene.start();
@@ -276,7 +357,7 @@ export async function startApp(bootOpts = {}) {
     nightLevel = 0,
     charm = null,
     seed,
-    coop = null,
+    coop: coopParty = null,
   } = {}) {
     audio.unlock();
     menuScene.stop();
@@ -295,6 +376,8 @@ export async function startApp(bootOpts = {}) {
     setScreen(null);
     finished = false;
     applySettings(save.settings);
+    const p0Skin = coopParty?.party?.[0]?.skinId || getEquippedHeroSkin(save, heroId);
+    const p0Vfx = coopParty?.party?.[0]?.attackVfx || getEquippedAttackVfx(save);
     const r = game.start({
       heroId,
       startWeapon: chosenStart,
@@ -303,9 +386,9 @@ export async function startApp(bootOpts = {}) {
       meta: getMetaBonuses(save),
       charm,
       seed,
-      coop,
-      skinId: getEquippedHeroSkin(save, heroId),
-      attackVfx: getEquippedAttackVfx(save),
+      coop: coopParty,
+      skinId: p0Skin,
+      attackVfx: p0Vfx,
     });
     if (syncCodexFromRun(save, r)) persist(false);
     runUI.mountHud();
@@ -324,8 +407,10 @@ export async function startApp(bootOpts = {}) {
   function finishRun(summary) {
     if (finished || !summary) return;
     finished = true;
+    coop.onRunFinished();
     const recorded = recordRun(save, summary, Date.now());
     persist(true);
+    leaderboard.submitScore(summary.score, save);
     runUI.teardown();
     audio.setMusicMode('menu');
     const el = renderResult(root, {
@@ -334,6 +419,7 @@ export async function startApp(bootOpts = {}) {
       adsOn: () => adsEnabled(),
       runAd,
       onDouble: (amount) => { const add = grantDoubleCoins(save, amount); persist(true); return add; },
+      onLeaderboard: () => openLeaderboard('public'),
       onHub: () => showHub(),
       onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
@@ -356,6 +442,10 @@ export async function startApp(bootOpts = {}) {
     game,
     audio,
     cloud,
+    leaderboard,
+    friends,
+    coop,
+    PRIMARY_LEADERBOARD_ID,
     achievements: {
       ACHIEVEMENTS,
       list: ACHIEVEMENTS,
@@ -375,6 +465,8 @@ export async function startApp(bootOpts = {}) {
     startRun,
     persist,
     replayIntro,
+    openLeaderboard,
+    openCoop,
     get hub() { return hub; },
     get screen() { return screen?.className || null; },
     get overlay() { return runUI.overlay; },
@@ -386,6 +478,15 @@ export async function startApp(bootOpts = {}) {
   if (!bootOpts?.skipBootIntro) {
     await runBootIntro({ audio });
   }
-  showTitle();
+  const launchRoomCode = friends.extractLaunchRoomCode();
+  if (launchRoomCode) {
+    showHub();
+    openCoop({ autoJoinCode: launchRoomCode });
+  } else {
+    showTitle();
+  }
   if (cloud.isAvailable()) handleCloudPull(true);
+  if ((save.leaderboard?.pendingScore || 0) > 0 && leaderboard.isAvailable()) {
+    leaderboard.flushPendingScore(save);
+  }
 }

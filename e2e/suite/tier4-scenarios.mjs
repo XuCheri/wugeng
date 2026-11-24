@@ -106,6 +106,12 @@ export const TIER4_TESTS = [
         await fastClick(s.page, '[data-action="inspect-loadout"]');
         await requireOpenSelector(s.page, '.veil--inspector');
         await fastClick(s.page, '[data-action="close-inspector"]');
+        await s.page.evaluate(() => {
+          const r = window.__wugeng.game.run;
+          if (Array.isArray(r?.choices) && r.choices.length) {
+            r.choices[0] = { kind: 'relic', id: 'strawshoes', level: 2, isNew: false, evolvable: false };
+          }
+        });
         await fastClick(s.page, '.qian');
 
         // Expand toward 6+6 & 3pc zhenhun

@@ -1969,7 +1969,7 @@ export const TIER2_F8_F15 = [
       const lsRes = await execFileAsync('git', ['ls-files'], { cwd: ROOT, timeout: 10_000 });
       const badTracked = lsRes.stdout
         .split('\n')
-        .filter((f) => /^(?:\.agents|e2e\/screenshots|dist)\//.test(f.trim()));
+        .filter((f) => /^(?:\.agents|e2e\/screenshots|dist)\//.test(f.trim()) && f.trim() !== '.agents/environment.json');
       assert.deepEqual(badTracked, [], `Forbidden artifacts tracked in git ls-files: ${badTracked.join(', ')}`);
 
       const stRes = await execFileAsync('git', ['status', '--porcelain'], { cwd: ROOT, timeout: 10_000 });

@@ -105,7 +105,7 @@ export const ENEMIES = {
   suona: { name: '吹鼓鬼', hp: 48, speed: 44, dmg: 8, r: 14, xp: 1.7 },
   paperbride: { name: '红衣纸新娘', hp: 68, speed: 56, dmg: 11, r: 13, xp: 1.6 },
   cinder: { name: '阴火骷髅', hp: 29, speed: 64, dmg: 8, r: 12, xp: 0.95 },
-  horse: { name: '纸马将军', hp: 2350, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
+  horse: { name: '纸马将军', hp: 2800, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
   umbrella: { name: '无面伞女', hp: 58000, speed: 52, dmg: 38, r: 28, xp: 75, boss: true },
   youshen: { name: '夜游神', hp: 176000, speed: 58, dmg: 79, r: 40, xp: 0, boss: true },
 };

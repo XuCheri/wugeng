@@ -116,45 +116,45 @@ export function vfxRingSprite(themeId, seed = 0) {
 
   return bakeVfx(`vfx_ring|${norm}|${seed % 3}`, dim, dim, center, center, (g) => {
     if (norm === 'jade_ghostfire') {
-      // 青冥幽火：五旋涡魂火长尾（自 0.25R 旋出至 1.28R 鬼火尖舌，打破圆形轮廓）
-      for (let i = 0; i < 5; i++) {
-        const baseA = (i / 5) * TAU + seed * 0.4;
-        g.beginPath();
-        for (let st = 0; st <= 18; st++) {
-          const t = st / 18;
-          const ang = baseA + t * 1.45;
-          const rad = R * (0.24 + t * 0.98);
-          const x = Math.cos(ang) * rad;
-          const y = Math.sin(ang) * rad;
-          if (st === 0) g.moveTo(x, y);
-          else g.lineTo(x, y);
-        }
-        strokeCfg(g, 12, pal.deep);
-        g.stroke();
-        strokeCfg(g, 7.5, pal.primary);
+      // 青冥幽火：三叶旋风鬼火风车（三道狭长青碧磷火弯刃直刺 1.16R + 三处无遮挡直通 0.18R 的深幽豁口）
+      for (let i = 0; i < 3; i++) {
+        const baseA = (i / 3) * TAU + seed * 0.42;
+        const midA = baseA + 0.22;
+        const tipA = baseA + 0.42;
+        poly(g, [
+          [Math.cos(baseA - 0.10) * R * 0.18, Math.sin(baseA - 0.10) * R * 0.18],
+          [Math.cos(baseA + 0.04) * R * 0.62, Math.sin(baseA + 0.04) * R * 0.62],
+          [Math.cos(midA - 0.04) * R * 0.96, Math.sin(midA - 0.04) * R * 0.96],
+          [Math.cos(tipA) * R * 1.16, Math.sin(tipA) * R * 1.16],
+          [Math.cos(midA + 0.18) * R * 0.80, Math.sin(midA + 0.18) * R * 0.80],
+          [Math.cos(baseA + 0.28) * R * 0.40, Math.sin(baseA + 0.28) * R * 0.40],
+          [Math.cos(baseA + 0.14) * R * 0.18, Math.sin(baseA + 0.14) * R * 0.18],
+        ]);
+        g.fillStyle = pal.primary;
+        g.fill();
+        strokeCfg(g, 3.5, pal.deep);
         g.stroke();
 
-        // 外圈耸起的青碧鬼火团
-        const tipA = baseA + 1.45;
-        const tx = Math.cos(tipA) * R * 1.18;
-        const ty = Math.sin(tipA) * R * 1.18;
-        const nx = -Math.sin(tipA);
-        const ny = Math.cos(tipA);
-        poly(g, [
-          [tx + Math.cos(tipA) * 18, ty + Math.sin(tipA) * 18],
-          [tx + nx * 11, ty + ny * 11],
-          [tx - Math.cos(tipA) * 12, ty - Math.sin(tipA) * 12],
-          [tx - nx * 11, ty - ny * 11],
-        ]);
-        g.fillStyle = pal.bright;
-        g.fill();
-        strokeCfg(g, 2.5, pal.deep);
+        // 刃脊亮色磷火流芯
+        g.beginPath();
+        g.moveTo(Math.cos(baseA + 0.03) * R * 0.24, Math.sin(baseA + 0.03) * R * 0.24);
+        g.quadraticCurveTo(
+          Math.cos(midA + 0.04) * R * 0.78,
+          Math.sin(midA + 0.04) * R * 0.78,
+          Math.cos(tipA) * R * 1.10,
+          Math.sin(tipA) * R * 1.10,
+        );
+        strokeCfg(g, 5, pal.bright);
         g.stroke();
       }
-      // 中心幽冥阴阳涡眼
-      g.beginPath();
-      g.arc(0, 0, R * 0.26, 0, TAU);
-      strokeCfg(g, 5, pal.primary);
+      // 中心三角幽冥火眼
+      poly(g, Array.from({ length: 3 }, (_, i) => {
+        const a = (i / 3) * TAU + seed * 0.42;
+        return [Math.cos(a) * R * 0.20, Math.sin(a) * R * 0.20];
+      }));
+      g.fillStyle = pal.bright;
+      g.fill();
+      strokeCfg(g, 3.5, pal.deep);
       g.stroke();
       return;
     }

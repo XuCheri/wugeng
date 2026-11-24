@@ -52,9 +52,16 @@ export function showPrivacyDialog(root) {
   loadPrivacy().then((body) => {
     holder.replaceChildren(body);
   }).catch(() => {
-    holder.replaceChildren(
-      h('p', {}, '本游戏进度仅保存在本机及你的 TapTap 云存档中，不另行收集个人敏感信息。'),
+    const fallback = h('div', { class: 'privacy-body' },
+      h('h2', {}, '一、开发者与数据保护承诺'),
+      h('p', {}, '《五更天》由剑清酱工作室（开发者「剑清酱」）研发，不自建账号体系，不收集手机号、通讯录或精确位置等个人敏感信息。'),
+      h('h2', {}, '二、云存档、排行榜、好友与多人联机'),
+      h('p', {}, '1. 云存档：游戏进度保存在本机 localStorage，并在 TapTap 环境内同步至你的 TapTap 云存档（v3）。'),
+      h('p', {}, '2. 排行榜：结算积分可上报至 TapTap「五更守夜总榜」（c5mzumajes9houq0ra），用于展示全服总榜与好友榜名次。'),
+      h('p', {}, '3. 好友与分享：主动点击好友列表或组队邀请时调用 TapTap 好友与分享能力传递 6 位守夜房号。'),
+      h('p', {}, '4. 多人联机：「同守五更」仅使用当前会话临时标识与点对点/同源通道同步房间角色外观及局内操作，结束后即刻释放。'),
       h('p', {}, h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, '打开完整隐私政策')));
+    holder.replaceChildren(fallback);
   });
   return v;
 }

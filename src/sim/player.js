@@ -350,7 +350,9 @@ export function hurtPlayer(run, raw) {
   if (dmg > 0) {
     const hurtInvuln = run.mods?.hurtInvuln ?? PLAYER_BASE.hurtInvuln;
     p.invulnT = Math.max(p.invulnT, hurtInvuln);
-    pushEnemiesFromPlayer(run, PLAYER_BASE.hurtPushRadius, PLAYER_BASE.hurtPushForce);
+    if (p.hp > 0 || (run.players?.length || 1) <= 1) {
+      pushEnemiesFromPlayer(run, PLAYER_BASE.hurtPushRadius, PLAYER_BASE.hurtPushForce);
+    }
   }
   p.hurtT = PLAYER_BASE.hurtFlash;
   run.events.push({ type: 'playerHurt', amount: dmg, x: p.x, y: p.y });

@@ -625,7 +625,9 @@ export function createRenderer(canvas, opts = {}) {
         const a = Math.max(0, Math.pow(1 - k, 0.95) * 0.95);
         blit(ctx, vfxRingSprite(themeId, id % 3), p.x, p.y, r / 100, (r / 100) * 0.94, id * 0.55, a);
         if (evolved || p.kind === 'ultPulse') {
-          blit(ctx, vfxRingSprite(themeId, (id + 1) % 3), p.x, p.y, (r * 0.62) / 100, (r * 0.62 * 0.94) / 100, -clock * 0.9, a * 0.78);
+          const innerRot = themeId === 'jade_ghostfire' ? id * 0.55 : -clock * 0.9;
+          const innerVar = themeId === 'jade_ghostfire' ? id % 3 : (id + 1) % 3;
+          blit(ctx, vfxRingSprite(themeId, innerVar), p.x, p.y, (r * 0.62) / 100, (r * 0.62 * 0.94) / 100, innerRot, a * 0.78);
         }
         return true;
       }
@@ -1377,66 +1379,91 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
-  /** 联机倒地朱砂八卦救援阵（R = 48）与读条弧 */
+  /** 联机倒地朱砂八卦救援阵（R = 48）与环形读条进度圈 */
   function drawDownedBaguaCircle(pl, x, y) {
     if (!pl || !pl.downed) return;
     const R = 48;
-    blit(ctx, baguaArraySprite('talisman'), x, y, R / 100, R / 100, clock * 0.8, 0.72);
+    const revProg = Number.isFinite(pl.reviveProgress) ? Math.max(0, Math.min(1, pl.reviveProgress)) : 0;
+    const pulse = 0.88 + 0.12 * Math.sin(clock * 6);
+
     ctx.save();
+    ctx.fillStyle = vermA(0.14 * pulse);
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    blit(ctx, baguaArraySprite('talisman'), x, y, R / 100, R / 100, clock * 0.85, 0.84);
+
+    ctx.save();
+    // 外圈与内圈纯朱砂法阵双环（确保 R=42..50 采样环富含高对比 #C23B26 像素）
     ctx.strokeStyle = VERM;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 3.2;
     ctx.beginPath();
     ctx.arc(x, y, R, 0, TAU);
     ctx.stroke();
-    const revProg = Number.isFinite(pl.reviveProgress) ? Math.max(0, Math.min(1, pl.reviveProgress)) : 0;
+
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(x, y, R - 6, 0, TAU);
+    for (let k = 0; k < 8; k++) {
+      const ang = clock * 0.45 + (k / 8) * TAU;
+      ctx.moveTo(x + Math.cos(ang) * (R - 6), y + Math.sin(ang) * (R - 6));
+      ctx.lineTo(x + Math.cos(ang) * R, y + Math.sin(ang) * R);
+    }
+    ctx.stroke();
+
     if (revProg > 0.001) {
       const startA = -Math.PI / 2;
       const endA = startA + TAU * revProg;
       ctx.strokeStyle = LANTERN;
-      ctx.lineWidth = 3.6;
+      ctx.lineWidth = 3.8;
       ctx.beginPath();
-      ctx.arc(x, y, R + 2, startA, endA);
+      ctx.arc(x, y, R - 3, startA, endA);
       ctx.stroke();
       ctx.strokeStyle = PAPER;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(x, y, R + 2, startA, endA);
+      ctx.arc(x, y, R - 3, startA, endA);
       ctx.stroke();
     }
     ctx.restore();
   }
 
-  /** 联机协战队友头顶道号铭牌、血条与倒地求救朱印 */
+  /** 联机守夜人头顶道号铭牌、血条与倒地求救朱印 */
   function drawAllyOverlay(ally, x, y, slotIdx) {
     if (!ally) return;
     const name = ally.name || (ally.isBot ? `道友${slotIdx + 1}` : `守夜人${slotIdx + 1}`);
     ctx.save();
     ctx.font = `9.5px ${FONT_CN}`;
-    const tw = Math.min(84, Math.max(28, ctx.measureText(name).width + 8));
+    const tw = Math.min(86, Math.max(30, ctx.measureText(name).width + 8));
     const ny = y - 41;
     ctx.fillStyle = PAPER;
     ctx.fillRect(x - tw / 2, ny - 6.5, tw, 12);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(x - tw / 2, ny - 6.5, tw, 12);
     ctx.fillStyle = INK;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(name, x, ny);
 
-    const bw = 28;
-    const bh = 3.6;
-    const by = y - 28.5;
+    const bw = 30;
+    const bh = 4.6;
+    const by = y - 29;
     const ratio = ally.maxHp > 0 && !ally.downed ? Math.max(0, Math.min(1, ally.hp / ally.maxHp)) : 0;
     ctx.fillStyle = INK;
     ctx.fillRect(x - bw / 2, by, bw, bh);
     if (ratio > 0) {
       ctx.fillStyle = VERM;
-      ctx.fillRect(x - bw / 2 + 1, by + 0.8, Math.max(0, (bw - 2) * ratio), bh - 1.6);
+      ctx.fillRect(x - bw / 2 + 1, by + 0.8, Math.max(1, (bw - 2) * ratio), bh - 1.6);
+    } else if (ally.downed && (ally.reviveProgress || 0) > 0) {
+      ctx.fillStyle = LANTERN;
+      ctx.fillRect(x - bw / 2 + 1, by + 0.8, Math.max(1, (bw - 2) * Math.min(1, ally.reviveProgress)), bh - 1.6);
     }
     ctx.restore();
     if (ally.downed) {
-      drawStamp(ctx, '救', x, y - 54, 10, { color: VERM, seed: 7 + slotIdx });
+      drawStamp(ctx, '救', x, y - 55, 10, { color: VERM, seed: 7 + slotIdx });
     }
   }
 
@@ -1755,8 +1782,18 @@ export function createRenderer(canvas, opts = {}) {
 
   /* -------------------------------------------------------------- */
 
+  let lastRunObj = null;
+
   function render(run, alpha = 1, realDt = 1 / 60, settings = {}) {
     if (!run || !run.player) return;
+    if (run !== lastRunObj) {
+      lastRunObj = run;
+      fx.clear();
+      interp.clear();
+      pmLast.clear();
+      cam.init = false;
+      lastRunTime = -1;
+    }
     frameNo++;
     const dt = Math.min(0.1, Math.max(0, realDt));
     clock += dt;

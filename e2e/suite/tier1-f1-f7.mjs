@@ -1573,12 +1573,10 @@ export const TIER1_F1_F7 = [
 
         const cells = await probeStyleLabSkinCells(s.page, false);
         assert.equal(cells.length, 18, 'Expected 18 skin showcase cells (6 heroes × 3 skins)');
-        const snaps = [];
-        for (const rect of cells) {
-          const snap = await analyzeCanvasSpriteBox(s.page, '#game-canvas', rect);
-          assert.ok(snap && snap.nonBgPixels > 100, `Expected non-blank skin cell ${JSON.stringify(rect)}, got ${snap?.nonBgPixels}`);
-          snaps.push(snap);
-        }
+        const snaps = await Promise.all(cells.map((rect) => analyzeCanvasSpriteBox(s.page, '#game-canvas', rect)));
+        snaps.forEach((snap, idx) => {
+          assert.ok(snap && snap.nonBgPixels > 100, `Expected non-blank skin cell ${JSON.stringify(cells[idx])}, got ${snap?.nonBgPixels}`);
+        });
         const uniqueHashes = new Set(snaps.map((x) => x.hash)).size;
         assert.equal(uniqueHashes, 18, `Expected 18 pairwise-unique skin bitmaps on ?scene=skins, got ${uniqueHashes}`);
         s.assertNoErrors('T1-F5-01');

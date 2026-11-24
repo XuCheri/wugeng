@@ -422,6 +422,49 @@ export function createHud() {
       /* ---------- 顶栏两侧紧凑装备与流派羁绊栏（T1-F11-03） ---------- */
       drawLoadoutAndSynergies(ctx, run, W, st, tx - 3, tx + tw + 3, endlessStampRight);
 
+      /* ---------- 联机小队存活/倒地徽标条（F14：仅多人同守时渲染） ---------- */
+      if (Array.isArray(run.players) && run.players.length > 1) {
+        const heroSeal = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
+        const baseY = run.boss ? ty + th + 54 : st + 76;
+        for (let idx = 0; idx < run.players.length && idx < 4; idx++) {
+          const pl = run.players[idx];
+          if (!pl) continue;
+          const bx = 6 + idx * 44;
+          const by = baseY;
+          const downed = Boolean(pl.downed);
+          ctx.fillStyle = downed ? VERM : PAPER;
+          ctx.fillRect(bx, by, 40, 15);
+          ctx.strokeStyle = downed ? LANTERN : INK;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bx + 0.5, by + 0.5, 39, 14);
+          ctx.font = `9.5px ${FONT_CN}`;
+          ctx.fillStyle = downed ? PAPER : INK;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          const sealCh = downed ? '救' : (heroSeal[pl.heroId] || '守');
+          ctx.fillText(sealCh, bx + 3, by + 7.5);
+
+          const barW = 22;
+          const barX2 = bx + 15;
+          const barY2 = by + 5;
+          ctx.fillStyle = downed ? INK : inkA(0.25);
+          ctx.fillRect(barX2, barY2, barW, 5);
+          if (downed) {
+            const rp = Number.isFinite(pl.reviveProgress) ? Math.max(0, Math.min(1, pl.reviveProgress)) : 0;
+            if (rp > 0) {
+              ctx.fillStyle = LANTERN;
+              ctx.fillRect(barX2, barY2, Math.max(1, barW * rp), 5);
+            }
+          } else {
+            const hf = pl.maxHp > 0 ? Math.max(0, Math.min(1, pl.hp / pl.maxHp)) : 0;
+            if (hf > 0) {
+              ctx.fillStyle = VERM;
+              ctx.fillRect(barX2, barY2, Math.max(1, barW * hf), 5);
+            }
+          }
+        }
+      }
+
       /* ---------- Boss 血条横幅 ---------- */
       if (run.boss) {
         const bw = Math.round(W - 36);

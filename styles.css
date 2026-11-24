@@ -1811,6 +1811,272 @@ p { margin: 0; }
   box-shadow: inset 0 0 0 1.5px var(--paper);
 }
 
+/* ───────── F12：五更守夜总榜木刻榜单 ───────── */
+.leaderboard-modal { width: min(92vw, 396px); }
+.leaderboard-modal .scroll__body { display: flex; flex-direction: column; overflow: hidden; }
+.lb-body { display: flex; flex-direction: column; gap: 7px; min-height: 0; flex: 1; }
+.lb-tabs { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; flex-shrink: 0; }
+.lb-tabs .seg__opt { min-height: 36px; font-size: 14.5px; letter-spacing: .1em; }
+.lb-me-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--lantern-28);
+  flex-shrink: 0;
+}
+.lb-me-card__left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lb-me-card__label { font-size: 11px; color: var(--lantern); letter-spacing: .08em; }
+.lb-me-card__rank { font-size: 13.5px; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-me-card__score { display: flex; align-items: baseline; gap: 3px; flex-shrink: 0; color: var(--lantern); }
+.lb-me-card__score b { font-weight: 400; font-size: 21px; }
+.lb-me-card__score small { font-size: 11px; color: var(--paper-shade); }
+.lb-notice {
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--verm-dark);
+  background: var(--lantern-14);
+  box-shadow: inset 0 0 0 1px var(--verm);
+  flex-shrink: 0;
+}
+.lb-notice[hidden] { display: none; }
+.lb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-right: 2px;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.lb-empty { font-size: 13px; text-align: center; padding: 18px 8px; line-height: 1.6; }
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+}
+.lb-row.is-self {
+  background-color: var(--paper);
+  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 4px var(--lantern-28);
+}
+.lb-rank--1 { background: var(--verm); color: var(--paper); box-shadow: inset 0 0 0 1.5px var(--lantern); }
+.lb-rank--top { background: var(--verm-dark); color: var(--paper); }
+.lb-row__main { flex: 1; min-width: 0; }
+.lb-row__name { font-size: 14.5px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-row__meta { font-size: 11px; color: var(--ink-60); margin-top: 1px; }
+.lb-row__score { display: flex; align-items: baseline; gap: 2px; flex-shrink: 0; color: var(--verm-dark); }
+.lb-row__score b { font-weight: 400; font-size: 17px; }
+.lb-row__score small { font-size: 11px; color: var(--ink-60); }
+.lb-native-btn { min-height: 40px; font-size: 14px; letter-spacing: .1em; }
+
+/* ───────── F13 & F14：同守五更联机更房与好友面板 ───────── */
+.coop-modal { width: min(92vw, 396px); }
+.coop-modal .scroll__body { display: flex; flex-direction: column; overflow: hidden; }
+.coop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.coop-code-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.coop-quick-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+.coop-quick-bar .btn { min-height: 38px; padding: 0 6px; font-size: 13px; letter-spacing: .06em; }
+.coop-code-badge {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 10px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--lantern-28);
+}
+.coop-code-badge__label { font-size: 10px; color: var(--paper-shade); letter-spacing: .08em; }
+.coop-code-badge__val { font-weight: 400; font-size: 21px; letter-spacing: .18em; color: var(--lantern); line-height: 1.15; }
+.coop-code-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.coop-code-actions .btn { min-height: 36px; padding: 0 8px; font-size: 12.5px; }
+.coop-status {
+  padding: 5px 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--ink-80);
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+  flex-shrink: 0;
+}
+.coop-status.is-error {
+  color: var(--verm-dark);
+  background: var(--verm-10);
+  box-shadow: inset 0 0 0 1px var(--verm);
+}
+.coop-party-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  flex-shrink: 0;
+}
+.coop-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 62px;
+  padding: 6px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+  box-sizing: border-box;
+}
+.coop-member.is-occupied {
+  background-color: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--ink), inset 0 0 0 3px var(--lantern-14);
+}
+.coop-member.is-ready {
+  box-shadow: inset 0 0 0 1.5px var(--verm), inset 0 0 0 3px var(--lantern-28);
+}
+.coop-member.is-empty {
+  justify-content: center;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+}
+.coop-member__empty { font-size: 11.5px; color: var(--ink-60); letter-spacing: .04em; text-align: center; }
+.coop-member__thumb { width: 42px; height: 42px; flex-shrink: 0; display: block; box-shadow: 0 1px 0 var(--ink); }
+.coop-member__info { flex: 1; min-width: 0; }
+.coop-member__name { display: flex; align-items: center; justify-content: space-between; gap: 3px; font-size: 12.5px; }
+.coop-member__name b { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coop-member__role {
+  font-size: 9.5px;
+  padding: 1px 3px;
+  background: var(--verm);
+  color: var(--paper);
+  flex-shrink: 0;
+}
+.coop-member__meta { font-size: 10.5px; color: var(--verm-dark); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coop-member__sub { font-size: 10px; color: var(--ink-60); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coop-controls { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.coop-join-row { display: flex; gap: 6px; align-items: stretch; }
+.coop-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 9px;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: .1em;
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  box-sizing: border-box;
+}
+.coop-join-row .btn { min-height: 38px; padding: 0 10px; font-size: 13px; flex-shrink: 0; }
+.coop-subtools { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.coop-subtools .btn { min-height: 34px; padding: 0 8px; font-size: 12px; }
+.coop-p2p-toggle { min-height: 30px; padding: 2px 4px; font-size: 12px; margin-left: auto; }
+.coop-sec-title { font-size: 12px; letter-spacing: .1em; color: var(--ink-80); margin-bottom: 4px; }
+.coop-friends-panel, .coop-p2p-box {
+  padding: 7px 8px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+  flex-shrink: 0;
+}
+.coop-friends-panel[hidden], .coop-p2p-box[hidden] { display: none; }
+.coop-friends-empty { font-size: 11.5px; line-height: 1.45; }
+.coop-friends-list { display: flex; flex-direction: column; gap: 5px; }
+.coop-friend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+}
+.coop-friend__main { flex: 1; min-width: 0; }
+.coop-friend__name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coop-friend__status { font-size: 10.5px; color: var(--verm-dark); margin-top: 1px; }
+.coop-friend__btn { min-height: 30px; min-width: 54px; padding: 0 7px; font-size: 11.5px; }
+.coop-p2p-btns { display: flex; gap: 6px; margin-bottom: 6px; }
+.coop-p2p-btns .btn { min-height: 32px; font-size: 12px; padding: 0 8px; }
+.coop-p2p-code {
+  margin-top: 5px;
+  padding: 4px 6px;
+  font-size: 10px;
+  word-break: break-all;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+  max-height: 52px;
+  overflow-y: auto;
+}
+.coop-foot-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* 结算页小队贡献表与守夜魁首 MVP 印章 */
+.result-score__unit { font-size: 12px; color: var(--ink-80); }
+.result-squad {
+  margin-top: 10px;
+  padding: 7px 8px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.result-squad__title { font-size: 12px; letter-spacing: .1em; color: var(--ink-80); text-align: center; }
+.result-squad__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 6px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+}
+.result-squad__row.is-mvp {
+  box-shadow: inset 0 0 0 1.5px var(--verm), inset 0 0 0 3px var(--lantern-28);
+}
+.result-squad__who { display: flex; align-items: center; gap: 5px; min-width: 0; flex-wrap: wrap; }
+.result-squad__who b { font-weight: 400; font-size: 13.5px; }
+.result-squad__hero { font-size: 10.5px; color: var(--ink-60); }
+.mvp-seal {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  background: var(--verm);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(239, 230, 210, .85);
+  transform: rotate(-3deg);
+}
+.result-squad__stats { display: flex; gap: 6px; font-size: 11px; color: var(--verm-dark); flex-shrink: 0; }
+.result-lb-btn { min-height: 42px; font-size: 15.5px; }
+
+@media (max-width: 370px) {
+  .coop-party-grid { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }

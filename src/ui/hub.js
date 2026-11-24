@@ -205,6 +205,7 @@ export function renderHub(root, ctx) {
           save.selectedHero = id;
           save.selectedStarterWeapon = getHeroStarterWeapon(save, id);
           ctx.persist(false);
+          ctx.onProfileChange?.();
           renderStart();
         },
       },
@@ -254,6 +255,7 @@ export function renderHub(root, ctx) {
           }
           if (setHeroStarterWeapon(save, activeHero, wid)) {
             ctx.persist(false);
+            ctx.onProfileChange?.();
             renderStart();
           }
         },

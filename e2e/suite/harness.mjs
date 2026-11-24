@@ -584,8 +584,25 @@ export async function createWarmWorkerSlot(browser, baseUrl) {
         slot.consoleErrors.length = 0;
         slot.badResponses.length = 0;
         try {
+          if (slot.page.url().startsWith(baseUrl)) {
+            await slot.page.evaluate(() => {
+              try { localStorage.clear(); sessionStorage.clear(); } catch {}
+            }).catch(() => {});
+          }
           await slot.page.goto(targetUrl);
           await slot.page.waitForSelector('.screen--title');
+          const hadStored = await slot.page.evaluate(() => {
+            const dirty = Boolean(localStorage.getItem('wugeng.save'));
+            if (dirty) {
+              localStorage.clear();
+              sessionStorage.clear();
+            }
+            return dirty;
+          });
+          if (hadStored) {
+            await slot.page.reload();
+            await slot.page.waitForSelector('.screen--title');
+          }
         } catch (err) {
           if (!/crashed/i.test(err?.message || '')) throw err;
           try { await slot.context.close(); } catch {}
@@ -595,11 +612,17 @@ export async function createWarmWorkerSlot(browser, baseUrl) {
         }
         await slot.page.evaluate(() => document.fonts.ready);
         await slot.page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));
-        await slot.page.evaluate(() => {
-          window.__e2ePristineSaveJson = JSON.stringify(window.__wugeng.save);
-        });
+        if (!slot.pristineSaveJson) {
+          slot.pristineSaveJson = await slot.page.evaluate(() => JSON.stringify(window.__wugeng.save));
+        }
+        slot.page.__pristineSaveJson = slot.pristineSaveJson;
+        await slot.page.evaluate((json) => {
+          window.__e2ePristineSaveJson = json;
+        }, slot.pristineSaveJson);
         slot.tainted = false;
       }
+
+      slot.page.__pristineSaveJson = slot.pristineSaveJson;
 
       slot.pageErrors.length = 0;
       slot.consoleErrors.length = 0;
@@ -1029,16 +1052,40 @@ export async function bootColdIntro(browser, baseUrl, opts = {}) {
 export async function bootGame(page, baseUrl, opts = {}) {
   const query = buildBootQuery(opts);
   const target = `${baseUrl}/index.html${query}`;
+  if (page.__isWarmSlot && page.url().startsWith(baseUrl)) {
+    await page.evaluate((pristineJson) => {
+      try {
+        const w = window.__wugeng;
+        if (w?.save && pristineJson) {
+          const fresh = JSON.parse(pristineJson);
+          for (const k of Object.keys(w.save)) {
+            if (!(k in fresh)) delete w.save[k];
+          }
+          for (const [k, v] of Object.entries(fresh)) {
+            w.save[k] = structuredClone(v);
+          }
+        }
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {}
+    }, page.__pristineSaveJson || null).catch(() => {});
+  }
   await page.goto(target);
   await page.waitForSelector('.screen--title, .screen--hub');
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));
-  if (target === warmUrl(baseUrl) && page.__isWarmSlot && baseUrl === page.__warmBaseUrl) {
-    await page.evaluate(() => {
-      if (!window.__e2ePristineSaveJson) {
-        window.__e2ePristineSaveJson = JSON.stringify(window.__wugeng.save);
-      }
-    });
+  if (page.__isWarmSlot) {
+    if (page.__pristineSaveJson) {
+      await page.evaluate((json) => {
+        window.__e2ePristineSaveJson = json;
+      }, page.__pristineSaveJson);
+    } else if (target === warmUrl(baseUrl) && baseUrl === page.__warmBaseUrl) {
+      await page.evaluate(() => {
+        if (!window.__e2ePristineSaveJson) {
+          window.__e2ePristineSaveJson = JSON.stringify(window.__wugeng.save);
+        }
+      });
+    }
   }
 }
 
@@ -1055,7 +1102,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
 
   if (canFastReset) {
     await page.evaluate(
-      ({ patch, patchFnSrc }) => {
+      ({ patch, patchFnSrc, pristineJson }) => {
         const w = window.__wugeng;
         if (w.coop) {
           try {
@@ -1076,7 +1123,8 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         sessionStorage.clear();
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
 
-        const fresh = JSON.parse(window.__e2ePristineSaveJson);
+        if (pristineJson) window.__e2ePristineSaveJson = pristineJson;
+        const fresh = JSON.parse(pristineJson || window.__e2ePristineSaveJson);
         const target = w.save;
         for (const k of Object.keys(target)) {
           if (!(k in fresh)) delete target[k];
@@ -1105,7 +1153,11 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         w.audio.setEnabled({ sfx: target.settings?.sfx ?? true, music: target.settings?.music ?? true });
         w.showHub();
       },
-      { patch: opts.savePatch || null, patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString() },
+      {
+        patch: opts.savePatch || null,
+        patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString(),
+        pristineJson: page.__pristineSaveJson || null,
+      },
     );
     await page.waitForSelector('.screen--hub');
     return;

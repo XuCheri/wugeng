@@ -344,6 +344,21 @@ export function createFx(opts = {}) {
           screen.push({ k: 'dawn', t: 0, life: 2.6 });
           banner('鸡鸣 · 天亮', '守夜功成', VERM, 3);
           break;
+        case 'allyDowned':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
+            drops(e.x, e.y - 8, low ? 4 : 8, 120, 'verm');
+          }
+          this.addShake(0.28);
+          screen.push({ k: 'bloom', t: 0, life: 0.45, color: 'verm', strength: 0.24 });
+          break;
+        case 'coopRevive':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
+            drops(e.x, e.y - 10, low ? 6 : 14, 175, 'lantern');
+            scraps(e.x, e.y - 8, low ? 3 : 7, 'paper');
+          }
+          this.addShake(0.32);
+          screen.push({ k: 'bloom', t: 0, life: 0.72, color: 'lantern', strength: 0.42 });
+          break;
         case 'revive':
           this.addShake(0.4);
           screen.push({ k: 'bloom', t: 0, life: 0.9, color: 'lantern', strength: 0.55 });
@@ -546,6 +561,14 @@ export function createFx(opts = {}) {
           ctx.restore();
         }
       }
+    },
+
+    clear() {
+      parts.length = 0;
+      decals.length = 0;
+      screen.length = 0;
+      trauma = 0;
+      hitstop = 0;
     },
 
     get counts() {

@@ -31,6 +31,9 @@ export function createGame({
   onHudSync = () => {},
   onStart = () => {},
   onClear = () => {},
+  transformInput = null,
+  onAfterStep = null,
+  shouldSkipAutoPause = null,
 } = {}) {
   const settings = { shake: true, dmgText: 'all', lowQuality: false, safeTop: 0, safeBottom: 0 };
   let renderer = createRenderer(canvas, { lowQuality: settings.lowQuality });
@@ -106,7 +109,9 @@ export function createGame({
       if (hit <= 0) acc += realDt;
       let steps = 0;
       while (acc >= DT && steps < MAX_STEPS_PER_FRAME) {
-        stepRun(run, input.sample(), DT);
+        const sampled = input.sample();
+        const stepInp = typeof transformInput === 'function' ? transformInput(sampled, run) : sampled;
+        stepRun(run, stepInp, DT);
         if (run.events.length) {
           renderer.consumeEvents(run.events);
           onEvents(run.events, run);
@@ -114,6 +119,9 @@ export function createGame({
         acc -= DT;
         steps++;
         if (run.status !== 'playing') { acc = 0; break; }
+      }
+      if (steps > 0 && typeof onAfterStep === 'function') {
+        onAfterStep(run);
       }
       if (steps === MAX_STEPS_PER_FRAME) acc = 0;
     }
@@ -124,7 +132,11 @@ export function createGame({
   }
 
   function onVisibility() {
-    if (document.hidden && run && !paused && run.status === 'playing') {
+    const skipPause = Boolean(
+      (typeof shouldSkipAutoPause === 'function' && shouldSkipAutoPause(run)) ||
+      (Array.isArray(run?.players) && run.players.length > 1),
+    );
+    if (!skipPause && document.hidden && run && !paused && run.status === 'playing') {
       paused = true;
       onAutoPause(run);
     }
@@ -165,6 +177,7 @@ export function createGame({
         if (!run.players[0].skinId && resolvedSkin) run.players[0].skinId = resolvedSkin;
         if (!run.players[0].attackVfx && resolvedVfx) run.players[0].attackVfx = resolvedVfx;
       }
+      resize();
       lastStatus = run.status;
       acc = 0; lastTs = 0;
       paused = false;

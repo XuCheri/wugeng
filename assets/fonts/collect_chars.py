@@ -23,7 +23,7 @@ PUNCT = (
 V3_CORE_COPY = (
     "剑清酱工作室五更守夜总榜同守五更鬼市商铺守夜功绩查看行囊透视战场本命专精全服总榜好友榜"
     "沈观星石敢当柳青衣桃木飞剑无常锁魂链纸鸢火鸦傩神战鼓雷击枣木勾魂阴牌硫磺火药囊五色傩面"
-    "古墨朱砂青冥幽火紫电天罡鎏金神诏玄霜寒月"
+    "古墨朱砂青冥幽火紫电天罡鎏金神诏玄霜寒月魁首戳"
 )
 
 STR_RE = re.compile(r"""(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)""", re.S)
@@ -36,7 +36,7 @@ def is_wanted(ch: str) -> bool:
 
 def extract_js_chars(text: str) -> set[str]:
     clean = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    clean = re.sub(r"(?m)//.*$", "", clean)
+    clean = re.sub(r"(?m)^\s*//.*$", "", clean)
     found: set[str] = set()
     for m in STR_RE.finditer(clean):
         for ch in m.group(0)[1:-1]:

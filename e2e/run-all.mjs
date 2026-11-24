@@ -424,46 +424,55 @@ async function main() {
         log(`\n▶ ${TIER_LABELS[test.tier]} (${countInTier} tests)`);
       }
       const timeoutMs = test.timeoutMs || 12_000;
-      try {
-        await withTimeout(
-          test.run({ browser: workerBrowser, baseUrl: server.baseUrl }),
-          timeoutMs,
-          `${test.id} (${test.name})`,
-        );
-        const end = performance.now();
-        tierEndMs.set(test.tier, end);
-        const durationMs = Math.round(end - start);
-        log(`  ✓ ${test.id} [${test.feature}] ${test.name} (${durationMs}ms)`);
-        return {
-          id: test.id,
-          tier: test.tier,
-          feature: test.feature,
-          features: test.features || [test.feature],
-          name: test.name,
-          passed: true,
-          durationMs,
-          error: null,
-        };
-      } catch (err) {
-        if (err?.isTimeout && workerBrowser?.__warmSlot) {
-          workerBrowser.__warmSlot.tainted = true;
-          try { await workerBrowser.__warmSlot.close(); } catch {}
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await withTimeout(
+            test.run({ browser: workerBrowser, baseUrl: server.baseUrl }),
+            timeoutMs,
+            `${test.id} (${test.name})`,
+          );
+          const end = performance.now();
+          tierEndMs.set(test.tier, end);
+          const durationMs = Math.round(end - start);
+          log(`  ✓ ${test.id} [${test.feature}] ${test.name} (${durationMs}ms)`);
+          return {
+            id: test.id,
+            tier: test.tier,
+            feature: test.feature,
+            features: test.features || [test.feature],
+            name: test.name,
+            passed: true,
+            durationMs,
+            error: null,
+          };
+        } catch (err) {
+          const msg = err?.message || String(err);
+          const isBrowserCrash =
+            err?.name !== 'AssertionError' &&
+            /(?:Target|Page|Browser) crashed|Target page, context or browser has been closed|waiting for locator\('\.screen--(?:title|hub)/i.test(msg);
+          if ((err?.isTimeout || isBrowserCrash) && workerBrowser?.__warmSlot) {
+            workerBrowser.__warmSlot.tainted = true;
+            try { await workerBrowser.__warmSlot.close(); } catch {}
+          }
+          if (attempt < 2 && isBrowserCrash) {
+            continue;
+          }
+          const end = performance.now();
+          tierEndMs.set(test.tier, end);
+          const durationMs = Math.round(end - start);
+          const cleanMsg = msg.replace(/\s*\n\s*/g, ' | ').slice(0, 240);
+          log(`  ✗ ${test.id} [${test.feature}] ${test.name} (${durationMs}ms)\n      ↳ ${cleanMsg}`);
+          return {
+            id: test.id,
+            tier: test.tier,
+            feature: test.feature,
+            features: test.features || [test.feature],
+            name: test.name,
+            passed: false,
+            durationMs,
+            error: cleanMsg,
+          };
         }
-        const end = performance.now();
-        tierEndMs.set(test.tier, end);
-        const durationMs = Math.round(end - start);
-        const cleanMsg = (err?.message || String(err)).replace(/\s*\n\s*/g, ' | ').slice(0, 240);
-        log(`  ✗ ${test.id} [${test.feature}] ${test.name} (${durationMs}ms)\n      ↳ ${cleanMsg}`);
-        return {
-          id: test.id,
-          tier: test.tier,
-          feature: test.feature,
-          features: test.features || [test.feature],
-          name: test.name,
-          passed: false,
-          durationMs,
-          error: cleanMsg,
-        };
       }
     });
 

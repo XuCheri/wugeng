@@ -1,4 +1,4 @@
-// 结算页：守夜积分、铜钱、打散数、守了多久、最狠一击（万/亿）、本局开光神兵、新解锁与功绩、「广告 · 铜钱翻倍」一次。
+// 结算页：守夜积分、五更守夜总榜入口、多人同守全队贡献榜与魁首 MVP 朱印、铜钱、开光神兵、新解锁与功绩、「广告 · 铜钱翻倍」。
 import { h, clear, scroll, sealButton, adButton, formatBig, formatTime, formatCoins } from './dom.js';
 import { heroInfo, weaponName, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
 import { canShowResultDouble } from '../ads/ad-policy.js';
@@ -12,14 +12,17 @@ export function renderResult(root, opts) {
   let doubled = false;
   const cleared = !!s.cleared;
   const endless = s.mode === 'endless';
+  const isCoop = (s.coopSize || 0) >= 2 || (Array.isArray(s.squad) && s.squad.length >= 2);
 
   const title = cleared && !endless ? '鸡鸣天亮' : endless ? '残夜守尽' : '灯灭了';
-  const sub = `${heroInfo(s.heroId).short} · ${nightLabel(s.nightLevel || 0)} · ${endless ? '守进无尽' : cleared ? '守满五更' : `撑到${watchName(s.reachedWatch || 1)}`}`;
+  const modeTag = isCoop ? `同守 ${s.coopSize || s.squad.length} 人` : heroInfo(s.heroId).short;
+  const sub = `${modeTag} · ${nightLabel(s.nightLevel || 0)} · ${endless ? '守进无尽' : cleared ? '守满五更' : `撑到${watchName(s.reachedWatch || 1)}`}`;
 
   const scoreBox = Number.isFinite(s.score)
     ? h('div', { class: 'result-score' },
       h('span', {}, '守夜总分'),
       h('b', {}, formatCoins(s.score)),
+      h('small', { class: 'result-score__unit' }, '分'),
       s.signatureStart ? h('em', { class: 'result-score__sig' }, '本命专精') : null)
     : null;
 
@@ -29,7 +32,26 @@ export function renderResult(root, opts) {
     row('守了', formatTime(s.timeSec)),
     row('打散', `${formatBig(s.kills)} 只`),
     row('最狠一击', formatBig(s.maxHit)),
-    row('等级', String(s.level ?? '—')));
+    row(isCoop ? '扶起同袍' : '等级', isCoop ? `${s.revivesDone || 0} 回` : String(s.level ?? '—')));
+
+  // 联机小队贡献榜与魁首 MVP 印章（F14）
+  let squadBox = null;
+  if (isCoop && Array.isArray(s.squad) && s.squad.length >= 2) {
+    squadBox = h('div', { class: 'result-squad', 'aria-label': '同守小队贡献榜' },
+      h('p', { class: 'result-squad__title' }, '同守五更 · 诸位道友功劳簿'),
+      ...s.squad.map((m) => h('div', {
+        class: `result-squad__row${m.mvp ? ' is-mvp' : ''}`,
+        dataset: { slot: String(m.slot ?? 0) },
+      },
+      h('div', { class: 'result-squad__who' },
+        h('b', {}, m.name || heroInfo(m.heroId).short),
+        h('span', { class: 'result-squad__hero' }, heroInfo(m.heroId).short),
+        m.mvp ? h('span', { class: 'mvp-seal' }, '守夜魁首') : null),
+      h('div', { class: 'result-squad__stats' },
+        h('span', {}, `伤 ${formatBig(m.damageDealt || 0)}`),
+        h('span', {}, `斩 ${m.kills || 0}`),
+        h('span', {}, `救 ${m.revivesDone || 0}`)))));
+  }
 
   const evolvedWeapons = (s.weapons || []).filter((w) => w && w.evolved).map((w) => weaponName(w.id, true));
   const evoLine = evolvedWeapons.length
@@ -58,9 +80,16 @@ export function renderResult(root, opts) {
         renderActions();
       }, { cls: 'btn--wide' }));
     }
+    if (opts.onLeaderboard) {
+      actions.appendChild(sealButton('五更守夜总榜', () => opts.onLeaderboard(), {
+        kind: 'ghost',
+        cls: 'btn--wide result-lb-btn',
+        dataset: { action: 'result-leaderboard' },
+      }));
+    }
     actions.append(
-      sealButton('回更房', opts.onHub, { cls: 'btn--wide' }),
-      sealButton('再守一夜', opts.onAgain, { kind: 'ghost', cls: 'btn--wide' }));
+      sealButton('再守一夜', opts.onAgain, { kind: 'ghost', cls: 'btn--wide' }),
+      sealButton('回更房', opts.onHub, { cls: 'btn--wide' }));
   };
   renderActions();
 
@@ -68,7 +97,7 @@ export function renderResult(root, opts) {
     scroll({
       title, sub,
       cls: 'scroll--result',
-      body: [scoreBox, coinBox, rows, evoLine, unlocks.length ? unlockBox : null],
+      body: [scoreBox, coinBox, rows, squadBox, evoLine, unlocks.length ? unlockBox : null],
       footer: [actions],
     }));
   root.appendChild(el);
