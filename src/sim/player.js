@@ -118,32 +118,43 @@ export function recomputeMods(run, opts = {}) {
     cdMul = Math.max(0.46, cdMul * ULT.nuoxi.danceCdMul);
   }
 
-  const lightMul = (1 + rel.lightPct + (lanternEvo ? WEAPONS.lantern.evo.lightBonusPct : 0)) * syn.lightMul * bl.lightMul;
+  const rr = run.runRules || null;
+  const lightMul = (1 + rel.lightPct + (lanternEvo ? WEAPONS.lantern.evo.lightBonusPct : 0)) * syn.lightMul * bl.lightMul * (rr ? rr.lightMul : 1);
   const lightRadius = Math.round(118 * lightMul);
   const critMult =
     PLAYER_BASE.critMult +
     rel.critDmg +
     syn.critMultBonus +
     bl.critMultBonus +
+    (rr ? rr.critDmg : 0) +
     (frenzyActive ? BLESSING_TUNING.thunder_decree.frenzyCritDmg * bl.thunderDecreeStacks : 0);
 
+  const cdrTotal = rel.cdr + (hero.cdr || 0) + syn.cdr + bl.cdr + (rr ? rr.cdr : 0);
+  let cdMulFinal = cooldownMul(cdrTotal, cooldownFloor);
+  if (frenzyActive && bl.thunderDecreeStacks > 0) {
+    cdMulFinal = Math.max(BLESSING_TUNING.thunder_decree.frenzyCdFloor, cdMulFinal * BLESSING_TUNING.thunder_decree.frenzyCdMul);
+  }
+  if (nuoDanceActive) {
+    cdMulFinal = Math.max(0.46, cdMulFinal * ULT.nuoxi.danceCdMul);
+  }
+
   const mods = {
-    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + (meta.dmgPct || 0) + bl.dmgPct,
+    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + (meta.dmgPct || 0) + bl.dmgPct + (rr ? rr.dmgPct : 0),
     summonDmgPct: (hero.summonDmgPct || 0) + syn.summonDmgPct,
     zhizhaDmgPct: syn.zhizhaDmgPct,
     summonHasteMul: syn.summonHasteMul * (summonFrenzyActive ? ULT.mian.frenzyMul : 1),
-    cdr,
+    cdr: cdrTotal,
     cooldownFloor,
-    cdMul,
-    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + syn.areaPct + bl.areaPct),
+    cdMul: cdMulFinal,
+    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
     durMul: Math.max(0.4, 1 + rel.durPct + (hero.durPct || 0) + syn.durPct),
-    amount: rel.amount + syn.amount + bl.amount,
+    amount: rel.amount + syn.amount + bl.amount + (rr ? rr.amount : 0),
     bonusPierce: (rel.bonusPierce || 0) + syn.bonusPierce,
-    critChance: PLAYER_BASE.critChance + rel.critChance + (hero.critChance || 0) + syn.critChance + bl.critChance,
+    critChance: PLAYER_BASE.critChance + rel.critChance + (hero.critChance || 0) + syn.critChance + bl.critChance + (rr ? rr.critChance : 0),
     critMult,
-    xpMul: (1 + rel.xpPct + (meta.xpPct || 0) + bl.xpPct) * run.night.xpMul,
-    pickupRange: PLAYER_BASE.pickupRange * (1 + rel.pickupPct + (meta.pickupPct || 0) + bl.pickupPct),
-    ultChargeMul: 1 + (hero.ultChargePct || 0) + rel.ultChargePct,
+    xpMul: (1 + rel.xpPct + (meta.xpPct || 0) + bl.xpPct) * run.night.xpMul * (rr ? rr.xpMul : 1),
+    pickupRange: PLAYER_BASE.pickupRange * (1 + rel.pickupPct + (meta.pickupPct || 0) + bl.pickupPct + (rr ? rr.pickupPct : 0)),
+    ultChargeMul: 1 + (hero.ultChargePct || 0) + rel.ultChargePct + (rr ? rr.ultChargePct : 0),
     ultCdRefund: rel.ultCdRefund,
     lightMul,
     lightRadius,
@@ -151,9 +162,9 @@ export function recomputeMods(run, opts = {}) {
     killHeal: rel.killHeal,
     slowResist: clamp(rel.slowResist, 0, 0.9),
     relicCoinPct: rel.coinPct,
-    coinDropMul: bl.coinDropMul,
-    spawnRateMul: bl.spawnRateMul,
-    eliteChanceMul: bl.eliteChanceMul,
+    coinDropMul: bl.coinDropMul * (rr ? rr.coinDropMul : 1),
+    spawnRateMul: bl.spawnRateMul * (rr ? rr.spawnRateMul : 1),
+    eliteChanceMul: bl.eliteChanceMul * (rr ? rr.eliteChanceMul : 1),
     knockbackMul: syn.knockbackMul * bl.knockbackMul,
     controlDurMul: syn.controlDurMul * (1 + (rel.controlDurPct || 0)),
     takenDmgMul: bl.takenDmgMul,
@@ -190,11 +201,11 @@ export function recomputeMods(run, opts = {}) {
     p.relics = run.relics;
   }
   p.armor = bl.zeroArmor ? 0 : PLAYER_BASE.armor + rel.armor + (hero.armor || 0) + (meta.armor || 0) + syn.bonusArmor + bl.bonusArmor;
-  const rawMaxHp = (PLAYER_BASE.maxHp + rel.maxHp + bl.bonusMaxHp) * (1 + (meta.maxHpPct || 0) + (hero.maxHpPct || 0)) * bl.maxHpMul;
+  const rawMaxHp = (PLAYER_BASE.maxHp + rel.maxHp + bl.bonusMaxHp) * (1 + (meta.maxHpPct || 0) + (hero.maxHpPct || 0)) * bl.maxHpMul * (rr ? rr.maxHpMul : 1);
   p.maxHp = Math.max(10, Math.round(rawMaxHp));
   p.speed = Math.max(
     40,
-    PLAYER_BASE.speed * (1 + rel.speedPct + (hero.speedPct || 0) + (meta.speedPct || 0) + bl.speedPct) * (nuoDanceActive ? ULT.nuoxi.danceSpeedMul : 1),
+    PLAYER_BASE.speed * (1 + rel.speedPct + (hero.speedPct || 0) + (meta.speedPct || 0) + bl.speedPct) * (nuoDanceActive ? ULT.nuoxi.danceSpeedMul : 1) * (rr ? rr.playerSpeedMul : 1),
   );
 
   const sb = run.weapons.find((w) => w.id === 'soulbanner');

@@ -71,7 +71,7 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     if (affix === 'treasure_bearer') hp *= ELITE_AFFIXES.treasure_bearer.hpMul;
   }
 
-  let speed = def.speed * night.enemySpeedMul * (def.boss ? 1 : enemySpeedScale(speedMin));
+  let speed = def.speed * night.enemySpeedMul * (run.runRules?.enemySpeedMul || 1) * (def.boss ? 1 : enemySpeedScale(speedMin));
   let dmg = def.dmg * night.contactDmgMul * (def.boss ? 1 : enemyDmgScale(m));
   let r = def.r * (opts.rMul || 1);
   let xp = opts.mirrorClone ? 0 : def.xp;

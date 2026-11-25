@@ -2,7 +2,7 @@
 // main.js 只做 startApp()。
 import { createGame } from './game.js';
 import * as Run from './sim/run.js';
-import { loadSave, saveSave } from './meta/save.js';
+import { WEAPON_IDS, loadSave, saveSave } from './meta/save.js';
 import { createCloudSave } from './meta/cloud-save.js';
 import { syncCodexFromRun } from './meta/codex.js';
 import { getMetaBonuses } from './meta/shop.js';
@@ -20,6 +20,11 @@ import {
   getDailyState,
   recordDailyRun,
 } from './meta/daily.js';
+import {
+  getDailyChallengeSpec,
+  getDailyChallengeState,
+  recordDailyChallengeRun,
+} from './meta/daily-challenge.js';
 import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
 import { createLeaderboard } from './meta/leaderboard.js';
@@ -90,11 +95,13 @@ export async function startApp(bootOpts = {}) {
     },
   });
 
-  function openLeaderboard(initialCollection = 'public') {
+  function openLeaderboard(initialCollectionOrOpts = 'public') {
+    const isObjArg = initialCollectionOrOpts && typeof initialCollectionOrOpts === 'object';
     return openLeaderboardModal(root, {
       save,
       leaderboard,
-      initialCollection,
+      initialBoard: isObjArg ? initialCollectionOrOpts.initialBoard : 'primary',
+      initialCollection: isObjArg ? (initialCollectionOrOpts.initialCollection || 'public') : initialCollectionOrOpts,
     });
   }
 
@@ -348,6 +355,19 @@ export async function startApp(bootOpts = {}) {
     menuScene.start();
   }
 
+  function startDailyChallenge(nowOverride = null) {
+    const spec = getDailyChallengeSpec(nowOverride || new Date());
+    return startRun({
+      heroId: spec.heroId,
+      startWeapon: spec.startWeapon,
+      unlockedWeapons: [...WEAPON_IDS],
+      nightLevel: spec.nightLevel,
+      seed: spec.seed,
+      runRules: spec.runRules,
+      charm: null,
+    });
+  }
+
   function showHub() {
     game.clear();
     runUI.teardown();
@@ -361,6 +381,7 @@ export async function startApp(bootOpts = {}) {
       runAd,
       now: () => new Date(),
       onStart: (opts) => startRun(opts),
+      onStartDailyChallenge: (spec) => startDailyChallenge(spec?.date || null),
       onSettings,
       onCosmeticChange: () => {
         applySettings(save.settings);
@@ -372,7 +393,7 @@ export async function startApp(bootOpts = {}) {
       onCloudPull: () => handleCloudPull(false),
       onQuickCloud: () => handleQuickCloud(),
       onCloudFlush: () => cloud.flushDirty(),
-      onOpenLeaderboard: () => openLeaderboard('public'),
+      onOpenLeaderboard: (opts) => openLeaderboard(opts || 'public'),
       onOpenCoop: () => openCoop(),
     });
     setScreen(hub.el, 'ink');
@@ -387,6 +408,7 @@ export async function startApp(bootOpts = {}) {
     charm = null,
     seed,
     coop: coopParty = null,
+    runRules = null,
   } = {}) {
     audio.unlock();
     menuScene.stop();
@@ -401,7 +423,14 @@ export async function startApp(bootOpts = {}) {
       ?? null;
     const chosenPool = unlockedWeapons
       ?? (Array.isArray(save.unlockedWeapons) ? save.unlockedWeapons : null);
-    lastStart = { heroId, startWeapon: chosenStart, nightLevel };
+    lastStart = {
+      heroId,
+      startWeapon: chosenStart,
+      unlockedWeapons: chosenPool,
+      nightLevel,
+      seed: runRules?.mode === 'daily' ? seed : undefined,
+      runRules,
+    };
     setScreen(null, 'battle');
     finished = false;
     applySettings(save.settings);
@@ -418,6 +447,7 @@ export async function startApp(bootOpts = {}) {
       coop: coopParty,
       skinId: p0Skin,
       attackVfx: p0Vfx,
+      runRules,
     });
     if (syncCodexFromRun(save, r)) persist(false);
     runUI.mountHud();
@@ -425,6 +455,7 @@ export async function startApp(bootOpts = {}) {
     audio.setMusicMode('run');
     audio.setWatch(1);
     if (!save.stats.firstRunDone) runUI.showFirstRunHint();
+    return r;
   }
 
   function endCurrentRun() {
@@ -440,6 +471,17 @@ export async function startApp(bootOpts = {}) {
     const nowTs = Date.now();
     const recorded = recordRun(save, summary, nowTs);
     recordDailyRun(save, summary, nowTs);
+    let dcResult = null;
+    if (summary.isDailyChallenge) {
+      dcResult = recordDailyChallengeRun(save, summary, summary.dailyDate || nowTs);
+      if (dcResult.ok) {
+        recorded.coinsEarned += dcResult.coins;
+        leaderboard.submitDailyScore(dcResult.dailyScore, save);
+        if (dcResult.rewarded) {
+          toast(`今日异事首胜入账：铜钱 +${dcResult.coins} · 周分 +${dcResult.weeklyPointsAdded}`, 2600);
+        }
+      }
+    }
     persist(true);
     leaderboard.submitScore(summary.score, save);
     coach.reset();
@@ -453,7 +495,7 @@ export async function startApp(bootOpts = {}) {
       adsOn: () => adsEnabled(),
       runAd,
       onDouble: (amount) => { const add = grantDoubleCoins(save, amount); persist(true); return add; },
-      onLeaderboard: () => openLeaderboard('public'),
+      onLeaderboard: () => openLeaderboard(summary.isDailyChallenge ? { initialBoard: 'daily' } : 'public'),
       onHub: () => showHub(),
       onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
@@ -517,8 +559,14 @@ export async function startApp(bootOpts = {}) {
         return res;
       },
     },
+    dailyChallenge: {
+      getSpec: (nowVal = new Date()) => getDailyChallengeSpec(nowVal),
+      getState: (nowVal = new Date()) => getDailyChallengeState(save, nowVal),
+      start: (nowVal = new Date()) => startDailyChallenge(nowVal),
+    },
     showHub,
     startRun,
+    startDailyChallenge,
     persist,
     replayIntro,
     openLeaderboard,

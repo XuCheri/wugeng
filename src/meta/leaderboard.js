@@ -5,6 +5,8 @@
 // - 支持 pendingScore 待重传队列，以及 ?mockLeaderboard=1|112|1025|103|104|500001 与 ?mockTap=1 模拟宿主
 
 import {
+  DAILY_LEADERBOARD_ID,
+  DAILY_LEADERBOARD_NAME,
   LEADERBOARD_COLLECTIONS,
   LEADERBOARD_DEFAULT_PAGE_SIZE,
   LEADERBOARD_MAX_PAGE_SIZE,
@@ -12,9 +14,12 @@ import {
   PRIMARY_LEADERBOARD_ID,
   PRIMARY_LEADERBOARD_NAME,
   PRIMARY_LEADERBOARD_UNIT,
+  SEASON_LEADERBOARD_ID,
+  SEASON_LEADERBOARD_NAME,
   getLeaderboardConfig,
 } from './leaderboard-config.js';
 import { DEFAULT_DAO_NAME, HERO_IDS, sanitizeDaoName, saveSave } from './save.js';
+import { buildLocalDailyEntries } from './daily-challenge.js';
 
 // 112：接口 scope 未在《小游戏隐私保护指引》中声明（宿主沿用小游戏通用错误码）；1025：未申明使用好友关系信息
 const PRIVACY_DECLARE_CODES = new Set([112, 1025, '112', '1025']);
@@ -286,10 +291,47 @@ function createMockTapLeaderboardManager(mode, getSave) {
   };
 }
 
+export function buildLocalSeasonEntries(save) {
+  const daoName = sanitizeDaoName(save?.daoName || DEFAULT_DAO_NAME);
+  const rawHist = Array.isArray(save?.season?.history) ? save.season.history : [];
+  const entries = rawHist
+    .filter((item) => item && typeof item === 'object' && Number.isFinite(Number(item.score)) && Number(item.score) >= 0)
+    .map((item) => ({
+      score: sanitizeLeaderboardScore(item.score),
+      name: sanitizeDaoName(item.daoName || daoName),
+      heroId: HERO_IDS.includes(item.heroId) ? item.heroId : 'zhou',
+      nightLevel: Number.isFinite(Number(item.nightLevel)) ? Math.max(0, Math.floor(Number(item.nightLevel))) : 0,
+      kills: Number.isFinite(Number(item.kills)) ? Math.max(0, Math.floor(Number(item.kills))) : 0,
+      timeSec: Number.isFinite(Number(item.timeSec)) ? Math.max(0, Math.floor(Number(item.timeSec))) : 0,
+      cleared: Boolean(item.cleared),
+      at: Number.isFinite(Number(item.at)) ? Number(item.at) : 0,
+      isSelf: true,
+    }));
+
+  const bestSeason = sanitizeLeaderboardScore(save?.season?.bestSeasonScore || save?.season?.xp || 0);
+  if (bestSeason > 0 && !entries.some((e) => e.score === bestSeason)) {
+    entries.push({
+      score: bestSeason,
+      name: daoName,
+      heroId: HERO_IDS.includes(save?.selectedHero) ? save.selectedHero : 'zhou',
+      nightLevel: Number(save?.nightCleared) > 0 ? Number(save.nightCleared) : 0,
+      kills: Number(save?.stats?.bestKills || 0),
+      timeSec: Number(save?.stats?.bestTimeSec || 0),
+      cleared: Number(save?.stats?.clears || 0) > 0,
+      at: Number(save?.updatedAt || 0),
+      isSelf: true,
+    });
+  }
+  entries.sort((a, b) => (b.score - a.score) || (b.at - a.at));
+  return entries.slice(0, 10).map((row, idx) => ({ ...row, rank: idx + 1 }));
+}
+
 export function createLeaderboard({
   win = typeof window !== 'undefined' ? window : null,
   getSave = () => null,
   persistSave = null,
+  dailyLeaderboardId = DAILY_LEADERBOARD_ID,
+  seasonLeaderboardId = SEASON_LEADERBOARD_ID,
 } = {}) {
   const saveFlush = (saveObj) => {
     if (typeof persistSave === 'function') {
@@ -544,16 +586,169 @@ export function createLeaderboard({
       : `天榜暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`;
   }
 
+  function resolveBoardId(boardType = 'primary') {
+    if (boardType === 'daily') return typeof dailyLeaderboardId === 'string' ? dailyLeaderboardId.trim() : '';
+    if (boardType === 'season') return typeof seasonLeaderboardId === 'string' ? seasonLeaderboardId.trim() : '';
+    return PRIMARY_LEADERBOARD_ID;
+  }
+
+  function submitSecondaryBoard(boardType, rawScore, targetSave = null) {
+    const save = targetSave || getSave?.() || null;
+    const score = sanitizeLeaderboardScore(rawScore);
+    const boardId = resolveBoardId(boardType);
+    if (!boardId) {
+      return Promise.resolve({
+        ok: false,
+        queued: false,
+        source: 'local',
+        reason: 'unconfigured',
+        leaderboardId: '',
+        boardType,
+        score,
+      });
+    }
+    const { mgr } = resolveManager();
+    if (!mgr || typeof mgr.submitScores !== 'function') {
+      if (save && score > 0) {
+        if (boardType === 'daily' && save.dailyChallenge) {
+          save.dailyChallenge.pendingScore = Math.max(sanitizeLeaderboardScore(save.dailyChallenge.pendingScore), score);
+          saveFlush(save);
+        } else if (boardType === 'season' && save.season) {
+          save.season.pendingScore = Math.max(sanitizeLeaderboardScore(save.season.pendingScore), score);
+          saveFlush(save);
+        }
+      }
+      return Promise.resolve({
+        ok: false,
+        queued: score > 0,
+        reason: 'unavailable',
+        leaderboardId: boardId,
+        boardType,
+        score,
+      });
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+      try {
+        mgr.submitScores({
+          scores: [{ leaderboardId: boardId, score }],
+          callback: {
+            onSuccess(res) {
+              done({ ok: true, queued: false, leaderboardId: boardId, boardType, score, raw: res || null });
+            },
+            onFailure(a1, a2) {
+              const err = parseFailureArgs(a1, a2);
+              done({ ok: false, queued: false, code: err.code, reason: 'sdk_failure', leaderboardId: boardId, boardType, score });
+            },
+          },
+        });
+      } catch {
+        done({ ok: false, queued: false, reason: 'exception', leaderboardId: boardId, boardType, score });
+      }
+    });
+  }
+
+  function submitDailyScore(rawScore, targetSave = null) {
+    return submitSecondaryBoard('daily', rawScore, targetSave);
+  }
+
+  function submitSeasonScore(rawScore, targetSave = null) {
+    return submitSecondaryBoard('season', rawScore, targetSave);
+  }
+
   async function fetchBoard({
+    boardType = 'primary',
     collection = LEADERBOARD_COLLECTIONS.PUBLIC,
     maxSize = LEADERBOARD_DEFAULT_PAGE_SIZE,
     continuationToken = null,
     save: explicitSave = null,
   } = {}) {
     const save = explicitSave || getSave?.() || null;
+    const normBoard = boardType === 'daily' || boardType === 'season' ? boardType : 'primary';
     const col = normalizeCollection(collection);
     const safeMaxSize = clampLeaderboardPageSize(maxSize);
     const daoName = sanitizeDaoName(save?.daoName || DEFAULT_DAO_NAME);
+
+    if (normBoard === 'daily' || normBoard === 'season') {
+      const targetId = resolveBoardId(normBoard);
+      const localSubEntries = normBoard === 'daily' ? buildLocalDailyEntries(save) : buildLocalSeasonEntries(save);
+      const bestSub = normBoard === 'daily'
+        ? sanitizeLeaderboardScore(save?.dailyChallenge?.todayBestScore || save?.dailyChallenge?.bestScore || 0)
+        : sanitizeLeaderboardScore(save?.season?.bestSeasonScore || save?.season?.xp || 0);
+      const localSubCurrent = bestSub > 0
+        ? { rank: 1, score: bestSub, name: daoName, isLocal: true }
+        : { rank: null, score: 0, name: daoName, isLocal: true };
+      const bLabel = normBoard === 'daily' ? DAILY_LEADERBOARD_NAME : SEASON_LEADERBOARD_NAME;
+
+      if (!targetId) {
+        return {
+          ok: false,
+          source: 'local',
+          boardType: normBoard,
+          collection: col,
+          leaderboardId: '',
+          notice: `${bLabel}待配置云端编号，当前展示本机战绩记录。`,
+          entries: localSubEntries,
+          currentPlayer: localSubCurrent,
+          nextContinuationToken: null,
+        };
+      }
+      const { mgr } = resolveManager();
+      if (!mgr || typeof mgr.loadLeaderboardScores !== 'function') {
+        return {
+          ok: false,
+          source: 'local',
+          boardType: normBoard,
+          collection: col,
+          leaderboardId: targetId,
+          notice: `当前展示本机${bLabel}战绩（在 TapTap 内打开可同步云端）。`,
+          entries: localSubEntries,
+          currentPlayer: localSubCurrent,
+          nextContinuationToken: null,
+        };
+      }
+      const subRes = await callSdk(mgr, 'loadLeaderboardScores', {
+        leaderboardId: targetId,
+        collection: col,
+        maxSize: safeMaxSize,
+      });
+      let subCur = { ok: false };
+      if (typeof mgr.loadCurrentPlayerLeaderboardScore === 'function') {
+        subCur = await callSdk(mgr, 'loadCurrentPlayerLeaderboardScore', {
+          leaderboardId: targetId,
+          collection: col,
+        });
+      }
+      const remoteSubCur = subCur.ok ? normalizeCurrentPlayer(subCur.data, daoName) : null;
+      if (!subRes.ok) {
+        return {
+          ok: false,
+          source: 'error_fallback',
+          retryable: !CONFIG_ERROR_CODES.has(subRes.err?.code),
+          boardType: normBoard,
+          collection: col,
+          leaderboardId: targetId,
+          notice: `${bLabel}暂未连通，先为你展示本机战绩。`,
+          entries: localSubEntries,
+          currentPlayer: remoteSubCur || localSubCurrent,
+          nextContinuationToken: null,
+        };
+      }
+      const normSub = normalizeRemoteScores(subRes.data);
+      return {
+        ok: true,
+        source: normSub.entries.length > 0 ? 'tap' : 'tap_empty_local',
+        boardType: normBoard,
+        collection: col,
+        leaderboardId: targetId,
+        notice: normSub.entries.length === 0 ? `${bLabel}已连通，当期虚位以待。` : '',
+        entries: normSub.entries.length > 0 ? normSub.entries : localSubEntries,
+        currentPlayer: remoteSubCur || localSubCurrent,
+        nextContinuationToken: normSub.nextContinuationToken,
+      };
+    }
+
     const localEntries = buildLocalHonorEntries(save);
     const bestLocal = sanitizeLeaderboardScore(save?.leaderboard?.bestScore || 0);
     const localCurrent = bestLocal > 0
@@ -565,6 +760,7 @@ export function createLeaderboard({
       return {
         ok: false,
         source: 'local',
+        boardType: 'primary',
         collection: col,
         leaderboardId: PRIMARY_LEADERBOARD_ID,
         notice: col === LEADERBOARD_COLLECTIONS.FRIENDS
@@ -626,6 +822,7 @@ export function createLeaderboard({
         code,
         // 权限类错误也允许「重新展卷」：后台补齐声明或玩家改为同意后无需重进游戏
         retryable: !CONFIG_ERROR_CODES.has(code),
+        boardType: 'primary',
         collection: col,
         leaderboardId: PRIMARY_LEADERBOARD_ID,
         notice: buildFailureNotice(code, col),
@@ -643,6 +840,7 @@ export function createLeaderboard({
     return {
       ok: true,
       source: norm.entries.length > 0 ? 'tap' : 'tap_empty_local',
+      boardType: 'primary',
       collection: col,
       leaderboardId: PRIMARY_LEADERBOARD_ID,
       notice: norm.entries.length === 0
@@ -654,14 +852,18 @@ export function createLeaderboard({
     };
   }
 
-  function openNativeLeaderboard({ collection = LEADERBOARD_COLLECTIONS.PUBLIC } = {}) {
+  function openNativeLeaderboard({ boardType = 'primary', collection = LEADERBOARD_COLLECTIONS.PUBLIC } = {}) {
     const col = normalizeCollection(collection);
+    const targetId = resolveBoardId(boardType);
+    if (!targetId) {
+      return Promise.resolve({ ok: false, reason: 'unconfigured', leaderboardId: '', collection: col });
+    }
     const { mgr } = resolveManager();
     if (!mgr || typeof mgr.openLeaderboard !== 'function') {
       return Promise.resolve({
         ok: false,
         reason: 'unavailable',
-        leaderboardId: PRIMARY_LEADERBOARD_ID,
+        leaderboardId: targetId,
         collection: col,
       });
     }
@@ -670,24 +872,26 @@ export function createLeaderboard({
       const done = (v) => { if (!settled) { settled = true; resolve(v); } };
       try {
         mgr.openLeaderboard({
-          leaderboardId: PRIMARY_LEADERBOARD_ID,
+          leaderboardId: targetId,
           collection: col,
           callback: {
-            onSuccess: (res) => done({ ok: true, leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col, raw: res || null }),
+            onSuccess: (res) => done({ ok: true, leaderboardId: targetId, collection: col, raw: res || null }),
             onFailure: (a1, a2) => {
               const err = parseFailureArgs(a1, a2);
-              done({ ok: false, code: err.code, leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col });
+              done({ ok: false, code: err.code, leaderboardId: targetId, collection: col });
             },
           },
         });
       } catch {
-        done({ ok: false, reason: 'exception', leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col });
+        done({ ok: false, reason: 'exception', leaderboardId: targetId, collection: col });
       }
     });
   }
 
   return {
     PRIMARY_LEADERBOARD_ID,
+    DAILY_LEADERBOARD_ID: dailyLeaderboardId,
+    SEASON_LEADERBOARD_ID: seasonLeaderboardId,
     leaderboardId: PRIMARY_LEADERBOARD_ID,
     name: PRIMARY_LEADERBOARD_NAME,
     unit: PRIMARY_LEADERBOARD_UNIT,
@@ -696,10 +900,13 @@ export function createLeaderboard({
     submitScore,
     submitRunScore: submitScore,
     submit: submitScore,
+    submitDailyScore,
+    submitSeasonScore,
     submitScores: submitScoresBatch,
     flushPendingScore,
     fetchBoard,
     loadScores: fetchBoard,
+    buildLocalSeasonEntries,
     openNativeLeaderboard,
     openLeaderboard: openNativeLeaderboard,
     getLastDiagnostics: () => (lastDiagnostics ? { ...lastDiagnostics } : null),

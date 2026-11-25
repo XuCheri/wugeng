@@ -25,8 +25,9 @@ import { createHeroStage } from '../render/menu-scene.js';
 import { openCodex } from './codex.js';
 import { openCosmeticShop } from './cosmetic-shop.js';
 import { openAchievementsModal } from './achievements.js';
-import { openDailyModal } from './daily.js';
+import { openDailyModal, openDailyChallengeModal } from './daily.js';
 import { getUnclaimedDailyCount } from '../meta/daily.js';
+import { getDailyChallengeState } from '../meta/daily-challenge.js';
 import { getHubFeatureLock } from './coach.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
@@ -39,7 +40,7 @@ function coinTag(n, sm = false) {
 
 /**
  * ctx: { save, adsOn(), persist(syncCloud?), runAd(placement) → Promise<result>, now() → Date,
- *        onStart({ heroId, startWeapon, unlockedWeapons, nightLevel, charm }), onSettings(settings),
+ *        onStart({ heroId, startWeapon, unlockedWeapons, nightLevel, charm, seed, runRules }), onSettings(settings),
  *        onCosmeticChange?(), cloudState?(), onCloudUpload?(), onCloudPull?(), onQuickCloud?(),
  *        onOpenLeaderboard?(), onOpenCoop?() }
  */
@@ -67,7 +68,7 @@ export function renderHub(root, ctx) {
   });
   const coinBox = h('div', { class: 'hub-coins' });
 
-  // ── 2. 居中沉浸动态演武舞台 + 浮层人物铭牌 + 右侧功能纵栏 ──
+  // ── 2. 居中沉浸动态演武舞台 + 左上每日异事/守夜令横签 + 浮层人物铭牌 + 右侧功能纵栏 ──
   const stageCanvas = h('canvas', {
     class: 'hero-stage__canvas',
     width: 680,
@@ -75,11 +76,13 @@ export function renderHub(root, ctx) {
     'aria-label': '当前角色衣冠与本命兵刃演武台',
     onClick: () => guardFeature('market', () => openMarket(getActiveHero())),
   });
+  const dailyStripBox = h('div', { class: 'hub-daily-strip' });
   const heroSpotlightEl = h('div', { class: 'hero-spotlight' });
   const ribbonBox = h('div', { class: 'hub-ribbon', role: 'toolbar', 'aria-label': '更房要务' });
   const stageSection = h('section', { class: 'hub-stage-panel', 'aria-label': '守夜演武台' },
     h('div', { class: 'hero-stage' },
       stageCanvas,
+      dailyStripBox,
       heroSpotlightEl,
       ribbonBox));
 
@@ -196,6 +199,7 @@ export function renderHub(root, ctx) {
     subLineEl.textContent = statLine(save);
     cloudBtn.textContent = cloudLabelText();
 
+    clear(dailyStripBox);
     clear(ribbonBox);
     const lkDaily = getHubFeatureLock(save, 'daily');
     const unclaimedDaily = lkDaily.locked ? 0 : getUnclaimedDailyCount(save, ctx.now());
@@ -204,7 +208,20 @@ export function renderHub(root, ctx) {
     const lkAch = getHubFeatureLock(save, 'achievements');
     const lkLb = getHubFeatureLock(save, 'leaderboard');
     const lkCoop = getHubFeatureLock(save, 'coop');
+    dailyStripBox.hidden = lkDaily.locked;
     if (!lkDaily.locked) {
+      const dcSt = getDailyChallengeState(save, ctx.now());
+      const dcRuleShort = dcSt.rules.map((r) => r.name).join('·');
+      dailyStripBox.appendChild(h('button', {
+        type: 'button',
+        class: `hub-daily-pill${dcSt.canEarnFirstReward ? ' has-reward' : ''}`,
+        dataset: { action: 'open-daily-challenge' },
+        onClick: () => openDailyChallenge(),
+      },
+      h('i', { class: 'stamp stamp--xs' }, '异'),
+      h('span', { class: 'hub-daily-pill__txt' }, `今日异事 · ${heroInfo(dcSt.heroId).short}`),
+      h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? '首胜+200钱' : (dcRuleShort || '试手冲榜'))));
+
       ribbonBox.appendChild(
         ribbonItem('差事', unclaimedDaily > 0 ? `领${unclaimedDaily}` : '周赏', 'open-daily', () => openDaily(), unclaimedDaily, false),
       );
@@ -499,7 +516,34 @@ export function renderHub(root, ctx) {
         ctx.onCosmeticChange?.();
         refresh();
       },
-      onOpenChallenge: ctx.onOpenDailyChallenge ? () => ctx.onOpenDailyChallenge() : null,
+      onOpenChallenge: () => openDailyChallenge(),
+    });
+  }
+
+  // ───────── 每日异事挑战 ─────────
+  function openDailyChallenge() {
+    return openDailyChallengeModal(root, {
+      save,
+      now: () => ctx.now(),
+      onStartChallenge: (spec) => {
+        if (ctx.onStartDailyChallenge) {
+          ctx.onStartDailyChallenge(spec);
+        } else {
+          ctx.onStart({
+            heroId: spec.heroId,
+            startWeapon: spec.startWeapon,
+            unlockedWeapons: [...WEAPON_IDS],
+            nightLevel: spec.nightLevel,
+            seed: spec.seed,
+            runRules: spec.runRules,
+            charm: null,
+          });
+        }
+      },
+      onOpenBoard: () => {
+        if (ctx.onOpenLeaderboard) ctx.onOpenLeaderboard({ initialBoard: 'daily' });
+        else openLocalLeaderboardFallback();
+      },
     });
   }
 
@@ -757,6 +801,7 @@ export function renderHub(root, ctx) {
     openMarket,
     openAchievements,
     openDaily,
+    openDailyChallenge,
     openCodex: () => openCodex(root, save),
   };
 }

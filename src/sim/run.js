@@ -68,6 +68,41 @@ function sanitizeMetaBonuses(meta) {
   return out;
 }
 
+function sanitizeRunRules(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const numOr = (v, def, min, max) => {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+  };
+  return {
+    mode: raw.mode === 'daily' ? 'daily' : raw.mode === 'season' ? 'season' : 'normal',
+    dailyDate: typeof raw.dailyDate === 'string' ? raw.dailyDate.slice(0, 16) : null,
+    seasonRuleActive: Boolean(raw.seasonRuleActive),
+    ruleIds: Array.isArray(raw.ruleIds) ? raw.ruleIds.filter((x) => typeof x === 'string').slice(0, 8) : [],
+    onlySchool: typeof raw.onlySchool === 'string' ? raw.onlySchool : null,
+    autoMagnetXp: Boolean(raw.autoMagnetXp),
+    swapWeaponPerWatch: Boolean(raw.swapWeaponPerWatch),
+    noBuns: Boolean(raw.noBuns),
+    dmgPct: numOr(raw.dmgPct, 0, -0.8, 5),
+    cdr: numOr(raw.cdr, 0, -0.8, 0.8),
+    amount: Math.round(numOr(raw.amount, 0, -3, 6)),
+    areaPct: numOr(raw.areaPct, 0, -0.5, 3),
+    maxHpMul: numOr(raw.maxHpMul, 1, 0.2, 5),
+    playerSpeedMul: numOr(raw.playerSpeedMul, 1, 0.4, 3),
+    enemySpeedMul: numOr(raw.enemySpeedMul, 1, 0.4, 3),
+    eliteChanceMul: numOr(raw.eliteChanceMul, 1, 0.2, 5),
+    xpMul: numOr(raw.xpMul, 1, 0.2, 5),
+    coinDropMul: numOr(raw.coinDropMul, 1, 0.2, 5),
+    pickupPct: numOr(raw.pickupPct, 0, -0.5, 5),
+    ultChargePct: numOr(raw.ultChargePct, 0, -0.5, 5),
+    lightMul: numOr(raw.lightMul, 1, 0.35, 3),
+    critChance: numOr(raw.critChance, 0, -0.5, 1),
+    critDmg: numOr(raw.critDmg, 0, -1, 5),
+    spawnRateMul: numOr(raw.spawnRateMul, 1, 0.3, 4),
+    scoreMul: numOr(raw.scoreMul, 1, 0.5, 5),
+  };
+}
+
 export function createRun(rawOpts = {}) {
   let {
     seed = 1,
@@ -78,6 +113,7 @@ export function createRun(rawOpts = {}) {
     meta = {},
     charm = null,
     coop = null,
+    runRules = null,
   } = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
   const party0 = Array.isArray(coop) ? coop[0] : coop && typeof coop === 'object' ? coop.party?.[0] : null;
   if (isOwnHero(party0?.heroId)) heroId = party0.heroId;
@@ -96,6 +132,7 @@ export function createRun(rawOpts = {}) {
   nightLevel = sanitizeNightLevel(nightLevel);
   const seedNum = typeof seed === 'number' && Number.isFinite(seed) ? seed >>> 0 : hashSeed(seed);
   const metaB = sanitizeMetaBonuses(meta);
+  const cleanRules = sanitizeRunRules(runRules);
   const run = {
     seed,
     heroId,
@@ -103,6 +140,7 @@ export function createRun(rawOpts = {}) {
     signatureStart: isHeroSignatureWeapon(heroId, chosenStartWeapon),
     unlockedWeapons: normUnlockedWeapons,
     nightLevel,
+    runRules: cleanRules,
     time: 0,
     watch: 1,
     mode: 'main',
@@ -258,6 +296,28 @@ function updateWatch(run, dt) {
       const healed = healPlayer(run, Math.round(run.player.maxHp * BLESSING_TUNING.lantern_oil.watchHealPct * oilStacks));
       if (healed > 0) {
         run.events.push({ type: 'heal', amount: healed, source: 'lantern_oil', x: run.player.x, y: run.player.y });
+      }
+    }
+
+    // 每日异事「每更易兵」词条：将一把未开光兵刃轮换为同阶未持有兵刃
+    if (run.runRules?.swapWeaponPerWatch && Array.isArray(run.weapons) && run.weapons.length > 0) {
+      const nonEvo = run.weapons.filter((wp) => wp && !wp.evolved);
+      const targetWp = nonEvo.length > 1 ? nonEvo[1] : nonEvo[0] || null;
+      if (targetWp) {
+        const ownedIds = new Set(run.weapons.map((wp) => wp.id));
+        const poolBase = Array.isArray(run.unlockedWeapons) && run.unlockedWeapons.length > 0
+          ? run.unlockedWeapons
+          : WEAPON_IDS;
+        const swapPool = poolBase.filter((wid) => !ownedIds.has(wid) && Object.hasOwn(WEAPONS, wid));
+        if (swapPool.length > 0) {
+          const fromId = targetWp.id;
+          const toId = swapPool[run.rng.int(0, swapPool.length - 1)];
+          targetWp.id = toId;
+          targetWp.cd = 0;
+          targetWp.altarReady = false;
+          recomputeMods(run, { emit: false });
+          run.events.push({ type: 'dailySwap', fromId, toId, watch: w });
+        }
       }
     }
 
@@ -758,6 +818,9 @@ export function endRun(run, clearedArg) {
   const safeStartWeapon = isOwnWeapon(run.startWeapon) ? run.startWeapon : HEROES[safeHeroId].startWeapon;
   const rawWatch = Number.isFinite(run.watch) ? Math.max(1, Math.min(5, Math.floor(run.watch))) : 1;
 
+  const scoreMul = Number.isFinite(run.runRules?.scoreMul) && run.runRules.scoreMul > 0 ? run.runRules.scoreMul : 1;
+  const dailyScore = Math.min(9_999_999_999, Math.max(0, Math.round(score * scoreMul)));
+
   run._ended = true;
   return {
     heroId: safeHeroId,
@@ -766,6 +829,9 @@ export function endRun(run, clearedArg) {
     nightLevel: nightLv,
     cleared,
     mode: run.mode === 'endless' ? 'endless' : 'main',
+    isDailyChallenge: run.runRules?.mode === 'daily',
+    dailyDate: run.runRules?.dailyDate || null,
+    seasonRuleActive: Boolean(run.runRules?.seasonRuleActive),
     timeSec: Math.floor(Math.min(1e9, safeTime)),
     reachedWatch: cleared ? 6 : rawWatch,
     level: Number.isFinite(run.player?.level) && run.player.level >= 1 ? Math.min(1e9, Math.floor(run.player.level)) : 1,
@@ -785,6 +851,7 @@ export function endRun(run, clearedArg) {
     bossKills,
     eventsCompleted,
     score,
+    dailyScore,
     coopSize,
     revivesDone,
     squad,

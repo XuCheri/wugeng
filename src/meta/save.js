@@ -130,6 +130,19 @@ export function defaultDaily() {
   };
 }
 
+export function defaultDailyChallenge() {
+  return {
+    lastRewardDate: null,
+    todayDate: null,
+    todayBestScore: 0,
+    todayRuns: 0,
+    bestScore: 0,
+    totalRewardClaims: 0,
+    pendingScore: 0,
+    history: [],
+  };
+}
+
 export function defaultSave() {
   const shop = {};
   for (const id of SHOP_IDS) shop[id] = 0;
@@ -161,6 +174,7 @@ export function defaultSave() {
     leaderboard: defaultLeaderboard(),
     coach: defaultCoach(),
     daily: defaultDaily(),
+    dailyChallenge: defaultDailyChallenge(),
     stats: {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
@@ -562,6 +576,39 @@ export function migrateSave(raw) {
     out.daily.totalWeeklyClaims = int(d.totalWeeklyClaims, 0, 0, 1e9);
   }
 
+  if (isObj(src.dailyChallenge)) {
+    const dc = src.dailyChallenge;
+    out.dailyChallenge.lastRewardDate = isValidDateStr(dc.lastRewardDate) ? dc.lastRewardDate : null;
+    out.dailyChallenge.todayDate = isValidDateStr(dc.todayDate) ? dc.todayDate : null;
+    out.dailyChallenge.todayBestScore = int(dc.todayBestScore, 0, 0, 1e12);
+    out.dailyChallenge.todayRuns = int(dc.todayRuns, 0, 0, 1e6);
+    out.dailyChallenge.bestScore = int(dc.bestScore, 0, 0, 1e12);
+    out.dailyChallenge.totalRewardClaims = int(dc.totalRewardClaims, 0, 0, 1e9);
+    out.dailyChallenge.pendingScore = int(dc.pendingScore, 0, 0, 1e12);
+    if (Array.isArray(dc.history)) {
+      const hList = [];
+      for (const item of dc.history) {
+        if (!isObj(item)) continue;
+        const sc = int(item.score, -1, 0, 1e12);
+        if (sc < 0) continue;
+        hList.push({
+          date: isValidDateStr(item.date) ? item.date : '',
+          score: sc,
+          daoName: sanitizeDaoName(item.daoName),
+          heroId: HERO_IDS.includes(item.heroId) ? item.heroId : 'zhou',
+          startWeapon: WEAPON_IDS.includes(item.startWeapon) ? item.startWeapon : 'gong',
+          kills: int(item.kills, 0, 0, 1e9),
+          timeSec: int(item.timeSec, 0, 0, 1e9),
+          cleared: bool(item.cleared, false),
+          at: int(item.at, 0, 0, 9e15),
+        });
+        if (hList.length >= 25) break;
+      }
+      hList.sort((a, b) => (b.score - a.score) || (b.at - a.at));
+      out.dailyChallenge.history = hList.slice(0, 15);
+    }
+  }
+
   out.version = SAVE_VERSION;
   return out;
 }
@@ -592,6 +639,8 @@ export function isFreshSave(s) {
     && int(s.daily?.totalTaskClaims, 0, 0, 1e9) === 0
     && int(s.daily?.totalWeeklyClaims, 0, 0, 1e9) === 0
     && int(s.daily?.weeklyPoints, 0, 0, 99999) === 0
+    && int(s.dailyChallenge?.totalRewardClaims, 0, 0, 1e9) === 0
+    && int(s.dailyChallenge?.bestScore, 0, 0, 1e12) === 0
     && onlyDefaultHero
     && !extraUnlockedWeapon
     && (Array.isArray(s.charms) ? s.charms.length : 0) === 0
@@ -619,6 +668,7 @@ export function saveProgressScore(s) {
     + (s?.checkin?.totalClaims || 0) * 60
     + (s?.daily?.totalTaskClaims || 0) * 80
     + (s?.daily?.totalWeeklyClaims || 0) * 140
+    + (s?.dailyChallenge?.totalRewardClaims || 0) * 200
     + Math.floor(s?.stats?.totalPlaySec || 0);
 }
 
@@ -796,6 +846,30 @@ export function mergeSaves(localRaw, remoteRaw) {
       : [...new Set([...(da.weeklyClaimed || []), ...(db.weeklyClaimed || [])])].sort((x, y) => x - y),
     totalTaskClaims: Math.max(da.totalTaskClaims || 0, db.totalTaskClaims || 0),
     totalWeeklyClaims: Math.max(da.totalWeeklyClaims || 0, db.totalWeeklyClaims || 0),
+  };
+
+  const dca = a.dailyChallenge || defaultDailyChallenge();
+  const dcb = b.dailyChallenge || defaultDailyChallenge();
+  const newerRewardDate = (!dcb.lastRewardDate || (dca.lastRewardDate && dca.lastRewardDate > dcb.lastRewardDate))
+    ? dca.lastRewardDate
+    : dcb.lastRewardDate;
+  const newerDcDay = (!dcb.todayDate || (dca.todayDate && dca.todayDate > dcb.todayDate)) ? dca
+    : (!dca.todayDate || (dcb.todayDate && dcb.todayDate > dca.todayDate)) ? dcb : null;
+  const dcHistMap = new Map();
+  for (const item of [...(dca.history || []), ...(dcb.history || [])]) {
+    const key = `${item.date}|${item.score}|${item.heroId}|${item.at}`;
+    if (!dcHistMap.has(key)) dcHistMap.set(key, item);
+  }
+  const mergedDcHist = [...dcHistMap.values()].sort((x, y) => (y.score - x.score) || (y.at - x.at)).slice(0, 15);
+  merged.dailyChallenge = {
+    lastRewardDate: newerRewardDate || null,
+    todayDate: newerDcDay ? newerDcDay.todayDate : dca.todayDate,
+    todayBestScore: newerDcDay ? newerDcDay.todayBestScore : Math.max(dca.todayBestScore || 0, dcb.todayBestScore || 0),
+    todayRuns: newerDcDay ? newerDcDay.todayRuns : Math.max(dca.todayRuns || 0, dcb.todayRuns || 0),
+    bestScore: Math.max(dca.bestScore || 0, dcb.bestScore || 0),
+    totalRewardClaims: Math.max(dca.totalRewardClaims || 0, dcb.totalRewardClaims || 0),
+    pendingScore: Math.max(dca.pendingScore || 0, dcb.pendingScore || 0),
+    history: mergedDcHist,
   };
 
   const histMap = new Map();

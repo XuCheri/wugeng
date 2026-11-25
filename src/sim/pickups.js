@@ -11,6 +11,10 @@ export function xpTier(value) {
 }
 
 export function dropPickup(run, kind, x, y, value) {
+  if (kind === 'bun' && run.runRules?.noBuns) {
+    kind = 'xp';
+    value = PICKUPS.xpTier2;
+  }
   const p = { id: run._nextId++, kind, x, y, value, tier: kind === 'xp' ? xpTier(value) : 1, mag: false, ms: 0 };
   run.pickups.push(p);
   if (kind === 'xp') run._xpCount++;
@@ -52,6 +56,7 @@ export function updatePickups(run, dt) {
   const isCoop = coopPartySize(run) > 1;
   const p0 = run.player;
   const baseRange = run.mods.pickupRange;
+  const autoMagnetXp = Boolean(run.runRules?.autoMagnetXp);
   const arr = run.pickups;
   let w = 0;
   for (let i = 0; i < arr.length; i++) {
@@ -66,7 +71,7 @@ export function updatePickups(run, dt) {
     const d2 = dx * dx + dy * dy;
     let taken = false;
     if (o.kind === 'xp' || o.kind === 'coin') {
-      if (!o.mag && d2 <= range2) {
+      if (!o.mag && (d2 <= range2 || (autoMagnetXp && o.kind === 'xp'))) {
         o.mag = true;
         o.ms = PICKUPS.magnetStartSpeed;
       }

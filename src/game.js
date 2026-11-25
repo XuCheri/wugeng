@@ -166,9 +166,10 @@ export function createGame({
       coop = null,
       skinId = null,
       attackVfx = null,
+      runRules = null,
     } = {}) {
       const s = seed ?? ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
-      run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, meta, charm, coop });
+      run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, meta, charm, coop, runRules });
       const eq = settings.cosmetics || {};
       const resolvedSkin = skinId || eq.heroSkins?.[run.heroId] || null;
       const resolvedVfx = attackVfx || eq.attackVfx || null;

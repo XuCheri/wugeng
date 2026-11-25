@@ -100,6 +100,14 @@ export function candidateChoices(run) {
       add('relic', id, 1, true, LEVELUP.wNewRelic * (paired ? LEVELUP.pairBonus : 1) * synMul);
     }
   }
+  const onlySchool = run.runRules?.onlySchool || null;
+  if (onlySchool && out.length > 0) {
+    const schoolMatches = out.filter((c) => {
+      const tags = c.kind === 'weapon' ? WEAPONS[c.id]?.tags : RELICS[c.id]?.tags;
+      return Array.isArray(tags) && tags.includes(onlySchool);
+    });
+    if (schoolMatches.length > 0) return schoolMatches;
+  }
   return out;
 }
 

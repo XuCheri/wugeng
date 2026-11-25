@@ -1,13 +1,15 @@
 // 每日差事与周赏供盒木版画弹窗（v4 M3.1）
 import { h, clear, scroll, sealButton, adButton, veil, toast, formatCoins } from './dom.js';
 import { applyStagger } from './motion.js';
-import { CHARM_LABEL } from './copy.js';
+import { CHARM_LABEL, heroInfo, weaponName } from './copy.js';
+import { icon } from './icons.js';
 import {
   claimDailyTask,
   claimWeeklyChest,
   getDailyState,
   syncDailyReset,
 } from '../meta/daily.js';
+import { getDailyChallengeState } from '../meta/daily-challenge.js';
 
 const COIN_SVG = `<svg viewBox="0 0 16 16" class="coin-ico" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.9" y="5.9" width="4.2" height="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
 
@@ -192,3 +194,92 @@ export function openDailyModal(root, opts = {}) {
 
   return { close: closeModal, refresh: () => render(false) };
 }
+
+/**
+ * 打开「每日异事」挑战弹窗（全服同日同种子、固定守夜人与起手兵刃、1–2 条异事词条、首局赏银与异事榜入口）。
+ * opts: { save, now(), onStartChallenge(spec), onOpenBoard?(), onClose?() }
+ */
+export function openDailyChallengeModal(root, opts = {}) {
+  const {
+    save,
+    now = () => new Date(),
+    onStartChallenge = () => {},
+    onOpenBoard = null,
+  } = opts;
+
+  let v = null;
+  const st = getDailyChallengeState(save, now());
+  const hero = heroInfo(st.heroId);
+  const wName = weaponName(st.startWeapon, false);
+  const mulPct = Math.round((st.runRules?.scoreMul || 1) * 100);
+
+  const heroCard = h('div', { class: 'dc-loadout' },
+    h('div', { class: 'dc-loadout__cell' },
+      icon('hero', st.heroId, 38, hero.short[0]),
+      h('div', { class: 'dc-loadout__meta' },
+        h('span', { class: 'dc-loadout__label' }, '当夜执更人'),
+        h('b', { class: 'dc-loadout__name' }, hero.name))),
+    h('div', { class: 'dc-loadout__cell' },
+      icon('weapon', st.startWeapon, 34, wName[0]),
+      h('div', { class: 'dc-loadout__meta' },
+        h('span', { class: 'dc-loadout__label' }, '指定起手器'),
+        h('b', { class: 'dc-loadout__name' }, wName))));
+
+  const rulesBox = h('div', { class: 'dc-rules' },
+    h('p', { class: 'dc-rules__head' }, `今日异事规则 · 异事分系数 ${mulPct}%`),
+    ...st.rules.map((r) => h('div', { class: 'dc-rule-row', dataset: { ruleId: r.id } },
+      h('span', { class: 'stamp stamp--xs' }, '异'),
+      h('div', { class: 'dc-rule-row__body' },
+        h('b', {}, r.name),
+        h('p', {}, r.desc)))));
+
+  const rewardCard = h('div', { class: `dc-reward${st.rewardedToday ? ' is-claimed' : ''}` },
+    h('div', { class: 'dc-reward__left' },
+      h('span', { class: 'dc-reward__title' }, st.rewardedToday ? '今日首局重赏已入账' : '今日首局出更重赏'),
+      h('p', { class: 'dc-reward__desc' }, st.rewardedToday
+        ? `今日最高异事分：${formatCoins(st.todayBestScore)} 分（可反复试手刷新排名）`
+        : `铜钱 ${st.firstReward.coins} · 周分 +${st.firstReward.weeklyPoints} · 令火 +${st.firstReward.seasonXp}`)),
+    st.rewardedToday ? h('span', { class: 'stamp stamp--sm' }, '押') : null);
+
+  function closeModal() {
+    v?.close();
+    opts.onClose?.();
+  }
+
+  const startBtn = sealButton(st.rewardedToday ? '再次试手冲榜' : '出更今日异事', () => {
+    closeModal();
+    onStartChallenge(st);
+  }, {
+    cls: 'btn--wide',
+    dataset: { action: 'start-daily-challenge' },
+  });
+
+  const footerBtns = [startBtn];
+  if (typeof onOpenBoard === 'function') {
+    footerBtns.push(sealButton('查看每日异事榜', () => {
+      closeModal();
+      onOpenBoard();
+    }, {
+      kind: 'small',
+      cls: 'btn--wide',
+      dataset: { action: 'open-daily-board' },
+    }));
+  }
+  footerBtns.push(sealButton('合卷回去', closeModal, {
+    kind: 'ghost',
+    cls: 'btn--wide',
+    dataset: { action: 'close-daily-challenge' },
+  }));
+
+  v = veil(root, scroll({
+    title: '今日异事',
+    sub: `${st.date} · 全服同种共战一局`,
+    cls: 'scroll--dialog scroll--tall daily-challenge-modal',
+    body: h('div', { class: 'dc-body' }, heroCard, rulesBox, rewardCard),
+    footer: footerBtns,
+  }), { onBackdrop: closeModal });
+
+  return { close: closeModal };
+}
+
+
