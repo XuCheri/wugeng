@@ -41,9 +41,15 @@ import {
   buildSquadSummary,
 } from './coop.js';
 import { computeRunHash } from './hash.js';
+import { MAPS, MAP_IDS, normalizeMapId, getMapConfig, isRiverWater, isWoodenBridge } from './maps.js';
 
 export {
   DT,
+  MAPS,
+  MAP_IDS,
+  normalizeMapId,
+  isRiverWater,
+  isWoodenBridge,
   getEvolutionRecipe,
   canEvolve,
   describeUpgrade,
@@ -124,6 +130,7 @@ export function createRun(rawOpts = {}) {
     startWeapon = null,
     unlockedWeapons = null,
     nightLevel = 0,
+    mapId = 'qingshi',
     meta = {},
     charm = null,
     coop = null,
@@ -144,11 +151,13 @@ export function createRun(rawOpts = {}) {
   }
 
   nightLevel = sanitizeNightLevel(nightLevel);
+  const cleanMapId = normalizeMapId(coop && typeof coop === 'object' && coop.mapId ? coop.mapId : mapId);
   const seedNum = typeof seed === 'number' && Number.isFinite(seed) ? seed >>> 0 : hashSeed(seed);
   const metaB = sanitizeMetaBonuses(meta);
   const cleanRules = sanitizeRunRules(runRules);
   const run = {
     seed,
+    mapId: cleanMapId,
     heroId,
     startWeapon: chosenStartWeapon,
     signatureStart: isHeroSignatureWeapon(heroId, chosenStartWeapon),
@@ -734,7 +743,8 @@ export function computeRunScore(run, clearedArg) {
     lv * SCORE_TUNING.perLevel +
     revivesDone * SCORE_TUNING.perCoopRevive +
     (isCleared ? SCORE_TUNING.clearBonus : 0);
-  const mul = 1 + SCORE_TUNING.nightBonusPerLv * nightLv;
+  const mapMul = getMapConfig(run.mapId).scoreMul || 1;
+  const mul = (1 + SCORE_TUNING.nightBonusPerLv * nightLv) * mapMul;
   const scaled = raw * mul;
   if (Number.isNaN(scaled) || scaled <= 0) return 0;
   if (scaled === Infinity) return SCORE_TUNING.maxScore;
@@ -746,6 +756,7 @@ export function endRun(run, clearedArg) {
   if (!run || typeof run !== 'object') {
     const cleared = Boolean(clearedArg);
     return {
+      mapId: 'qingshi',
       heroId: 'zhou',
       startWeapon: 'gong',
       signatureStart: true,
@@ -858,6 +869,7 @@ export function endRun(run, clearedArg) {
 
   run._ended = true;
   return {
+    mapId: normalizeMapId(run.mapId),
     heroId: safeHeroId,
     startWeapon: safeStartWeapon,
     signatureStart: run.signatureStart !== undefined ? !!run.signatureStart : isHeroSignatureWeapon(safeHeroId, safeStartWeapon),

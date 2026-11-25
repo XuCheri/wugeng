@@ -168,6 +168,7 @@ export function createGame({
       startWeapon = null,
       unlockedWeapons = null,
       nightLevel = 0,
+      mapId = 'qingshi',
       meta = {},
       charm = null,
       seed,
@@ -177,7 +178,7 @@ export function createGame({
       runRules = null,
     } = {}) {
       const s = seed ?? ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
-      run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, meta, charm, coop, runRules });
+      run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, mapId, meta, charm, coop, runRules });
       if (coop && typeof coop === 'object') {
         if (coop.lockstep) run._coopLockstep = true;
         if (Number.isInteger(coop.mySlot) && coop.mySlot >= 0) run._localSlot = coop.mySlot;

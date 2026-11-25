@@ -4,6 +4,7 @@ import { PLAYER_BASE, HEROES, WEAPONS, ULT, DAMAGE, xpForLevel, cooldownMul, dam
 import { relicTotals } from './relics.js';
 import { syncSynergies, synergyStatMods } from './synergies.js';
 import { computeBlessingMods, BLESSING_TUNING } from './blessings.js';
+import { terrainMoveMul, isRiverWater } from './maps.js';
 import { clamp } from '../core/math.js';
 
 export function createPlayer(heroId, extra = {}) {
@@ -256,13 +257,15 @@ export function updatePlayer(run, input, dt) {
   const rawSlow = run._auraSlow ?? 1;
   const resist = clamp(run.mods?.slowResist || 0, 0, 0.9);
   const effSlow = rawSlow < 1 ? 1 - (1 - rawSlow) * (1 - resist) : rawSlow;
-  const spd = p.speed * effSlow;
+  const waterMul = terrainMoveMul(run.mapId, p.x, p.y, run._seedNum, resist);
+  const spd = p.speed * effSlow * waterMul;
   const dx = mx * spd * dt;
   const dy = my * spd * dt;
   p.vx = dt > 0 ? dx / dt : 0;
   p.vy = dt > 0 ? dy / dt : 0;
   p.x += dx;
   p.y += dy;
+  p.inWater = run.mapId === 'hedeng' && isRiverWater(p.x, p.y, run._seedNum);
 
   if (p.moving && (run.mods?.watchmanStepStacks || 0) > 0) {
     const stepDist = BLESSING_TUNING.watchman_step.stepDist;

@@ -1752,8 +1752,33 @@ function drawArch(g) {
   roof(0, -116, 30, 11);
 }
 
+function drawRiverLantern(g) {
+  // 漂浮河灯：水波墨圈 + 宣纸莲瓣托 + 朱砂花边 + 暖金灯芯火苗
+  ink(g, 1.1, inkA(0.45));
+  ell(g, 0, -2, 13, 5.5);
+  g.stroke();
+  // 底座木托
+  poly(g, [[-8, -4], [8, -4], [6, -1], [-6, -1]]);
+  fs(g, INK, 1.1);
+  // 外圈朱红莲瓣
+  for (const dx of [-7, 0, 7]) {
+    poly(g, [[dx - 4.5, -4], [dx, -14], [dx + 4.5, -4]]);
+    fs(g, dx === 0 ? PAPER : VERM, 1.1);
+  }
+  // 内层宣纸灯盏与暖金火芯
+  poly(g, [[-5, -5], [-3.5, -15], [3.5, -15], [5, -5]]);
+  fs(g, PAPER, 1.15);
+  circ(g, 0, -10.5, 3.2);
+  g.fillStyle = LANTERN;
+  g.fill();
+  circ(g, 0, -11.2, 1.4);
+  g.fillStyle = VERM;
+  g.fill();
+}
+
 const PROP_DEFS = {
   lanternpost: { w: 34, h: 66, ax: 12, ay: 62, draw: drawLanternpost },
+  riverlantern: { w: 32, h: 28, ax: 16, ay: 22, draw: drawRiverLantern },
   well: { w: 60, h: 58, ax: 30, ay: 38, draw: drawWell },
   arch: { w: 150, h: 140, ax: 75, ay: 132, draw: drawArch },
 };

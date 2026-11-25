@@ -105,6 +105,14 @@ function ensureUnlockSave(save) {
   st.totalEvents = safeInt(st.totalEvents, 1e9);
 
   if (!isPlainObj(save.achievements)) save.achievements = {};
+  if (Array.isArray(save.mapsUnlocked) && canMutateArray(save.mapsUnlocked)) {
+    if (!save.mapsUnlocked.includes('qingshi')) save.mapsUnlocked.unshift('qingshi');
+  } else if (save.mapsUnlocked === undefined && canWriteProp(save, 'mapsUnlocked')) {
+    save.mapsUnlocked = ['qingshi'];
+  }
+  if (!isPlainObj(save.clearsByMap) && save.clearsByMap === undefined && canWriteProp(save, 'clearsByMap')) {
+    save.clearsByMap = {};
+  }
 }
 
 /**
@@ -189,7 +197,7 @@ function syncUnlockedHeroSignatureWeapons(save) {
   }
 }
 
-/** 判定并写入 save，返回本次新解锁的列表 [{ kind: 'hero'|'night', id }]。 */
+/** 判定并写入 save，返回本次新解锁的列表 [{ kind: 'hero'|'night'|'map', id }]。 */
 export function evaluateUnlocks(save, summary) {
   const out = [];
   if (!canMutateUnlockSave(save) || !isPlainObj(summary)) return out;
@@ -208,6 +216,16 @@ export function evaluateUnlocks(save, summary) {
   syncUnlockedHeroSignatureWeapons(save);
 
   if (summary.cleared) {
+    const explicitMap = typeof summary.mapId === 'string';
+    const clearedMapId = summary.mapId === 'hedeng' ? 'hedeng' : 'qingshi';
+    if (isPlainObj(save.clearsByMap) && canMutateObj(save.clearsByMap) && canWriteProp(save.clearsByMap, clearedMapId)) {
+      save.clearsByMap[clearedMapId] = Math.min(1e9, safeInt(save.clearsByMap[clearedMapId], 1e9) + 1);
+    }
+    if (clearedMapId === 'qingshi' && Array.isArray(save.mapsUnlocked) && canMutateArray(save.mapsUnlocked) && !save.mapsUnlocked.includes('hedeng')) {
+      save.mapsUnlocked.push('hedeng');
+      if (explicitMap) out.push({ kind: 'map', id: 'hedeng' });
+    }
+
     const rawNight = toFiniteNumber(summary.nightLevel);
     const n = Number.isFinite(rawNight) ? Math.max(0, Math.min(NIGHT_MAX, Math.floor(rawNight))) : 0;
     if (n > save.nightCleared) save.nightCleared = n;

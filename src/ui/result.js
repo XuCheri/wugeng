@@ -4,6 +4,7 @@ import { applyStagger } from './motion.js';
 import { icon } from './icons.js';
 import { heroInfo, weaponName, relicName, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
 import { canShowResultDouble } from '../ads/ad-policy.js';
+import { MAPS } from '../sim/maps.js';
 
 /**
  * opts: { summary, recorded: { coins, unlocks, achievements }, nextGoal?, getNextGoal?(),
@@ -21,7 +22,8 @@ export function renderResult(root, opts) {
 
   const title = cleared && !endless ? '鸡鸣天亮' : endless ? '残夜守尽' : '灯灭了';
   const modeTag = isCoop ? `同守 ${s.coopSize || s.squad.length} 人` : heroInfo(s.heroId).short;
-  const sub = `${modeTag} · ${nightLabel(s.nightLevel || 0)} · ${endless ? '守进无尽' : cleared ? '守满五更' : `撑到${watchName(s.reachedWatch || 1)}`}`;
+  const mapPrefix = s.mapId === 'hedeng' ? `${MAPS.hedeng.name} · ` : '';
+  const sub = `${mapPrefix}${modeTag} · ${nightLabel(s.nightLevel || 0)} · ${endless ? '守进无尽' : cleared ? '守满五更' : `撑到${watchName(s.reachedWatch || 1)}`}`;
 
   const scoreBox = Number.isFinite(s.score)
     ? h('div', { class: 'result-score' },
@@ -126,8 +128,13 @@ export function renderResult(root, opts) {
 
   const unlockBox = h('div', { class: 'result-unlocks' });
   const unlocks = [
-    ...(recorded.unlocks || []).map((u) => (u.kind === 'hero'
-      ? `新打更人：${heroInfo(u.id).name}` : `${nightLabel(u.id)} 可选了`)),
+    ...(recorded.unlocks || []).map((u) => (
+      u.kind === 'hero'
+        ? `新打更人：${heroInfo(u.id).name}`
+        : u.kind === 'map'
+          ? `新地界：${MAPS[u.id]?.name || u.id}`
+          : `${nightLabel(u.id)} 可选了`
+    )),
     ...(recorded.achievements || []).slice(0, 4).map((a) => `达成功绩「${ACHIEVEMENT_NAMES[a] || a}」`).filter(Boolean),
   ];
   for (const t of unlocks) unlockBox.appendChild(h('p', { class: 'result-unlock' }, h('i', { class: 'stamp stamp--sm' }, '得'), t));

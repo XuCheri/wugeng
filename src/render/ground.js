@@ -1,6 +1,16 @@
 // ground.js —— 青石镇地面：石板街、窄巷、屋檐瓦影、街心石刻、竹叶纸钱，按区块程序生成并缓存
-import { INK, VERM, PAPER_SHADE, inkA, vermA, paperShadeA } from './palette.js';
+import { INK, VERM, LANTERN, PAPER_SHADE, inkA, vermA, lanternA, paperA, paperShadeA } from './palette.js';
 import { makeCanvas, makeRng, hash2, brushStroke } from './ink.js';
+import {
+  RIVER_GAP_Y,
+  RIVER_HALF_W,
+  BRIDGE_GAP_X,
+  BRIDGE_HALF_W,
+  SPAWN_DRY_RADIUS,
+  riverChannelYAt,
+  bridgeCenterX,
+  isInRiverChannel,
+} from '../sim/maps.js';
 
 export const CHUNK = 320;
 const STREET_GAP_Y = 460; // 横街间距（更密集的民俗街巷路网）
@@ -316,10 +326,213 @@ function drawChunk(cx, cy, seed, scale) {
   return c;
 }
 
+function drawChunkHedeng(cx, cy, seed, scale) {
+  // 河灯水口专属冷调靛蓝版画河岸（颜色仅局部于 hedeng 渲染，绝不改动 palette.RGB 与青石镇暖调）
+  const SHORE_WASH = 'rgba(28, 44, 64, 0.84)';
+  const SHORE_SLAB = 'rgba(38, 56, 78, 0.58)';
+  const WATER_DEEP = '#132336';
+  const WATER_MID = '#1B3450';
+  const WATER_WAVE = 'rgba(132, 176, 214, 0.28)';
+  const PLANK_FILL = '#6B4C32';
+  const PLANK_LIGHT = 'rgba(224, 210, 180, 0.28)';
+
+  const c = makeCanvas(CHUNK * scale, CHUNK * scale);
+  const g = c.getContext('2d');
+  g.scale(scale, scale);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const x0 = cx * CHUNK;
+  const y0 = cy * CHUNK;
+
+  // 1. 靛蓝夜岸底色罩染
+  g.fillStyle = SHORE_WASH;
+  g.fillRect(0, 0, CHUNK, CHUNK);
+
+  // 2. 河岸青灰石板与芦草碎石（避开河槽）
+  const G = 56;
+  const gx0 = Math.floor((x0 - 20) / G);
+  const gx1 = Math.floor((x0 + CHUNK + 20) / G);
+  const gy0 = Math.floor((y0 - 20) / G);
+  const gy1 = Math.floor((y0 + CHUNK + 30) / G);
+  for (let gy = gy0; gy <= gy1; gy++) {
+    for (let gx = gx0; gx <= gx1; gx++) {
+      const rng = makeRng(hash2(gx, gy, seed + 613));
+      const wx = gx * G + rng() * G;
+      const wy = gy * G + rng() * G;
+      if (isInRiverChannel(wx, wy, seed)) continue;
+      const lx = wx - x0;
+      const ly = wy - y0;
+      const roll = rng();
+      if (roll < 0.34) {
+        g.fillStyle = SHORE_SLAB;
+        const sw = 18 + rng() * 14;
+        const sh = 11 + rng() * 8;
+        g.fillRect(lx, ly, sw, sh);
+        g.strokeStyle = inkA(0.42);
+        g.lineWidth = 1.05;
+        slabOutline(g, lx, ly, sw, sh, rng);
+      } else if (roll < 0.56) {
+        drawTuft(g, lx, ly, 8 + rng() * 5, rng);
+      } else if (roll < 0.66) {
+        drawPebble(g, lx, ly, 1.8 + rng() * 2.2, rng);
+      }
+    }
+  }
+
+  // 3. 蜿蜒夜河水道（深靛河床 + 中流暗涌 + 木刻水纹与暖黄灯影）
+  const k0 = Math.floor((y0 - 175 - RIVER_HALF_W - 36) / RIVER_GAP_Y) - 1;
+  const k1 = Math.ceil((y0 + CHUNK - 175 + RIVER_HALF_W + 36) / RIVER_GAP_Y) + 1;
+  const stepX = 16;
+
+  for (let k = k0; k <= k1; k++) {
+    const sampleMid = riverChannelYAt(x0 + CHUNK * 0.5, k, seed);
+    if (sampleMid + RIVER_HALF_W + 42 < y0 || sampleMid - RIVER_HALF_W - 42 > y0 + CHUNK) continue;
+
+    const topPts = [];
+    const botPts = [];
+    const midTopPts = [];
+    const midBotPts = [];
+    for (let lx = -16; lx <= CHUNK + 16; lx += stepX) {
+      const wx = x0 + lx;
+      const cyR = riverChannelYAt(wx, k, seed);
+      topPts.push([lx, cyR - RIVER_HALF_W - y0]);
+      botPts.push([lx, cyR + RIVER_HALF_W - y0]);
+      midTopPts.push([lx, cyR - RIVER_HALF_W * 0.52 - y0]);
+      midBotPts.push([lx, cyR + RIVER_HALF_W * 0.52 - y0]);
+    }
+
+    g.fillStyle = WATER_DEEP;
+    g.beginPath();
+    g.moveTo(topPts[0][0], topPts[0][1]);
+    for (let i = 1; i < topPts.length; i++) g.lineTo(topPts[i][0], topPts[i][1]);
+    for (let i = botPts.length - 1; i >= 0; i--) g.lineTo(botPts[i][0], botPts[i][1]);
+    g.closePath();
+    g.fill();
+
+    g.fillStyle = WATER_MID;
+    g.beginPath();
+    g.moveTo(midTopPts[0][0], midTopPts[0][1]);
+    for (let i = 1; i < midTopPts.length; i++) g.lineTo(midTopPts[i][0], midTopPts[i][1]);
+    for (let i = midBotPts.length - 1; i >= 0; i--) g.lineTo(midBotPts[i][0], midBotPts[i][1]);
+    g.closePath();
+    g.fill();
+
+    // 水面波纹与暖灯倒影碎金
+    const wRng = makeRng(hash2(cx, cy * 13 + k, seed + 907));
+    for (let w = 0; w < 18; w++) {
+      const lx = -6 + wRng() * (CHUNK + 12);
+      const wx = x0 + lx;
+      const cyR = riverChannelYAt(wx, k, seed);
+      const wy = cyR + (wRng() - 0.5) * (RIVER_HALF_W * 1.55);
+      if (wx * wx + wy * wy < SPAWN_DRY_RADIUS * SPAWN_DRY_RADIUS) continue;
+      const ly = wy - y0;
+      const len = 14 + wRng() * 26;
+      g.strokeStyle = wRng() < 0.22 ? lanternA(0.24) : WATER_WAVE;
+      g.lineWidth = 1.15;
+      g.beginPath();
+      g.moveTo(lx, ly);
+      g.quadraticCurveTo(lx + len * 0.5, ly + (wRng() - 0.5) * 3.5, lx + len, ly);
+      g.stroke();
+    }
+
+    // 两岸墨色驳岸石线
+    g.strokeStyle = INK;
+    g.lineWidth = 2.1;
+    for (const edge of [topPts, botPts]) {
+      g.beginPath();
+      g.moveTo(edge[0][0], edge[0][1]);
+      for (let i = 1; i < edge.length; i++) g.lineTo(edge[i][0], edge[i][1]);
+      g.stroke();
+    }
+    g.strokeStyle = paperA(0.16);
+    g.lineWidth = 1;
+    for (const edge of [topPts, botPts]) {
+      g.beginPath();
+      g.moveTo(edge[0][0], edge[0][1] + (edge === topPts ? 2.5 : -2.5));
+      for (let i = 1; i < edge.length; i++) g.lineTo(edge[i][0], edge[i][1] + (edge === topPts ? 2.5 : -2.5));
+      g.stroke();
+    }
+
+    // 4. 横跨夜河的木板桥（不减速的安全走廊，醒目暖木纹理 + 四角引路灯桩）
+    const b0 = Math.floor((x0 - BRIDGE_HALF_W - 48) / BRIDGE_GAP_X) - 1;
+    const b1 = Math.ceil((x0 + CHUNK + BRIDGE_HALF_W + 48) / BRIDGE_GAP_X) + 1;
+    for (let b = b0; b <= b1; b++) {
+      const bxWorld = bridgeCenterX(b, k, seed);
+      const bx = bxWorld - x0;
+      if (bx + BRIDGE_HALF_W + 16 < 0 || bx - BRIDGE_HALF_W - 16 > CHUNK) continue;
+      const cyBridge = riverChannelYAt(bxWorld, k, seed) - y0;
+      const bTop = cyBridge - RIVER_HALF_W - 10;
+      const bBot = cyBridge + RIVER_HALF_W + 10;
+      const bH = bBot - bTop;
+      const bLeft = bx - BRIDGE_HALF_W;
+      const bW = BRIDGE_HALF_W * 2;
+
+      // 桥底浓墨阴影
+      g.fillStyle = inkA(0.55);
+      g.fillRect(bLeft - 3, bTop + 2, bW + 6, bH);
+
+      // 桥面木板底色
+      g.fillStyle = PLANK_FILL;
+      g.fillRect(bLeft, bTop, bW, bH);
+
+      // 横向木板拼缝与浅木高光
+      const plankStep = 9;
+      g.strokeStyle = INK;
+      g.lineWidth = 1.25;
+      for (let py = bTop + plankStep; py < bBot - 2; py += plankStep) {
+        g.beginPath();
+        g.moveTo(bLeft + 1, py);
+        g.lineTo(bLeft + bW - 1, py);
+        g.stroke();
+      }
+      g.fillStyle = PLANK_LIGHT;
+      g.fillRect(bLeft + 4, bTop + 2, 5, bH - 4);
+      g.fillRect(bLeft + bW - 9, bTop + 2, 5, bH - 4);
+
+      // 两侧木栏纵梁与四角暖灯柱头
+      g.strokeStyle = INK;
+      g.lineWidth = 2.4;
+      g.strokeRect(bLeft, bTop, bW, bH);
+      for (const px of [bLeft + 2, bLeft + bW - 2]) {
+        for (const py of [bTop + 3, bBot - 3]) {
+          g.fillStyle = VERM;
+          g.beginPath();
+          g.arc(px, py, 3.6, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = LANTERN;
+          g.beginPath();
+          g.arc(px, py, 1.8, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+  }
+
+  // 5. 出生点干爽石砌码头圆台（若本区块覆盖原点附近）
+  if (x0 <= SPAWN_DRY_RADIUS + 20 && x0 + CHUNK >= -SPAWN_DRY_RADIUS - 20 &&
+      y0 <= SPAWN_DRY_RADIUS + 20 && y0 + CHUNK >= -SPAWN_DRY_RADIUS - 20) {
+    const ox = -x0;
+    const oy = -y0;
+    g.fillStyle = 'rgba(42, 58, 78, 0.92)';
+    g.beginPath();
+    g.arc(ox, oy, SPAWN_DRY_RADIUS, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(ox, oy, SPAWN_DRY_RADIUS, 0, Math.PI * 2);
+    g.stroke();
+    drawIntersectionMedallion(g, ox, oy);
+  }
+
+  return c;
+}
+
 /** 地面区块缓存（LRU） */
 export function createGround(seed = 1) {
   const chunks = new Map();
   let scale = 2;
+  let mapId = 'qingshi';
   const MAX = 28;
   return {
     setScale(s) {
@@ -334,6 +547,13 @@ export function createGround(seed = 1) {
         chunks.clear();
       }
     },
+    setMap(nextMapId) {
+      const clean = nextMapId === 'hedeng' ? 'hedeng' : 'qingshi';
+      if (clean !== mapId) {
+        mapId = clean;
+        chunks.clear();
+      }
+    },
     /** 在世界坐标系下绘制可见区域 [vx, vy, vw, vh] */
     draw(ctx, vx, vy, vw, vh) {
       const cx0 = Math.floor(vx / CHUNK);
@@ -342,10 +562,10 @@ export function createGround(seed = 1) {
       const cy1 = Math.floor((vy + vh) / CHUNK);
       for (let cy = cy0; cy <= cy1; cy++) {
         for (let cx = cx0; cx <= cx1; cx++) {
-          const key = cx + ',' + cy;
+          const key = mapId + ':' + cx + ',' + cy;
           let c = chunks.get(key);
           if (!c) {
-            c = drawChunk(cx, cy, seed, scale);
+            c = mapId === 'hedeng' ? drawChunkHedeng(cx, cy, seed, scale) : drawChunk(cx, cy, seed, scale);
             chunks.set(key, c);
             if (chunks.size > MAX) chunks.delete(chunks.keys().next().value);
           } else {

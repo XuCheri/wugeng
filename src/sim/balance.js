@@ -771,7 +771,11 @@ export const PROPS = {
   lanternpostR: 12,
   wellR: 22,
   archR: 30,
+  riverlanternR: 13,
   lanternpostHp: 1,
+  riverlanternHp: 1,
+  riverlanternMax: 5,
+  riverlanternXp: 5,
   safeRadius: 120, // 出生点附近不放道具
   // 灯笼柱掉落
   drop: { bun: 0.42, coin: 0.43, banner: 0.15 },

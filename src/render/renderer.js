@@ -164,6 +164,7 @@ export function createRenderer(canvas, opts = {}) {
   let darkCtx = null;
   const DARK_DOWN = 4;
   let groundSeed = null;
+  let groundMapId = 'qingshi';
   const drawList = [];
   const pmLast = new Map();
 
@@ -2070,6 +2071,11 @@ export function createRenderer(canvas, opts = {}) {
     clock += dt;
     fx.setAttackVfx(run.player.attackVfx || settings.cosmetics?.attackVfx || 'default');
     fx.update(dt);
+    const activeMapId = run.mapId === 'hedeng' ? 'hedeng' : 'qingshi';
+    if (groundMapId !== activeMapId) {
+      groundMapId = activeMapId;
+      ground.setMap(activeMapId);
+    }
     if (groundSeed !== run.seed) {
       groundSeed = run.seed;
       ground.setSeed((run.seed >>> 0) || 1);
@@ -2160,11 +2166,21 @@ export function createRenderer(canvas, opts = {}) {
 
     // y 排序：场景物件 + 奇遇建筑 + 敌人 + 主控守夜人 + 协战道友
     drawList.length = 0;
+    let allyScreenLights = null;
     const props = run.props || [];
+    let riverLightCount = 0;
     for (let i = 0; i < props.length; i++) {
       const o = props[i];
       if (o.hp !== undefined && o.hp <= 0) continue;
-      if (inView(o.x, o.y, 160)) drawList.push({ t: 0, o, y: o.y, x: o.x });
+      if (inView(o.x, o.y, 160)) {
+        const bobY = o.kind === 'riverlantern' ? Math.sin(clock * 2.6 + (o.id % 19)) * 1.8 : 0;
+        drawList.push({ t: 0, o, y: o.y + bobY, x: o.x });
+        if (o.kind === 'riverlantern' && riverLightCount < 8) {
+          if (!allyScreenLights) allyScreenLights = [];
+          allyScreenLights.push({ x: o.x + ox, y: o.y - 6 + bobY + oy, r: 42 });
+          riverLightCount++;
+        }
+      }
     }
     const shrines = run.shrines || [];
     for (let i = 0; i < shrines.length; i++) {
@@ -2181,9 +2197,8 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(x, y, e.boss || e.warder ? 220 : M)) drawList.push({ t: 1, o: e, y, x });
     }
     drawList.push({ t: 2, o: p, y: pyI, x: pxI });
-    let allyScreenLights = null;
     if (party) {
-      allyScreenLights = [];
+      if (!allyScreenLights) allyScreenLights = [];
       for (let idx = 1; idx < party.length; idx++) {
         const ally = party[idx];
         if (!ally) continue;

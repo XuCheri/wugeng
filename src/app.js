@@ -420,6 +420,7 @@ export async function startApp(bootOpts = {}) {
     startWeapon = null,
     unlockedWeapons = null,
     nightLevel = 0,
+    mapId = null,
     charm = null,
     seed,
     coop: coopParty = null,
@@ -439,11 +440,17 @@ export async function startApp(bootOpts = {}) {
     const chosenPool = unlockedWeapons
       ?? (Array.isArray(save.unlockedWeapons) ? save.unlockedWeapons : null);
     const effectiveRules = runRules || (!coopParty ? buildSeasonRunRules(save, new Date()) : null);
+    const chosenMap = effectiveRules?.mode === 'daily'
+      ? 'qingshi'
+      : (mapId === 'hedeng' || mapId === 'qingshi')
+        ? mapId
+        : (Array.isArray(save.mapsUnlocked) && save.mapsUnlocked.includes(save.selectedMap) ? save.selectedMap : 'qingshi');
     lastStart = {
       heroId,
       startWeapon: chosenStart,
       unlockedWeapons: chosenPool,
       nightLevel,
+      mapId: chosenMap,
       seed: effectiveRules?.mode === 'daily' ? seed : undefined,
       runRules: effectiveRules?.mode === 'daily' ? effectiveRules : null,
     };
@@ -457,6 +464,7 @@ export async function startApp(bootOpts = {}) {
       startWeapon: chosenStart,
       unlockedWeapons: chosenPool,
       nightLevel,
+      mapId: chosenMap,
       meta: getMetaBonuses(save),
       charm,
       seed,

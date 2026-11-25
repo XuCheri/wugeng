@@ -8,7 +8,9 @@ import {
   cosmeticShopSpent,
 } from './cosmetics.js';
 import { SEASONS, SEASONS_BY_ID, SEASON_TITLE_IDS } from './season-config.js';
+import { MAP_IDS } from '../sim/maps.js';
 
+export { MAP_IDS };
 export const SAVE_KEY = 'wugeng.save';
 export const SAVE_VERSION = 4;
 export const COACH_KEYS = ['firstLevelUp', 'firstChest', 'firstUltReady', 'firstEvolve', 'firstElite'];
@@ -177,6 +179,9 @@ export function defaultSave() {
     nightUnlocked: 0,     // 可选的最高夜色（0 = 寻常夜）
     nightCleared: -1,     // 已通关的最高夜色，-1 = 从未通关
     selectedNight: 0,
+    mapsUnlocked: ['qingshi'],
+    selectedMap: 'qingshi',
+    clearsByMap: {},
     achievements: {},     // { id: 首次达成的时间戳 }
     achievementClaims: [],
     codex: defaultCodex(),
@@ -500,6 +505,30 @@ export function migrateSave(raw) {
     out.stats.totalEvents = int(s.totalEvents, 0, 0, 1e9);
   }
 
+  const cbm = {};
+  if (isObj(src.clearsByMap)) {
+    for (const mid of MAP_IDS) {
+      const cnt = int(src.clearsByMap[mid], 0, 0, 1e9);
+      if (cnt > 0) cbm[mid] = cnt;
+    }
+  }
+  if (out.stats.clears > 0 && !cbm.qingshi && !cbm.hedeng) {
+    cbm.qingshi = out.stats.clears;
+  }
+  out.clearsByMap = cbm;
+
+  const mapSet = new Set(['qingshi']);
+  if (Array.isArray(src.mapsUnlocked)) {
+    for (const mid of src.mapsUnlocked) {
+      if (MAP_IDS.includes(mid)) mapSet.add(mid);
+    }
+  }
+  if (out.stats.clears > 0 || out.nightCleared >= 0 || (cbm.qingshi || 0) > 0) {
+    mapSet.add('hedeng');
+  }
+  out.mapsUnlocked = MAP_IDS.filter((mid) => mapSet.has(mid));
+  out.selectedMap = out.mapsUnlocked.includes(src.selectedMap) ? src.selectedMap : 'qingshi';
+
   if (isObj(src.leaderboard)) {
     const lb = src.leaderboard;
     out.leaderboard.bestScore = int(lb.bestScore, 0, 0, 1e12);
@@ -704,6 +733,7 @@ export function isFreshSave(s) {
     && (Array.isArray(s.charms) ? s.charms.length : 0) === 0
     && int(s.nightUnlocked, 0, 0, NIGHT_MAX) === 0
     && int(s.nightCleared, -1, -1, NIGHT_MAX) < 0
+    && (!Array.isArray(s.mapsUnlocked) || s.mapsUnlocked.every((m) => m === 'qingshi'))
     && (isObj(s.achievements) ? Object.keys(s.achievements).length : 0) === 0
     && (Array.isArray(s.achievementClaims) ? s.achievementClaims.length : 0) === 0
     && (Array.isArray(s.cosmetics?.owned) ? s.cosmetics.owned.length : 0) === 0
@@ -866,6 +896,25 @@ export function mergeSaves(localRaw, remoteRaw) {
     coopRevives: Math.max(a.stats.coopRevives, b.stats.coopRevives),
     totalEvents: Math.max(a.stats.totalEvents, b.stats.totalEvents),
   };
+
+  const mergedCbm = {};
+  for (const mid of MAP_IDS) {
+    const cnt = Math.max(a.clearsByMap?.[mid] || 0, b.clearsByMap?.[mid] || 0);
+    if (cnt > 0) mergedCbm[mid] = cnt;
+  }
+  if (merged.stats.clears > 0 && !mergedCbm.qingshi && !mergedCbm.hedeng) {
+    mergedCbm.qingshi = merged.stats.clears;
+  }
+  merged.clearsByMap = mergedCbm;
+
+  const mergedMapSet = new Set(['qingshi', ...(a.mapsUnlocked || []), ...(b.mapsUnlocked || [])]);
+  if (merged.stats.clears > 0 || merged.nightCleared >= 0 || (mergedCbm.qingshi || 0) > 0) {
+    mergedMapSet.add('hedeng');
+  }
+  merged.mapsUnlocked = MAP_IDS.filter((mid) => mergedMapSet.has(mid));
+  merged.selectedMap = merged.mapsUnlocked.includes(primary.selectedMap)
+    ? primary.selectedMap
+    : (merged.mapsUnlocked.includes(secondary.selectedMap) ? secondary.selectedMap : 'qingshi');
 
   const coachSeen = {};
   for (const k of COACH_KEYS) {

@@ -14,6 +14,7 @@ import {
   setHeroStarterWeapon,
 } from '../meta/save.js';
 import { isHeroSignatureWeapon } from '../sim/balance.js';
+import { MAPS, MAP_IDS, normalizeMapId } from '../sim/maps.js';
 import { getShopItems, getLevel, nextCost, buyLevel, describeLevel } from '../meta/shop.js';
 import { heroUnlockProgress } from '../meta/unlocks.js';
 import { getCheckinState, claimCheckin } from '../meta/checkin.js';
@@ -79,16 +80,18 @@ export function renderHub(root, ctx) {
     onClick: () => guardFeature('market', () => openMarket(getActiveHero())),
   });
   const dailyStripBox = h('div', { class: 'hub-daily-strip' });
+  const mapStripBox = h('div', { class: 'hub-map-strip', role: 'radiogroup', 'aria-label': '选地界' });
+  const stageTopBox = h('div', { class: 'hub-stage-top' }, dailyStripBox, mapStripBox);
   const heroSpotlightEl = h('div', { class: 'hero-spotlight' });
   const ribbonBox = h('div', { class: 'hub-ribbon', role: 'toolbar', 'aria-label': '更房要务' });
   const stageSection = h('section', { class: 'hub-stage-panel', 'aria-label': '守夜演武台' },
     h('div', { class: 'hero-stage' },
       stageCanvas,
-      dailyStripBox,
+      stageTopBox,
       heroSpotlightEl,
       ribbonBox));
 
-  // ── 3. 底部备战台（6人一排头像条 + 横滑兵刃架 + 夜色/护身符行 + 唯一主按钮）──
+  // ── 3. 底部备战台（单排头像条 + 横滑兵刃架 + 夜色/护身符行 + 唯一主按钮）──
   const heroRowEl = h('div', { class: 'hero-row', role: 'radiogroup', 'aria-label': '选打更人' });
   const starterHeadSubEl = h('span', { class: 'starter-sec__sub' });
   const starterGridEl = h('div', { class: 'starter-grid', role: 'radiogroup', 'aria-label': '自选起手兵刃' });
@@ -103,6 +106,7 @@ export function renderHub(root, ctx) {
         startWeapon: chosenStarter,
         unlockedWeapons: getRunWeaponPool(),
         nightLevel: n,
+        mapId: getActiveMap(),
         charm,
       });
     }, { cls: 'btn--wide btn--big hub-cta' }));
@@ -140,6 +144,16 @@ export function renderHub(root, ctx) {
       : 'zhou';
     save.selectedHero = activeHero;
     return activeHero;
+  }
+
+  function getActiveMap() {
+    const unlocked = Array.isArray(save.mapsUnlocked) && save.mapsUnlocked.length
+      ? save.mapsUnlocked
+      : ['qingshi'];
+    const cand = normalizeMapId(save.selectedMap);
+    const active = unlocked.includes(cand) ? cand : 'qingshi';
+    save.selectedMap = active;
+    return active;
   }
 
   function guardFeature(feature, action) {
@@ -331,7 +345,46 @@ export function renderHub(root, ctx) {
       pulseClass(heroSpotlightEl, 'is-popping', 240);
     }
 
-    // 2. 六守夜人单行精巧头像条
+    // 1.5 横向滑动地界画卷（青石镇 / 河灯水口）
+    const activeMap = getActiveMap();
+    const unlockedMaps = Array.isArray(save.mapsUnlocked) && save.mapsUnlocked.length
+      ? save.mapsUnlocked
+      : ['qingshi'];
+    clear(mapStripBox);
+    for (const mid of MAP_IDS) {
+      const mCfg = MAPS[mid];
+      const mUnlocked = unlockedMaps.includes(mid);
+      const mSel = activeMap === mid;
+      const subText = !mUnlocked
+        ? mCfg.unlockText
+        : mCfg.scoreMul > 1
+          ? `积分×${mCfg.scoreMul.toFixed(2)}`
+          : '古巷长街';
+      const card = h('button', {
+        type: 'button',
+        role: 'radio',
+        dataset: { mapId: mid },
+        'aria-checked': mSel ? 'true' : 'false',
+        class: `hub-map-card${mSel ? ' is-on' : ''}${mUnlocked ? '' : ' is-map-locked'}`,
+        onClick: () => {
+          if (!mUnlocked) {
+            toast(`未开放：${mCfg.unlockText}`);
+            return;
+          }
+          if (save.selectedMap === mid) return;
+          save.selectedMap = mid;
+          ctx.persist(false);
+          renderStart(true);
+          stageCtl?.triggerBurst();
+        },
+      },
+      h('i', { class: 'stamp stamp--xs' }, mCfg.stamp),
+      h('span', { class: 'hub-map-card__name' }, mCfg.name),
+      h('small', { class: 'hub-map-card__sub' }, subText));
+      mapStripBox.appendChild(card);
+    }
+
+    // 2. 守夜人单行精巧头像条
     clear(heroRowEl);
     for (const id of HERO_IDS) {
       const info = heroInfo(id);

@@ -467,6 +467,11 @@ export const APPLY_SAVE_PATCH_IN_PAGE = (target, patch) => {
   if (patch.nightUnlocked !== undefined) target.nightUnlocked = patch.nightUnlocked;
   if (patch.nightCleared !== undefined) target.nightCleared = patch.nightCleared;
   if (patch.selectedNight !== undefined) target.selectedNight = patch.selectedNight;
+  if (patch.mapsUnlocked) target.mapsUnlocked = [...patch.mapsUnlocked];
+  if (patch.selectedMap !== undefined) target.selectedMap = patch.selectedMap;
+  if (patch.clearsByMap && typeof patch.clearsByMap === 'object') {
+    target.clearsByMap = Object.assign({}, target.clearsByMap || {}, patch.clearsByMap);
+  }
   if (patch.charms) {
     target.charms = patch.charms.map((c) => (typeof c === 'string' ? { relicId: c } : c));
   }
@@ -1245,14 +1250,21 @@ export async function bootAndStartRun(page, baseUrl, opts = {}) {
   const startWeapon = opts.startWeapon ?? null;
   const unlockedWeapons = opts.unlockedWeapons ?? null;
   const nightLevel = opts.nightLevel ?? 0;
+  const mapId = opts.mapId ?? null;
   const charm = opts.charm ?? null;
   const seed = opts.seed ?? 12345;
   const coop = opts.coop ?? null;
   await page.evaluate(
-    ({ heroId: h, startWeapon: sw, unlockedWeapons: uw, nightLevel: n, charm: c, seed: s, coop: cp }) => {
+    ({ heroId: h, startWeapon: sw, unlockedWeapons: uw, nightLevel: n, mapId: mid, charm: c, seed: s, coop: cp }) => {
       const w = window.__wugeng;
       if (w?.save) {
         if (h) w.save.selectedHero = h;
+        if (mid) {
+          if (Array.isArray(w.save.mapsUnlocked) && !w.save.mapsUnlocked.includes(mid)) {
+            w.save.mapsUnlocked.push(mid);
+          }
+          w.save.selectedMap = mid;
+        }
         if (uw !== null && uw !== undefined) {
           w.save.unlockedWeapons = [...uw];
         }
@@ -1264,6 +1276,7 @@ export async function bootAndStartRun(page, baseUrl, opts = {}) {
         }
       }
       const runOpts = { heroId: h, nightLevel: n, charm: c, seed: s };
+      if (mid !== null && mid !== undefined) runOpts.mapId = mid;
       if (sw !== null && sw !== undefined) runOpts.startWeapon = sw;
       if (uw !== null && uw !== undefined) runOpts.unlockedWeapons = uw;
       if (cp !== null && cp !== undefined) runOpts.coop = cp;
@@ -1277,7 +1290,7 @@ export async function bootAndStartRun(page, baseUrl, opts = {}) {
       }
       window.__e2eStepFrames(1);
     },
-    { heroId, startWeapon, unlockedWeapons, nightLevel, charm, seed, coop },
+    { heroId, startWeapon, unlockedWeapons, nightLevel, mapId, charm, seed, coop },
   );
 }
 
