@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   ALL_ENEMY_IDS,
+  ALL_HERO_IDS,
   ALL_RELIC_IDS,
   ALL_WEAPON_IDS,
   ATTACK_VFX_IDS,
@@ -671,7 +672,7 @@ export const TIER4_TESTS = [
       try {
         await bootToHub(s.page, baseUrl, {
           savePatch: {
-            unlockedHeroes: HERO_IDS,
+            unlockedHeroes: ALL_HERO_IDS,
             codex: {
               weapons: ALL_WEAPON_IDS,
               evolutions: ALL_WEAPON_IDS,

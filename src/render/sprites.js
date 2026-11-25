@@ -433,6 +433,65 @@ function drawNuoxi(g, rng, f, outfit) {
   g.fill();
 }
 
+function drawWeier(g, rng, f, outfit) {
+  // 背后的破浪修竹杆 + 苇叶蓑肩（严格 6 色暖木版）
+  line(g, -9.5, -31, 3.5, -9, 1.7, INK);
+  heroLegs(g, f);
+  heroRobe(g, PAPER_SHADE, outfit);
+  poly(g, [[-6.8, -20.2], [6.8, -20.2], [8.8, -13.5], [-8.8, -13.5]]);
+  fs(g, PAPER, 1.0);
+  vfill(g, () => circ(g, 0, -19.2, 1.5));
+  // 头 + 斜插白芦 + 宽檐扁圆水笠
+  circ(g, 0, -22.2, 3.8);
+  fs(g, PAPER, 1.1);
+  line(g, 1.8, -25.5, 7.8, -32.5, 1.1, INK);
+  poly(g, [[5.2, -29.8], [9.2, -33.6], [9.6, -30.6], [5.8, -28.0]]);
+  fs(g, PAPER, 0.8);
+  g.beginPath();
+  g.moveTo(-9.6, -24.8);
+  g.quadraticCurveTo(0, -31.5, 9.6, -24.8);
+  g.quadraticCurveTo(0, -23.4, -9.6, -24.8);
+  g.closePath();
+  fs(g, PAPER_SHADE, 1.2);
+  g.fillStyle = INK;
+  circ(g, 1.5, -21.4, 0.6);
+  g.fill();
+  circ(g, -1.2, -21.4, 0.6);
+  g.fill();
+}
+
+function drawQiansuanzi(g, rng, f, outfit) {
+  // 背后的乌木框黄铜算盘背饰（严格 6 色暖木版）
+  poly(g, [[-9.2, -24.5], [-2.5, -24.5], [-2.5, -13.5], [-9.2, -13.5]]);
+  fs(g, INK, 1.1);
+  poly(g, [[-8.2, -23.2], [-3.5, -23.2], [-3.5, -14.8], [-8.2, -14.8]]);
+  fs(g, LANTERN, 0.8);
+  heroLegs(g, f);
+  heroRobe(g, INK, outfit);
+  // 宣纸对襟马褂边 + 腰悬铜钱串
+  ink(g, 1.1, PAPER_SHADE);
+  g.beginPath();
+  g.moveTo(0, -20);
+  g.lineTo(0, -7);
+  g.stroke();
+  circ(g, 3.8, -11.5, 1.6);
+  fs(g, LANTERN, 0.7);
+  // 头 + 圆框老花铜镜 + 账房黑布小帽朱顶
+  circ(g, 0, -22.2, 3.8);
+  fs(g, PAPER, 1.1);
+  circ(g, -1.5, -21.4, 1.3);
+  fs(g, PAPER_SHADE, 0.7);
+  circ(g, 1.6, -21.4, 1.3);
+  fs(g, PAPER_SHADE, 0.7);
+  g.beginPath();
+  g.moveTo(-4.4, -24.2);
+  g.quadraticCurveTo(-4.2, -29.8, 0, -29.8);
+  g.quadraticCurveTo(4.2, -29.8, 4.4, -24.2);
+  g.closePath();
+  fs(g, INK, 1.1);
+  vfill(g, () => circ(g, 0, -30.8, 1.3));
+}
+
 /** 手提灯笼（单独精灵，运行时以手为轴摆动） */
 function drawHandLantern(g, style = null) {
   line(g, 0, 0, 0, 2.6, 0.8);
@@ -476,6 +535,8 @@ const HEROES = {
   yinyang: drawYinyang,
   tiejiang: drawTiejiang,
   nuoxi: drawNuoxi,
+  weier: drawWeier,
+  qiansuanzi: drawQiansuanzi,
 };
 
 export function heroSprite(heroId, frame = 0, flash = false, outfit = null, skinId = null) {
@@ -2672,6 +2733,43 @@ const PROJ_DEFS = {
   skyLanternEvo: { w: 26, h: 32, ax: 13, ay: 16, draw: (g) => drawSkyLanternProj(g, true) },
   luopanSlip: { w: 34, h: 10, ax: 17, ay: 5, draw: (g) => drawLuopanSlipProj(g, false) },
   luopanSlipEvo: { w: 36, h: 12, ax: 18, ay: 6, draw: (g) => drawLuopanSlipProj(g, true) },
+  bambooWave: {
+    w: 36, h: 48, ax: 16, ay: 24,
+    draw: (g) => {
+      brushStroke(g, arcPoints(-6, 0, 18, -1.15, 1.15, 0.08), 8, { color: PAPER, seed: 611, dry: 0.35 });
+      brushStroke(g, arcPoints(-4, 0, 20, -0.95, 0.95, 0.09), 3.6, { color: INK, seed: 613, dry: 0.4 });
+    },
+  },
+  bambooWaveEvo: {
+    w: 42, h: 54, ax: 19, ay: 27,
+    draw: (g) => {
+      brushStroke(g, arcPoints(-6, 0, 21, -1.2, 1.2, 0.07), 9.5, { color: PAPER, seed: 617, dry: 0.3 });
+      brushStroke(g, arcPoints(-3, 0, 23, -1.0, 1.0, 0.08), 4.2, { color: LANTERN, seed: 619, dry: 0.35 });
+      brushStroke(g, arcPoints(-8, 0, 16, -0.8, 0.8, 0.09), 3.2, { color: VERM, seed: 623, dry: 0.35 });
+    },
+  },
+  abacusBead: {
+    w: 20, h: 20, ax: 10, ay: 10,
+    draw: (g) => {
+      poly(g, [[0, -8], [8, 0], [0, 8], [-8, 0]]);
+      fs(g, LANTERN, 1.2);
+      circ(g, 0, 0, 2.4);
+      g.fillStyle = INK;
+      g.fill();
+    },
+  },
+  abacusBeadEvo: {
+    w: 24, h: 24, ax: 12, ay: 12,
+    draw: (g) => {
+      poly(g, [[0, -10], [10, 0], [0, 10], [-10, 0]]);
+      fs(g, LANTERN, 1.3);
+      poly(g, [[0, -5.5], [5.5, 0], [0, 5.5], [-5.5, 0]]);
+      fs(g, VERM, 0.9);
+      circ(g, 0, 0, 2.0);
+      g.fillStyle = PAPER;
+      g.fill();
+    },
+  },
 };
 
 export function projSprite(name) {

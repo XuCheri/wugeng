@@ -200,7 +200,7 @@ test('T5-04: lockedChoice 跨守夜命签保留、rerollChoices 模式隔离、b
   assert.equal(r.banishesLeft, 0);
   assert.equal(banishChoice(r, 1), false);
 
-  r.banishesLeft = 40;
+  r.banishesLeft = 60;
   while (r.choices.some((c) => c.kind === 'weapon' || c.kind === 'relic')) {
     const idx = r.choices.findIndex((c) => c.kind === 'weapon' || c.kind === 'relic');
     assert.equal(banishChoice(r, idx), true);

@@ -210,6 +210,7 @@ export function createRun(rawOpts = {}) {
       ultsCast: 0,
       coopRevives: 0,
       eventsCompleted: 0,
+      xpOrbsCollected: 0,
     },
     events: [],
     // ↓ 内部状态
@@ -856,6 +857,7 @@ export function endRun(run, clearedArg) {
   }
   const maxCombo = Number.isFinite(st.maxCombo) && st.maxCombo > 0 ? Math.min(1e9, Math.floor(st.maxCombo)) : 0;
   const eventsCompleted = Number.isFinite(st.eventsCompleted) && st.eventsCompleted > 0 ? Math.min(1e6, Math.floor(st.eventsCompleted)) : 0;
+  const xpOrbsCollected = Number.isFinite(st.xpOrbsCollected) && st.xpOrbsCollected > 0 ? Math.min(1e9, Math.floor(st.xpOrbsCollected)) : 0;
   const squad = buildSquadSummary(run);
   const coopSize = squad.length;
   const revivesDone = squad.reduce((s, m) => s + m.revivesDone, 0);
@@ -897,6 +899,7 @@ export function endRun(run, clearedArg) {
     maxSynergyTier,
     bossKills,
     eventsCompleted,
+    xpOrbsCollected,
     score,
     dailyScore,
     coopSize,

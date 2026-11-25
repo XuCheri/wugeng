@@ -603,6 +603,29 @@ export const WEAPONS = {
       acupointHits: 3, burstRadius: 58, burstDmgMul: 0.85, stunDur: 0.50, vulnDur: 2.6, vulnPct: 0.22,
     },
   },
+  bamboo_pole: {
+    name: '破浪竹杆', pair: 'straw_cape', tags: ['zhenhun'], evoName: '靖海镇浪杆',
+    evoDesc: '双杆交击横扫净除敌弹，卷起破甲巨浪贯穿定身',
+    evoMult: 1.94,
+    dmg: [20, 27, 35, 44, 54], radius: [112, 120, 128, 138, 148], arcDeg: [130, 140, 150, 160, 172],
+    cd: [1.32, 1.25, 1.18, 1.11, 1.04], sweepLife: 0.22, knockback: 92, slowDur: 1.0,
+    waveSpeed: 295, waveLife: 0.72, waveR: 22, waveDmgMul: 0.55,
+    evo: {
+      arcDeg: 220, radiusMul: 1.18, stunDur: 0.55, clearBullets: true,
+      waves: 3, waveFan: 0.34, waveSpeed: 340, waveLife: 0.92, waveR: 28, waveDmgMul: 0.72,
+    },
+  },
+  gold_abacus: {
+    name: '金算盘', pair: 'ledger_book', tags: ['daofa'], evoName: '乾坤金算盘',
+    evoDesc: '多枚赤金算子连环弹射，每三跳引爆金光震波并震落铜钱',
+    evoMult: 1.92,
+    count: [2, 2, 3, 3, 4], bounces: [3, 4, 4, 5, 6], dmg: [13, 18, 24, 31, 39],
+    cd: [1.24, 1.17, 1.10, 1.03, 0.96], speed: 440, bounceRange: 215, seekRange: 320, life: 1.95, r: 8, knockback: 24,
+    evo: {
+      bonusCount: 2, bonusBounces: 3, speed: 515, bounceRange: 250,
+      burstEvery: 3, burstRadius: 56, burstDmgMul: 0.80, coinChance: 0.22,
+    },
+  },
 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 export const WEAPON_NAMES = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].name]));
@@ -627,7 +650,7 @@ export const FX = {
   chainLife: 0.25,
 };
 
-// ───────────────────────── 法器（20 件：经典 8 + v2 新增 4 + v3 新增 4 + v4 新增 4）─────────────────────────
+// ───────────────────────── 法器（22 件：经典 8 + v2 新增 4 + v3 新增 4 + v4 新增 6）─────────────────────────
 export const RELICS = {
   clapper: { name: '梆子', pair: 'gong', tags: ['zhenhun'], perLevel: { cdr: 0.08 } },
   censer: { name: '香炉', pair: 'lantern', tags: ['yangyan'], perLevel: { areaPct: 0.10 } },
@@ -649,13 +672,15 @@ export const RELICS = {
   lamp_oil: { name: '长明灯油', pair: 'sky_lantern', tags: ['yangyan'], perLevel: { areaPct: 0.06, durPct: 0.06, lightPct: 0.06 } },
   folk_rice: { name: '百家米', pair: 'carpenter_line', tags: ['zhizha'], perLevel: { maxHp: 12, xpPct: 0.06, pickupPct: 0.08 } },
   cinnabar_pen: { name: '朱砂笔', pair: 'luopan_slip', tags: ['daofa'], perLevel: { critChance: 0.04, critDmg: 0.14, cdr: 0.03 } },
+  straw_cape: { name: '防风蓑衣', pair: 'bamboo_pole', tags: ['zhenhun'], perLevel: { slowResist: 0.14, armor: 1, maxHp: 8 } },
+  ledger_book: { name: '阴阳账册', pair: 'gold_abacus', tags: ['daofa'], perLevel: { xpPct: 0.08, coinPct: 0.10, pickupPct: 0.08 } },
 };
 export const RELIC_IDS = Object.keys(RELICS);
 export const RELIC_NAMES = Object.fromEntries(RELIC_IDS.map((k) => [k, RELICS[k].name]));
 export const MAX_RELIC_LEVEL = 5;
 export const MAX_RELICS = 6;
 
-// ───────────────────────── 英雄（6 名守夜人 + 本命初始武器亲和）─────────────────────────
+// ───────────────────────── 英雄（8 名守夜人 + 本命初始武器亲和）─────────────────────────
 export const HEROES = {
   zhou: {
     id: 'zhou', name: '打更人·老周', short: '老周', startWeapon: 'gong',
@@ -687,6 +712,20 @@ export const HEROES = {
     trait: '移速 +12%，冷却缩减 +10%', mods: { speedPct: 0.12, cdr: 0.10 },
     unlock: { kind: 'synergy6', value: 6, desc: '单局激活任意流派 6 件羁绊' },
   },
+  weier: {
+    id: 'weier', name: '水路引灯娘·芦二娘', short: '芦二娘', startWeapon: 'bamboo_pole',
+    trait: '推浪：持续行步叠起水浪（至多5层，每层伤害+7%、范围+4%并溅浪伤敌，停步渐消）',
+    mods: { speedPct: 0.06, maxHpPct: 0.05 },
+    waveMaxStacks: 5, waveStepSec: 0.5, waveDecaySec: 0.5, waveDmgPerStack: 0.07, waveAreaPerStack: 0.04, wakeInterval: 0.55,
+    unlock: { kind: 'mapClear', value: 'hedeng', desc: '通关「河灯水口」任意夜色' },
+  },
+  qiansuanzi: {
+    id: 'qiansuanzi', name: '账房·钱算子', short: '钱算子', startWeapon: 'gold_abacus',
+    trait: '铁算收魂：寻常不远摄魂火，每3秒集中收魂一回，倍率1+0.08×团数（上限×2）',
+    mods: { cdr: 0.06, critChance: 0.05 },
+    abacusInterval: 3.0, abacusRadius: 280, abacusPerOrb: 0.08, abacusMaxMult: 2.0,
+    unlock: { kind: 'totalXpOrbs', value: 20000, desc: '累计拾取 20000 团魂火' },
+  },
 };
 export const HERO_IDS = Object.keys(HEROES);
 
@@ -702,7 +741,7 @@ export function isHeroSignatureWeapon(heroId, weaponId) {
   return HEROES[heroId].startWeapon === weaponId;
 }
 
-// ───────────────────────── 英雄专属大招（F10 + v3 新增 3 位）─────────────────────────
+// ───────────────────────── 英雄专属大招（F10 + v3/v4 8 位角色全专属）─────────────────────────
 export const ULT = {
   max: 100,
   cost: 100,
@@ -798,6 +837,36 @@ export const ULT = {
     stun: 0.8,
     vulnT: 3.0,
     vulnPct: 0.20,
+  },
+  weier: {
+    name: '千浪过水口',
+    burstR: 190,
+    burstDmgMul: 0.85,
+    waves: 6,
+    waveSpeed: 360,
+    waveLife: 1.05,
+    waveR: 32,
+    waveDmgMul: 0.78,
+    surgeDelays: [0.18, 0.36],
+    surgeRadii: [230, 275],
+    surgeDmgMul: 0.56,
+    stun: 1.0,
+    vulnT: 3.5,
+    vulnPct: 0.25,
+  },
+  qiansuanzi: {
+    name: '万贯清账令',
+    burstR: 185,
+    burstDmgMul: 0.78,
+    minBeads: 8,
+    maxBeads: 16,
+    beadSpeed: 520,
+    beadBounces: 5,
+    beadDmgMul: 0.72,
+    bonusCoinsBase: 5,
+    vulnT: 3.5,
+    vulnPct: 0.25,
+    stun: 0.75,
   },
 };
 

@@ -925,13 +925,20 @@ p { margin: 0; }
   box-sizing: border-box;
 }
 
-/* 六人单排圆形灯印头像 */
+/* 八人单排圆形灯印头像（支持窄屏横向轻滑，零折行溢出） */
 .hero-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 2px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  padding: 5px 2px 1px;
+  margin-top: -5px;
 }
+.hero-row::-webkit-scrollbar { display: none; }
 .hero-tile {
+  flex: 1 0 50px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -945,7 +952,7 @@ p { margin: 0; }
   color: var(--paper-shade);
   cursor: pointer;
   box-sizing: border-box;
-  touch-action: manipulation;
+  touch-action: pan-x manipulation;
   transition: transform 180ms cubic-bezier(.22, 1.35, .36, 1), color 160ms;
 }
 .hero-tile .icon {

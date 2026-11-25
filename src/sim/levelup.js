@@ -351,6 +351,8 @@ const WEAPON_INTRO = {
   sky_lantern: '放飞孔明灯升空索敌，天火轰落灼燃一片',
   carpenter_line: '弹射笔直墨线贯穿两点之间群祟并附流血',
   luopan_slip: '齐射多枚索敌飞签灵巧穿刺群祟',
+  bamboo_pole: '挥动修竹长杆横抽前方群祟，激起水花震退减速',
+  gold_abacus: '弹出黄铜算子在邪祟之间疾速弹跳穿击',
 };
 
 const EVOLVED_INTRO = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].evoDesc]));

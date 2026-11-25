@@ -425,7 +425,7 @@ export function createHud() {
 
       /* ---------- 联机小队存活/倒地徽标条（F14：仅多人同守时渲染） ---------- */
       if (Array.isArray(run.players) && run.players.length > 1) {
-        const heroSeal = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
+        const heroSeal = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩', weier: '芦', qiansuanzi: '算' };
         const baseY = run.boss ? ty + th + 54 : st + 76;
         for (let idx = 0; idx < run.players.length && idx < 4; idx++) {
           const pl = run.players[idx];

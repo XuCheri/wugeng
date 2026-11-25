@@ -1,11 +1,12 @@
 // 英雄专属大招（F10）：老周「五更镇魂锣」、阿绵「百鬼纸马阵」、小道童「九天玄雷敕」；
 // 同时结算引魂灯芯的武器冷却返还与五雷号令命签的极速暴伤增益。
 
-import { ULT } from './balance.js';
-import { fsin, fcos } from '../core/math.js';
+import { ULT, HEROES } from './balance.js';
+import { fsin, fcos, fatan2 } from '../core/math.js';
 import { damageCircle } from './combat.js';
 import { weaponFullCooldown } from './weapons.js';
-import { recomputeMods } from './player.js';
+import { recomputeMods, earnCoins } from './player.js';
+import { collectPickup } from './pickups.js';
 import { BLESSING_TUNING } from './blessings.js';
 
 export function ultReady(run) {
@@ -319,6 +320,159 @@ export function castUlt(run, force = false) {
     }
     run._nuoDanceT = N.danceT;
     recomputeMods(run);
+  } else if (heroId === 'weier') {
+    // 水路引灯娘·芦二娘：千浪过（立满五层推浪 + 六道破甲巨浪净弹定身 + 双叠潮涌）
+    const W = ULT.weier;
+    const R = W.burstR * areaMul;
+    p.waveStacks = HEROES.weier.waveMaxStacks || 5;
+    p._waveAcc = 0;
+    recomputeMods(run);
+    clearEnemyBullets(run, p.x, p.y, 240 * areaMul);
+    damageCircle(run, p.x, p.y, R, dmg * W.burstDmgMul, 'ult', {
+      armorBreak: true,
+      knock: 260,
+      stun: W.stun,
+      vuln: W.vulnT,
+      vulnPct: W.vulnPct,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'ultPulse',
+      weaponId: 'ult',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, R),
+      angle: 0,
+      t: 0,
+      life: ULT.pulseLife,
+      radius: 0,
+      maxRadius: R,
+    });
+    const baseA = fatan2(p.facingY || -1, p.facingX || 0);
+    const waveR = W.waveR * areaMul;
+    for (let i = 0; i < W.waves; i++) {
+      const wa = baseA + (i / W.waves) * Math.PI * 2;
+      run.projectiles.push({
+        id: run._nextId++,
+        kind: 'bambooWave',
+        weaponId: 'ult',
+        ownerSlot,
+        x: p.x + fcos(wa) * 20,
+        y: p.y + fsin(wa) * 20,
+        r: waveR,
+        hitR: waveR,
+        radius: waveR,
+        angle: wa,
+        t: 0,
+        life: W.waveLife,
+        vx: fcos(wa) * W.waveSpeed,
+        vy: fsin(wa) * W.waveSpeed,
+        speed: W.waveSpeed,
+        dmg: dmg * W.waveDmgMul,
+        stunDur: W.stun * 0.75,
+        clearBullets: true,
+        evolved: true,
+        _hit: [],
+      });
+    }
+    for (let k = 0; k < W.surgeDelays.length; k++) {
+      run._scheduled.push({
+        delay: W.surgeDelays[k],
+        type: 'zhouUltWave',
+        radius: W.surgeRadii[k] * areaMul,
+        dmg: dmg * W.surgeDmgMul,
+        knock: 240,
+        stun: W.stun * 0.65,
+        vulnT: W.vulnT,
+        vulnPct: W.vulnPct,
+        ownerSlot,
+      });
+    }
+  } else if (heroId === 'qiansuanzi') {
+    // 账房·钱算子：清账（引爆全屏魂火与铜钱倍率入账 + 化作赤金算子索敌连弹轰击）
+    const Q = ULT.qiansuanzi;
+    const R = Q.burstR * areaMul;
+    clearEnemyBullets(run, p.x, p.y, 235 * areaMul);
+    damageCircle(run, p.x, p.y, R, dmg * Q.burstDmgMul, 'ult', {
+      knock: 210,
+      stun: Q.stun,
+      vuln: Q.vulnT,
+      vulnPct: Q.vulnPct,
+    });
+    run.projectiles.push({
+      id: run._nextId++,
+      kind: 'ultPulse',
+      weaponId: 'ult',
+      ownerSlot,
+      x: p.x,
+      y: p.y,
+      r: Math.max(0, R),
+      angle: 0,
+      t: 0,
+      life: ULT.pulseLife,
+      radius: 0,
+      maxRadius: R,
+    });
+
+    const xpList = [];
+    for (let i = 0; i < run.pickups.length; i++) {
+      if (run.pickups[i].kind === 'xp') xpList.push(run.pickups[i]);
+    }
+    const batchMult = Math.min(
+      HEROES.qiansuanzi.abacusMaxMult || 2.0,
+      1 + (HEROES.qiansuanzi.abacusPerOrb || 0.08) * xpList.length,
+    );
+    const origins = [];
+    let keepIdx = 0;
+    for (let i = 0; i < run.pickups.length; i++) {
+      const pk = run.pickups[i];
+      if (pk.kind === 'xp' || pk.kind === 'coin') {
+        origins.push({ x: pk.x, y: pk.y });
+        if (pk.kind === 'xp') pk.batchMult = Math.max(pk.batchMult || 1, batchMult);
+        collectPickup(run, pk, p);
+      } else {
+        run.pickups[keepIdx++] = pk;
+      }
+    }
+    run.pickups.length = keepIdx;
+    p._abacusPulseT = 0;
+    earnCoins(run, Q.bonusCoinsBase + Math.min(16, Math.floor(origins.length * 0.5)), true);
+
+    const shotCount = Math.min(Q.maxBeads, Math.max(Q.minBeads, origins.length));
+    const liveEnemies = [];
+    for (let i = 0; i < run.enemies.length; i++) {
+      if (!run.enemies[i].dead) liveEnemies.push(run.enemies[i]);
+    }
+    for (let s = 0; s < shotCount; s++) {
+      const orig = origins.length > 0
+        ? origins[s % origins.length]
+        : { x: p.x + fcos((s / shotCount) * Math.PI * 2) * 26, y: p.y + fsin((s / shotCount) * Math.PI * 2) * 26 };
+      const tgt = liveEnemies.length > 0 ? liveEnemies[s % liveEnemies.length] : null;
+      const a = tgt ? fatan2(tgt.y - orig.y, tgt.x - orig.x) : (s / shotCount) * Math.PI * 2;
+      run.projectiles.push({
+        id: run._nextId++,
+        kind: 'abacusBead',
+        weaponId: 'ult',
+        ownerSlot,
+        x: orig.x,
+        y: orig.y,
+        r: 9,
+        angle: a,
+        t: 0,
+        life: 1.9,
+        vx: fcos(a) * Q.beadSpeed,
+        vy: fsin(a) * Q.beadSpeed,
+        speed: Q.beadSpeed,
+        bouncesLeft: Q.beadBounces,
+        bounceCount: 0,
+        bounceRange: 250 * areaMul,
+        dmg: dmg * Q.beadDmgMul,
+        evolved: true,
+        _hit: [],
+        _tgt: tgt,
+      });
+    }
   } else {
     // 打更人·老周：五更镇魂锣（三叠扩域震波 + 破甲易伤 + 净除敌弹）
     const Z = ULT.zhou;

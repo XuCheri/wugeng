@@ -33,7 +33,7 @@ import { getDailyChallengeState } from '../meta/daily-challenge.js';
 import { getSeasonState } from '../meta/season.js';
 import { getHubFeatureLock } from './coach.js';
 
-const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
+const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩', weier: '芦', qiansuanzi: '算' };
 const ACH_WEAPON_SET = new Set(['taomujian', 'zhinian_kite']);
 const COIN_SVG = `<svg viewBox="0 0 16 16" class="coin-ico" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.9" y="5.9" width="4.2" height="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
 

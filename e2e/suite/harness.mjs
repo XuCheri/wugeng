@@ -2145,6 +2145,8 @@ export async function shopBuyAndEquipInModal(page, opts = {}) {
       yinyang: '观星|阴阳',
       tiejiang: '石敢当|铁匠',
       nuoxi: '青衣|傩',
+      weier: '芦二娘|引灯娘',
+      qiansuanzi: '钱算子|账房',
     };
 
     const extractPrice = (el) => {
@@ -2269,7 +2271,7 @@ export async function shopBuyAndEquipInModal(page, opts = {}) {
           ) {
             return true;
           }
-          const others = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'].filter((x) => x !== hero);
+          const others = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi', 'weier', 'qiansuanzi'].filter((x) => x !== hero);
           if (others.some((oh) => idStr.startsWith(`${oh}_`) || idStr.startsWith(`${oh}-`) || idStr.startsWith(`skin_${oh}`))) {
             return false;
           }
@@ -2283,8 +2285,8 @@ export async function shopBuyAndEquipInModal(page, opts = {}) {
       if (hId && heroCards.length === 0 && allSkinCards.length > 0 && allSkinCards.length <= 4) {
         heroCards = allSkinCards;
       }
-      if (hId && heroCards.length === 0 && allSkinCards.length === 18) {
-        const ord = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'].indexOf(hId);
+      if (hId && heroCards.length === 0 && allSkinCards.length >= 18) {
+        const ord = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi', 'weier', 'qiansuanzi'].indexOf(hId);
         if (ord >= 0) heroCards = allSkinCards.slice(ord * 3, ord * 3 + 3);
       }
 

@@ -492,6 +492,57 @@ export const WEAPON_ICONS = {
     circ(g, 0, 22, 7);
     fs(g, INK, 2.8);
   },
+  bamboo_pole(g) {
+    // 破浪竹杆：斜贯翠节修竹长杆 + 竹节墨环 + 前激三叠飞白浪花
+    g.save();
+    g.rotate(-0.58);
+    poly(g, [[-5, -46], [5, -46], [4, 46], [-4, 46]]);
+    fs(g, PAPER_SHADE, 4.2);
+    st(g, 3.2, INK);
+    g.beginPath();
+    for (const ny of [-26, -6, 14, 34]) {
+      g.moveTo(-6, ny);
+      g.lineTo(6, ny);
+    }
+    g.stroke();
+    vfill(g, () => poly(g, [[-5, -36], [5, -36], [5, -28], [-5, -28]]));
+    g.restore();
+    // 激起浪花弧
+    st(g, 4.4, PAPER);
+    g.beginPath();
+    g.arc(16, -16, 22, -Math.PI * 0.65, Math.PI * 0.25);
+    g.stroke();
+    st(g, 2.8, VERM);
+    g.beginPath();
+    g.arc(20, -20, 15, -Math.PI * 0.55, Math.PI * 0.2);
+    g.stroke();
+  },
+  gold_abacus(g) {
+    // 金算盘：乌木框黄铜横梁算盘 + 五档错落金朱算子
+    poly(g, [[-40, -28], [40, -28], [40, 28], [-40, 28]]);
+    fs(g, INK, 4.6);
+    poly(g, [[-34, -22], [34, -22], [34, 22], [-34, 22]]);
+    fs(g, PAPER_SHADE, 2.8);
+    g.fillStyle = INK;
+    g.fillRect(-34, -10, 68, 4.5);
+    for (let i = -2; i <= 2; i++) {
+      const rx = i * 13;
+      st(g, 2.4, INK);
+      g.beginPath();
+      g.moveTo(rx, -22);
+      g.lineTo(rx, 22);
+      g.stroke();
+      // 上珠
+      circ(g, rx, i % 2 === 0 ? -16 : -14, 4.2);
+      fs(g, VERM, 2);
+      // 下珠两枚
+      const yOff = (i + 2) % 2 === 0 ? 0 : 4;
+      circ(g, rx, 1 + yOff, 4.2);
+      fs(g, LANTERN, 2);
+      circ(g, rx, 11 + yOff, 4.2);
+      fs(g, LANTERN, 2);
+    }
+  },
 };
 
 /**
@@ -1000,6 +1051,48 @@ export const EVO_WEAPON_ICONS = {
     circ(g, 0, 0, 4.5);
     fs(g, LANTERN, 2);
   },
+  bamboo_pole(g) {
+    // 靖海镇浪杆：双杆十字交镇 + 三重翻涌白浪法轮 + 镇海赤金宝印
+    circ(g, 0, 6, 36);
+    fs(g, PAPER, 4);
+    brushStroke(g, [[-38, 18], [-12, 4], [14, 22], [40, 8]], 10, { seed: 91, color: INK, dry: 0.4 });
+    brushStroke(g, [[-32, 30], [0, 20], [34, 32]], 7, { seed: 93, color: VERM, dry: 0.35 });
+    for (const rot of [-0.62, 0.62]) {
+      g.save();
+      g.rotate(rot);
+      poly(g, [[-4.5, -46], [4.5, -46], [3.5, 44], [-3.5, 44]]);
+      fs(g, LANTERN, 3.6);
+      g.restore();
+    }
+    octagon(g, 15);
+    fs(g, VERM, 3.4);
+    circ(g, 0, 0, 6);
+    fs(g, PAPER, 2.2);
+  },
+  gold_abacus(g) {
+    // 乾坤金算盘：八角乾坤金盘外轮 + 中央赤金算阵 + 四隅飞射元宝金珠
+    octagon(g, 40);
+    fs(g, LANTERN, 4.4);
+    poly(g, [[-26, -18], [26, -18], [26, 18], [-26, 18]]);
+    fs(g, INK, 3.6);
+    st(g, 2.4, PAPER);
+    g.beginPath();
+    g.moveTo(-26, -4);
+    g.lineTo(26, -4);
+    for (const rx of [-14, 0, 14]) {
+      g.moveTo(rx, -18);
+      g.lineTo(rx, 18);
+    }
+    g.stroke();
+    for (const [bx, by, col] of [[-14, -11, VERM], [0, -11, LANTERN], [14, -11, VERM], [-14, 6, LANTERN], [0, 10, PAPER], [14, 6, LANTERN]]) {
+      circ(g, bx, by, 4.2);
+      fs(g, col, 1.8);
+    }
+    for (const [ox, oy] of [[-36, -34], [36, -34], [-36, 34], [36, 34]]) {
+      circ(g, ox, oy, 5.5);
+      fs(g, VERM, 2.4);
+    }
+  },
 };
 
 export const RELIC_ICONS = {
@@ -1387,6 +1480,55 @@ export const RELIC_ICONS = {
       fs(g, VERM, 1.8);
     }
   },
+  straw_cape(g) {
+    // 防风蓑衣：三叠芦草编织披肩大蓑衣 + 朱砂领绳同心结
+    poly(g, [[-18, -32], [18, -32], [44, -4], [28, 4], [-28, 4], [-44, -4]]);
+    fs(g, PAPER_SHADE, 4.2);
+    poly(g, [[-26, 2], [26, 2], [38, 22], [-38, 22]]);
+    fs(g, PAPER, 4);
+    poly(g, [[-30, 20], [30, 20], [40, 42], [-40, 42]]);
+    fs(g, PAPER_SHADE, 4.2);
+    st(g, 2.2, inkA(0.65));
+    g.beginPath();
+    for (const dx of [-22, -11, 0, 11, 22]) {
+      g.moveTo(dx * 0.7, -26);
+      g.lineTo(dx * 1.3, 38);
+    }
+    g.stroke();
+    vfill(g, () => circ(g, 0, -28, 6.5));
+    st(g, 3.2, VERM);
+    g.beginPath();
+    g.moveTo(0, -22);
+    g.lineTo(-8, -8);
+    g.moveTo(0, -22);
+    g.lineTo(8, -8);
+    g.stroke();
+  },
+  ledger_book(g) {
+    // 阴阳账册：右侧线装玄墨厚账本 + 宣纸竖签「账」纹 + 压册铜钱
+    poly(g, [[-30, -38], [26, -38], [26, 38], [-30, 38]]);
+    fs(g, INK, 4.6);
+    st(g, 2.6, PAPER_SHADE);
+    g.beginPath();
+    g.moveTo(18, -38);
+    g.lineTo(18, 38);
+    for (const sy of [-24, -8, 8, 24]) {
+      g.moveTo(18, sy);
+      g.lineTo(26, sy);
+    }
+    g.stroke();
+    poly(g, [[-20, -26], [-2, -26], [-2, 18], [-20, 18]]);
+    fs(g, PAPER, 2.8);
+    st(g, 2.8, VERM);
+    g.beginPath();
+    g.moveTo(-11, -20);
+    g.lineTo(-11, 12);
+    g.stroke();
+    circ(g, 22, 26, 13);
+    fs(g, LANTERN, 3.5);
+    g.fillStyle = INK;
+    g.fillRect(18, 22, 8, 8);
+  },
 };
 
 export const HERO_ICONS = {
@@ -1531,6 +1673,65 @@ export const HERO_ICONS = {
     g.fill();
     circ(g, 7, 13, 2.5);
     g.fill();
+  },
+  weier(g) {
+    // 水路引灯娘·芦二娘：扁阔芦编水笠 + 斜插白芦穗 + 蓑领红结
+    circ(g, 0, 10, 18);
+    fs(g, PAPER, 4);
+    // 斜插白芦穗
+    st(g, 3.4, INK);
+    g.beginPath();
+    g.moveTo(8, -14);
+    g.lineTo(34, -40);
+    g.stroke();
+    poly(g, [[22, -28], [38, -44], [42, -34], [26, -22]]);
+    fs(g, PAPER, 2.8);
+    // 水笠（圆弧低檐，区别于老周高尖笠）
+    g.beginPath();
+    g.moveTo(-42, -2);
+    g.quadraticCurveTo(0, -30, 42, -2);
+    g.quadraticCurveTo(0, 4, -42, -2);
+    g.closePath();
+    fs(g, PAPER_SHADE, 4.4);
+    vfill(g, () => poly(g, [[-16, -4], [16, -4], [14, -10], [-14, -10]]));
+    g.fillStyle = INK;
+    circ(g, -7, 11, 2.5);
+    g.fill();
+    circ(g, 7, 11, 2.5);
+    g.fill();
+    poly(g, [[-24, 28], [24, 28], [32, 42], [-32, 42]]);
+    fs(g, PAPER_SHADE, 3.6);
+    vfill(g, () => circ(g, 0, 30, 5));
+  },
+  qiansuanzi(g) {
+    // 账房·钱算子：黑绸账房小帽 + 朱砂帽结 + 金框圆镜 + 八字须
+    circ(g, 0, 10, 19);
+    fs(g, PAPER, 4);
+    // 账房小帽
+    g.beginPath();
+    g.moveTo(-22, -2);
+    g.quadraticCurveTo(-20, -30, 0, -30);
+    g.quadraticCurveTo(20, -30, 22, -2);
+    g.closePath();
+    fs(g, INK, 4);
+    poly(g, [[-23, -6], [23, -6], [23, 0], [-23, 0]]);
+    fs(g, LANTERN, 2.6);
+    vfill(g, () => circ(g, 0, -33, 5.5));
+    // 圆框老花铜镜
+    circ(g, -8, 10, 6.2);
+    fs(g, PAPER_SHADE, 2.8);
+    circ(g, 8, 10, 6.2);
+    fs(g, PAPER_SHADE, 2.8);
+    st(g, 2.8, INK);
+    g.beginPath();
+    g.moveTo(-2, 10);
+    g.lineTo(2, 10);
+    // 八字精明小胡须
+    g.moveTo(-2, 20);
+    g.quadraticCurveTo(-10, 22, -15, 28);
+    g.moveTo(2, 20);
+    g.quadraticCurveTo(10, 22, 15, 28);
+    g.stroke();
   },
 };
 

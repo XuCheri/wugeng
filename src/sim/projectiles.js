@@ -2,9 +2,10 @@
 
 import { WEAPONS, FX, ULT } from './balance.js';
 import { turnToward, fsin, fcos, fatan2 } from '../core/math.js';
-import { damageEnemy, damageCircle, knockback, applySlow } from './combat.js';
+import { damageEnemy, damageCircle, knockback, applySlow, applyStun } from './combat.js';
 import { hurtPlayer } from './player.js';
 import { hitPropsCircle } from './props.js';
+import { dropPickup } from './pickups.js';
 import { papermanDmg, getWeapon, sweepSoulbanner, emitFire, weaponAreaMul } from './weapons.js';
 import { withPlayerContext, hurtTargetPlayer, coopPartySize } from './coop.js';
 
@@ -253,6 +254,28 @@ export function processScheduled(run, dt) {
           evolved: false,
         });
         break;
+
+      case 'weierWake':
+        hitPropsCircle(run, s.x, s.y, s.radius);
+        damageCircle(run, s.x, s.y, s.radius, s.dmg, 'bamboo_pole', { knock: 65, slow: 0.85 });
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'gongPulse',
+          weaponId: 'bamboo_pole',
+          subKind: 'weierWake',
+          ownerSlot,
+          fixedPos: true,
+          x: s.x,
+          y: s.y,
+          r: Math.max(0, s.radius),
+          radius: 0,
+          maxRadius: s.radius,
+          angle: 0,
+          t: 0,
+          life: 0.28,
+          evolved: (s.stacks || 1) >= 4,
+        });
+        break;
     }
   };
 
@@ -459,6 +482,14 @@ export function updateProjectiles(run, dt) {
 
       case 'luopanSlip':
         updateLuopanSlipProj(run, pr, dt, hash, near);
+        break;
+
+      case 'bambooWave':
+        updateBambooWaveProj(run, pr, dt, hash, near);
+        break;
+
+      case 'abacusBead':
+        updateAbacusBeadProj(run, pr, dt, hash, near);
         break;
 
       case 'enemyBullet': {
@@ -1555,3 +1586,101 @@ function updateLuopanSlipProj(run, pr, dt, hash, near) {
     pr._tgt = null;
   }
 }
+
+function updateBambooWaveProj(run, pr, dt, hash, near) {
+  pr.x += pr.vx * dt;
+  pr.y += pr.vy * dt;
+  const hitR = pr.hitR || pr.radius || pr.r || 22;
+  hitPropsCircle(run, pr.x, pr.y, hitR);
+  if (pr.clearBullets) {
+    for (let j = 0; j < run.projectiles.length; j++) {
+      const b = run.projectiles[j];
+      if (b.kind === 'enemyBullet' && !b.dead) {
+        const rr = hitR + (b.r || 0);
+        if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) b.dead = true;
+      }
+    }
+  }
+  const wid = pr.weaponId || 'bamboo_pole';
+  const list = hash.queryCircle(pr.x, pr.y, hitR, near);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead || pr._hit.includes(e.id)) continue;
+    pr._hit.push(e.id);
+    applySlow(run, e, 1.0);
+    if (pr.stunDur > 0) applyStun(run, e, pr.stunDur);
+    damageEnemy(run, e, pr.dmg, wid, {
+      knock: 95,
+      knockDx: pr.vx,
+      knockDy: pr.vy,
+      armorBreak: !!pr.evolved,
+    });
+  }
+}
+
+function updateAbacusBeadProj(run, pr, dt, hash, near) {
+  const def = WEAPONS.gold_abacus;
+  const evo = def.evo;
+  let t = pr._tgt;
+  if (!t || t.dead) {
+    t = pr._tgt = hash.nearest(pr.x, pr.y, pr.bounceRange || def.bounceRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
+  }
+  if (t) {
+    const want = fatan2(t.y - pr.y, t.x - pr.x);
+    pr.angle = turnToward(pr.angle, want, 12.5 * dt);
+    pr.vx = fcos(pr.angle) * pr.speed;
+    pr.vy = fsin(pr.angle) * pr.speed;
+  }
+  pr.x += pr.vx * dt;
+  pr.y += pr.vy * dt;
+  hitPropsCircle(run, pr.x, pr.y, pr.r);
+
+  const wid = pr.weaponId || 'gold_abacus';
+  const list = hash.queryCircle(pr.x, pr.y, pr.r + 3, near);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead || pr._hit.includes(e.id)) continue;
+    pr._hit.push(e.id);
+    pr.bounceCount = (pr.bounceCount || 0) + 1;
+    damageEnemy(run, e, pr.dmg, wid, {
+      knock: def.knockback,
+      knockDx: pr.vx,
+      knockDy: pr.vy,
+    });
+
+    if (pr.evolved && pr.bounceCount % evo.burstEvery === 0) {
+      explode(run, e.x, e.y, evo.burstRadius * (run.mods?.areaMul || 1), pr.dmg * evo.burstDmgMul, wid, {
+        evolved: true,
+        explosionKind: 'abacusGoldBurst',
+        knock: 75,
+      });
+      if (run.rng.chance(evo.coinChance * (run.mods?.coinDropMul || 1))) {
+        dropPickup(run, 'coin', e.x, e.y, 1);
+      }
+    }
+
+    if ((pr.bouncesLeft || 0) <= 0) {
+      pr.dead = true;
+      break;
+    }
+    pr.bouncesLeft--;
+
+    const bRange = pr.bounceRange || def.bounceRange;
+    let next = hash.nearest(e.x, e.y, bRange, run._sys.scratchW2, (cand) => !cand.dead && cand.id !== e.id && !pr._hit.includes(cand.id));
+    if (!next) {
+      pr._hit.length = 0;
+      pr._hit.push(e.id);
+      next = hash.nearest(e.x, e.y, bRange, run._sys.scratchW2, (cand) => !cand.dead && cand.id !== e.id);
+    }
+    if (next) {
+      pr._tgt = next;
+      pr.angle = fatan2(next.y - pr.y, next.x - pr.x);
+      pr.vx = fcos(pr.angle) * pr.speed;
+      pr.vy = fsin(pr.angle) * pr.speed;
+    } else {
+      pr.dead = true;
+    }
+    break;
+  }
+}
+

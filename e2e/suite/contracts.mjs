@@ -35,7 +35,9 @@ export const MAX_RELICS = 6;
 
 export const CLASSIC_HERO_IDS = ['zhou', 'mian', 'daotong'];
 export const V3_NEW_HERO_IDS = ['yinyang', 'tiejiang', 'nuoxi'];
+export const V4_NEW_HERO_IDS = ['weier', 'qiansuanzi'];
 export const HERO_IDS = [...CLASSIC_HERO_IDS, ...V3_NEW_HERO_IDS];
+export const ALL_HERO_IDS = [...HERO_IDS, ...V4_NEW_HERO_IDS];
 
 export const HERO_SIGNATURE_WEAPONS = {
   zhou: 'gong',
@@ -44,6 +46,8 @@ export const HERO_SIGNATURE_WEAPONS = {
   yinyang: 'compass',
   tiejiang: 'suohun_chain',
   nuoxi: 'nuo_drum',
+  weier: 'bamboo_pole',
+  qiansuanzi: 'gold_abacus',
 };
 
 export const HERO_AFFINITY = {
@@ -74,6 +78,7 @@ export const V3_NEW_WEAPON_IDS = [
 export const V3_WEAPON_IDS = V3_NEW_WEAPON_IDS;
 export const V4_NEW_WEAPON_IDS = [
   'mourning_staff', 'sky_lantern', 'carpenter_line', 'luopan_slip',
+  'bamboo_pole', 'gold_abacus',
 ];
 export const ACHIEVEMENT_WEAPON_IDS = ['taomujian', 'zhinian_kite'];
 export const DEFAULT_UNLOCKED_WEAPON_IDS = [
@@ -98,6 +103,8 @@ export const V4_BASE_WEAPON_NAMES = {
   sky_lantern: '孔明灯',
   carpenter_line: '墨斗线',
   luopan_slip: '风水飞签',
+  bamboo_pole: '破浪竹杆',
+  gold_abacus: '金算盘',
 };
 
 export const CLASSIC_RELIC_IDS = [
@@ -114,6 +121,7 @@ export const V3_NEW_RELIC_IDS = [
 export const V3_RELIC_IDS = V3_NEW_RELIC_IDS;
 export const V4_NEW_RELIC_IDS = [
   'altar_mirror', 'lamp_oil', 'folk_rice', 'cinnabar_pen',
+  'straw_cape', 'ledger_book',
 ];
 export const ALL_RELIC_IDS = [
   ...CLASSIC_RELIC_IDS,
@@ -134,6 +142,8 @@ export const V4_RELIC_NAMES = {
   lamp_oil: '长明灯油',
   folk_rice: '百家米',
   cinnabar_pen: '朱砂笔',
+  straw_cape: '防风蓑衣',
+  ledger_book: '阴阳账册',
 };
 
 export const WEAPON_PAIRS = {
@@ -157,6 +167,8 @@ export const WEAPON_PAIRS = {
   sky_lantern: 'lamp_oil',
   carpenter_line: 'folk_rice',
   luopan_slip: 'cinnabar_pen',
+  bamboo_pole: 'straw_cape',
+  gold_abacus: 'ledger_book',
 };
 
 export const WEAPON_EVO_NAMES = {
@@ -235,7 +247,7 @@ export const CODEX_TAB_COUNTS = [
   ALL_WEAPON_IDS.length,
   ALL_RELIC_IDS.length,
   ALL_ENEMY_IDS.length,
-  HERO_IDS.length,
+  ALL_HERO_IDS.length,
 ];
 export const CODEX_TOTAL = CODEX_TAB_COUNTS.reduce((a, b) => a + b, 0);
 

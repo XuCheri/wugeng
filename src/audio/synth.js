@@ -47,6 +47,8 @@ const SFX = {
   fire_sky_lantern:    { gap: 0.05,  vol: 0.30 },
   fire_carpenter_line: { gap: 0.045, vol: 0.32 },
   fire_luopan_slip:    { gap: 0.038, vol: 0.28 },
+  fire_bamboo_pole:    { gap: 0.048, vol: 0.34 },
+  fire_gold_abacus:    { gap: 0.040, vol: 0.32 },
 
   // 局内战斗、奇遇与多人协同扩展事件音色
   explosion:      { gap: 0.045, vol: 0.48 },
@@ -410,6 +412,18 @@ export function createAudio() {
       osc('triangle', 1567.98, t, 0.07, v * 0.44, out, { a: 0.001, bend: 1.22 });
       if (evo) osc('sine', 2349.32, t + 0.016, 0.07, v * 0.30, out, { a: 0.002 });
       return 0.10;
+    },
+    fire_bamboo_pole(t, v, out, evo = false) {
+      noise(t, 0.09, v * 0.50, out, { freq: 920, q: 1.4, sweepTo: 480 });
+      osc('triangle', evo ? 261.63 : 293.66, t, 0.11, v * 0.46, out, { a: 0.002, bend: 0.72 });
+      if (evo) osc('sine', 523.25, t + 0.02, 0.10, v * 0.36, out, { a: 0.002 });
+      return 0.13;
+    },
+    fire_gold_abacus(t, v, out, evo = false) {
+      voices.woodblock(t, v * 0.48, out, 1320);
+      bell(t + 0.015, evo ? 1567.98 : 1318.51, v * 0.52, out, 0.12);
+      if (evo) bell(t + 0.038, 2093.0, v * 0.38, out, 0.11);
+      return 0.14;
     },
 
     // ───────── 爆炸 / 尸潮 / 神龛 / 羁绊 / 命签 / 协同救援 等局内事件音色 ─────────

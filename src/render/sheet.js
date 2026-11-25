@@ -224,10 +224,12 @@ const HERO_SHORT_NAMES = {
   yinyang: '沈观星',
   tiejiang: '石敢当',
   nuoxi: '柳青衣',
+  weier: '芦二娘',
+  qiansuanzi: '钱算子',
 };
 
 /**
- * ?scene=skins —— 6 角色 × 3 套 = 18 套明显差异重彩木刻皮肤全景陈列室
+ * ?scene=skins —— 默认展示前 6 角色 × 3 套 = 18 套（兼容 F5 18 格像素契约），?scene=skins&all=1 展示全部 8 角色 × 3 套
  * 同步写入物理像素坐标表 window.__skinCells 供自动化像素/剪影检验。
  */
 export function drawSkinsShowcase(canvas, { low = false } = {}) {
@@ -263,12 +265,14 @@ export function drawSkinsShowcase(canvas, { low = false } = {}) {
   g.fillStyle = PAPER;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText('守夜百相衣冠录 · 六脉十八装', ox + spanW * 0.5 + 14, 15);
+  g.fillText('守夜百相衣冠录 · 八脉百装', ox + spanW * 0.5 + 14, 15);
   g.font = `9.5px ${FONT_CN}`;
   g.fillStyle = LANTERN;
   g.fillText('原装木刻 · 鬼市重彩 · 功绩典藏（冠冕/披风/背饰/提灯/灵阵）', ox + spanW * 0.5 + 16, 31);
 
-  const rows = HERO_IDS.length; // 6
+  const showAll = typeof window !== 'undefined' && new URLSearchParams(window.location?.search || '').get('all') === '1';
+  const showcaseHeroes = showAll ? HERO_IDS : HERO_IDS.slice(0, 6);
+  const rows = showcaseHeroes.length;
   const cols = 3;
   const usableH = H - topH - 6;
   const rowH = Math.floor(usableH / rows);
@@ -277,8 +281,8 @@ export function drawSkinsShowcase(canvas, { low = false } = {}) {
   const skinCells = [];
 
   for (let r = 0; r < rows; r++) {
-    const heroId = HERO_IDS[r];
-    const skins = getHeroSkins(heroId);
+    const heroId = showcaseHeroes[r];
+    const skins = getHeroSkins(heroId).filter((s) => s.unlock !== 'season').slice(0, 3);
     for (let c = 0; c < cols; c++) {
       const skin = skins[c];
       const cellX = ox + c * colW;

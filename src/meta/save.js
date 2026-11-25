@@ -16,7 +16,7 @@ export const SAVE_VERSION = 4;
 export const COACH_KEYS = ['firstLevelUp', 'firstChest', 'firstUltReady', 'firstEvolve', 'firstElite'];
 export const DEFAULT_DAO_NAME = '守夜打更人';
 
-export const HERO_IDS = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'];
+export const HERO_IDS = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi', 'weier', 'qiansuanzi'];
 export const HERO_START_WEAPON = {
   zhou: 'gong',
   mian: 'paperman',
@@ -24,6 +24,8 @@ export const HERO_START_WEAPON = {
   yinyang: 'compass',
   tiejiang: 'suohun_chain',
   nuoxi: 'nuo_drum',
+  weier: 'bamboo_pole',
+  qiansuanzi: 'gold_abacus',
 };
 export const DEFAULT_UNLOCKED_WEAPONS = [
   'gong', 'lantern', 'talisman', 'brush', 'suohun_chain', 'nuo_drum',
@@ -34,12 +36,14 @@ export const WEAPON_IDS = [
   'compass', 'soulbanner', 'bronze_mirror', 'paperhorse',
   'taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum',
   'mourning_staff', 'sky_lantern', 'carpenter_line', 'luopan_slip',
+  'bamboo_pole', 'gold_abacus',
 ];
 export const RELIC_IDS = [
   'clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring',
   'strawshoes', 'glutinous', 'fivecoins', 'soulwick',
   'leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask',
   'altar_mirror', 'lamp_oil', 'folk_rice', 'cinnabar_pen',
+  'straw_cape', 'ledger_book',
 ];
 export const ENEMY_IDS = [
   'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',
@@ -70,6 +74,8 @@ export const ACHIEVEMENT_COSMETIC_REWARDS = {
   evolve12: 'daotong_jade_immortal',
   score50k: 'yinyang_gold_oracle',
   endless15: 'frost_moon',
+  hedengClear: 'weier_azure_tide',
+  xpOrbs5000: 'qiansuanzi_gold_treasury',
 };
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -202,6 +208,7 @@ export function defaultSave() {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
       totalEvolutions: 0, totalBossKills: 0, coopRuns: 0, coopRevives: 0, totalEvents: 0,
+      totalXpOrbs: 0,
     },
   };
 }
@@ -504,6 +511,7 @@ export function migrateSave(raw) {
     out.stats.coopRuns = int(s.coopRuns, 0, 0, 1e9);
     out.stats.coopRevives = int(s.coopRevives, 0, 0, 1e9);
     out.stats.totalEvents = int(s.totalEvents, 0, 0, 1e9);
+    out.stats.totalXpOrbs = int(s.totalXpOrbs, 0, 0, 1e12);
   }
 
   const cbm = {};
@@ -896,6 +904,7 @@ export function mergeSaves(localRaw, remoteRaw) {
     coopRuns: Math.max(a.stats.coopRuns, b.stats.coopRuns),
     coopRevives: Math.max(a.stats.coopRevives, b.stats.coopRevives),
     totalEvents: Math.max(a.stats.totalEvents, b.stats.totalEvents),
+    totalXpOrbs: Math.max(a.stats.totalXpOrbs || 0, b.stats.totalXpOrbs || 0),
   };
 
   const mergedCbm = {};

@@ -200,7 +200,8 @@ test('V3-M1-02: 四把新增民俗武器（桃木飞剑 / 无常锁魂链 / 纸�
 // ───────────────────────── F2 & F3: 6 角色、3 新绝技、自选起手武器与本命亲和 ─────────────────────────
 
 test('V3-M1-03: 新三名守夜人（沈观星 / 石敢当 / 柳青衣）被动词条、专属大招与英雄解锁条件验证', () => {
-  assert.deepEqual(HERO_IDS, ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi']);
+  assert.deepEqual(HERO_IDS.slice(0, 6), ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi']);
+  assert.ok(HERO_IDS.length >= 8);
 
   // 1) 沈观星：范围 +15%、弹速持续 +15%，大招「奇门遁甲大阵」
   const rYin = createRun({ seed: 3021, heroId: 'yinyang' });

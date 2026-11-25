@@ -28,6 +28,7 @@ const LOOKS = {
   zhou_default: { robe: VERM_DARK, inner: PAPER_SHADE, trim: LANTERN, sash: VERM, accent: LANTERN, accent2: PAPER, hat: PAPER_SHADE, lantern: VERM },
   zhou_jade_watch: { robe: M.jadeDeep, inner: PAPER, trim: M.goldLight, sash: M.jade, accent: M.jadeLight, accent2: PAPER, hat: M.jade, lantern: M.jadeLight, ornament: 'flag' },
   zhou_imperial_bell: { robe: M.goldDeep, inner: PAPER, trim: M.goldLight, sash: VERM, accent: M.gold, accent2: VERM, hat: M.gold, lantern: M.goldLight, ornament: 'sunbell' },
+  zhou_bloodmoon: { robe: VERM_DARK, inner: INK, trim: M.goldLight, sash: VERM, accent: M.gold, accent2: VERM, hat: INK, lantern: VERM, ornament: 'sunbell' },
   mian_default: { robe: VERM, inner: PAPER, trim: LANTERN, sash: INK, accent: VERM_DARK, accent2: LANTERN, lantern: LANTERN },
   mian_azure_bride: { robe: M.azureDeep, inner: PAPER, trim: M.azureLight, sash: VERM, accent: M.azure, accent2: M.azureLight, lantern: M.azureLight, ornament: 'veil' },
   mian_gold_puppeteer: { robe: M.goldDeep, inner: PAPER_SHADE, trim: M.goldLight, sash: VERM, accent: M.gold, accent2: VERM, lantern: M.goldLight, ornament: 'puppet' },
@@ -43,6 +44,12 @@ const LOOKS = {
   nuoxi_default: { robe: VERM, inner: PAPER, trim: LANTERN, sash: INK, accent: LANTERN, accent2: VERM_DARK, lantern: LANTERN },
   nuoxi_azure_phoenix: { robe: M.azureDeep, inner: PAPER, trim: M.azureLight, sash: M.gold, accent: M.azure, accent2: M.goldLight, lantern: M.azureLight, ornament: 'phoenix' },
   nuoxi_gold_nuo_god: { robe: M.goldDeep, inner: PAPER, trim: M.goldLight, sash: VERM, accent: M.gold, accent2: VERM, lantern: M.goldLight, ornament: 'radiance' },
+  weier_default: { robe: PAPER_SHADE, inner: PAPER, trim: VERM, sash: VERM, accent: LANTERN, accent2: PAPER, hat: PAPER_SHADE, lantern: LANTERN },
+  weier_jade_lotus: { robe: M.jadeDeep, inner: PAPER, trim: M.jadeLight, sash: M.jade, accent: M.jadeLight, accent2: M.goldLight, hat: M.jadeLight, lantern: M.jadeLight, ornament: 'swords' },
+  weier_azure_tide: { robe: M.azureDeep, inner: PAPER, trim: M.azureLight, sash: M.gold, accent: M.azure, accent2: M.goldLight, hat: M.azure, lantern: M.azureLight, ornament: 'astrolabe' },
+  qiansuanzi_default: { robe: INK, inner: PAPER_SHADE, trim: LANTERN, sash: VERM_DARK, accent: LANTERN, accent2: VERM, hat: INK, lantern: LANTERN, line: PAPER_SHADE },
+  qiansuanzi_violet_abacus: { robe: M.violetDeep, inner: PAPER, trim: M.violetLight, sash: M.gold, accent: M.violet, accent2: M.goldLight, hat: M.violetDeep, lantern: M.violetLight, ornament: 'thunder' },
+  qiansuanzi_gold_treasury: { robe: M.goldDeep, inner: PAPER, trim: M.goldLight, sash: VERM, accent: M.gold, accent2: VERM, hat: M.goldDeep, lantern: M.goldLight, ornament: 'sundisc' },
 };
 
 const BUILDS = {
@@ -52,6 +59,8 @@ const BUILDS = {
   yinyang: { sh: 13, hem: 19.5, headY: -76, headR: 9.8, armLen: 25 },
   tiejiang: { sh: 18.5, hem: 20, headY: -76, headR: 10.2, armLen: 25 },
   nuoxi: { sh: 12.5, hem: 25, headY: -75, headR: 10, armLen: 24 },
+  weier: { sh: 13, hem: 22, headY: -75, headR: 10, armLen: 24 },
+  qiansuanzi: { sh: 13.5, hem: 20, headY: -75, headR: 10, armLen: 24 },
 };
 
 /* ------------------------------------------------------------------ */
@@ -880,6 +889,47 @@ function drawHead(g, heroId, L, B, t) {
     g.beginPath();
     g.arc(0, 0, r * 1.02, Math.PI * 1.1, Math.PI * 1.9);
     g.stroke();
+  } else if (heroId === 'weier') {
+    // 斜插白芦穗 + 低檐扁阔水笠
+    ink(g, 1.4, INK);
+    g.beginPath();
+    g.moveTo(r * 0.4, -r * 0.8);
+    g.lineTo(r * 2.0, -r * 2.2);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(r * 1.2, -r * 1.5);
+    g.lineTo(r * 2.2, -r * 2.35);
+    g.lineTo(r * 2.3, -r * 1.75);
+    g.closePath();
+    fillInk(g, PAPER, 1.0, INK);
+    g.beginPath();
+    g.moveTo(-r * 2.5, -r * 0.35);
+    g.quadraticCurveTo(0, -r * 1.85, r * 2.55, -r * 0.3);
+    g.quadraticCurveTo(0, r * 0.05, -r * 2.5, -r * 0.35);
+    g.closePath();
+    fillInk(g, L.hat || PAPER_SHADE, 1.5, INK);
+  } else if (heroId === 'qiansuanzi') {
+    // 圆框铜镜 + 八字须 + 账房小帽朱顶
+    circle(g, -r * 0.28, r * 0.05, r * 0.3);
+    ink(g, 1.1, L.trim || LANTERN);
+    g.stroke();
+    circle(g, r * 0.42, r * 0.05, r * 0.3);
+    g.stroke();
+    ink(g, 1.1, INK);
+    g.beginPath();
+    g.moveTo(0, r * 0.48);
+    g.quadraticCurveTo(-r * 0.45, r * 0.55, -r * 0.65, r * 0.72);
+    g.moveTo(r * 0.15, r * 0.48);
+    g.quadraticCurveTo(r * 0.55, r * 0.55, r * 0.78, r * 0.72);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(-r * 1.08, -r * 0.35);
+    g.quadraticCurveTo(-r * 0.95, -r * 1.65, 0, -r * 1.65);
+    g.quadraticCurveTo(r * 0.95, -r * 1.65, r * 1.08, -r * 0.35);
+    g.closePath();
+    fillInk(g, L.hat || INK, 1.4, INK);
+    circle(g, 0, -r * 1.78, 2.4);
+    fillInk(g, VERM, 1.0, INK);
   }
   g.restore();
 }
@@ -891,14 +941,15 @@ function drawHead(g, heroId, L, B, t) {
 const WEAPON_STYLE = {
   gong: 'wave', nuo_drum: 'wave', bell: 'wave',
   lantern: 'shoot', talisman: 'shoot', coinsword: 'blade', paperman: 'shoot', firecracker: 'throw',
-  brush: 'blade', taomujian: 'blade', soulbanner: 'blade', mourning_staff: 'blade', suohun_chain: 'whip', carpenter_line: 'whip',
-  compass: 'beam', bronze_mirror: 'beam', paperhorse: 'shoot', zhinian_kite: 'shoot', sky_lantern: 'throw', luopan_slip: 'shoot',
+  brush: 'blade', taomujian: 'blade', soulbanner: 'blade', mourning_staff: 'blade', bamboo_pole: 'blade',
+  suohun_chain: 'whip', carpenter_line: 'whip',
+  compass: 'beam', bronze_mirror: 'beam', paperhorse: 'shoot', zhinian_kite: 'shoot', sky_lantern: 'throw', luopan_slip: 'shoot', gold_abacus: 'shoot',
 };
 
 const HIT_P = {
   gong: 0.56, nuo_drum: 0.56, bell: 0.54,
-  brush: 0.5, taomujian: 0.56, coinsword: 0.56, soulbanner: 0.58, mourning_staff: 0.54,
-  compass: 0.38, bronze_mirror: 0.36, suohun_chain: 0.46, carpenter_line: 0.48, firecracker: 0.62, sky_lantern: 0.6, luopan_slip: 0.52,
+  brush: 0.5, taomujian: 0.56, coinsword: 0.56, soulbanner: 0.58, mourning_staff: 0.54, bamboo_pole: 0.52,
+  compass: 0.38, bronze_mirror: 0.36, suohun_chain: 0.46, carpenter_line: 0.48, firecracker: 0.62, sky_lantern: 0.6, luopan_slip: 0.52, gold_abacus: 0.54,
 };
 
 export function getShowcaseHitPhase(weaponId) {
@@ -1184,6 +1235,86 @@ function drawHeldWeapon(g, weaponId, vp, t, armAngle) {
       g.closePath();
       fillInk(g, VERM, 1, INK);
       g.restore();
+      break;
+    }
+    case 'bamboo_pole':
+    case 'mourning_staff': {
+      g.rotate(-0.35);
+      g.beginPath();
+      g.rect(-2.0, -10, 4.0, 62);
+      fillInk(g, PAPER_SHADE, 1.2, INK);
+      ink(g, 1.1, INK);
+      g.beginPath();
+      for (const ny of [4, 18, 32, 46]) {
+        g.moveTo(-2.4, ny);
+        g.lineTo(2.4, ny);
+      }
+      g.stroke();
+      if (weaponId === 'mourning_staff') {
+        const wv = Math.sin(t * 5) * 2.5;
+        g.beginPath();
+        g.moveTo(0, 50);
+        g.lineTo(-12 + wv, 44);
+        g.lineTo(-9 + wv, 30);
+        g.lineTo(0, 34);
+        g.closePath();
+        fillInk(g, PAPER, 1.0, INK);
+      } else {
+        g.fillStyle = VERM;
+        g.fillRect(-2.2, 40, 4.4, 4);
+      }
+      break;
+    }
+    case 'gold_abacus': {
+      g.translate(6, -6);
+      g.rotate(-0.2);
+      g.beginPath();
+      g.rect(-10, -7, 20, 14);
+      fillInk(g, INK, 1.3, INK);
+      g.beginPath();
+      g.rect(-8, -5, 16, 10);
+      fillInk(g, PAPER_SHADE, 0.8, INK);
+      for (const rx of [-4.5, 0, 4.5]) {
+        circle(g, rx, -2, 1.5);
+        fillInk(g, VERM, 0.6, INK);
+        circle(g, rx, 2.2, 1.5);
+        fillInk(g, LANTERN, 0.6, INK);
+      }
+      break;
+    }
+    case 'sky_lantern': {
+      g.translate(6, -12);
+      g.beginPath();
+      g.moveTo(-6, -6);
+      g.lineTo(0, -11);
+      g.lineTo(6, -6);
+      g.lineTo(4.5, 6);
+      g.lineTo(-4.5, 6);
+      g.closePath();
+      fillInk(g, LANTERN, 1.1, INK);
+      circle(g, 0, 1, 2.4);
+      g.fillStyle = VERM;
+      g.fill();
+      break;
+    }
+    case 'carpenter_line': {
+      g.translate(4, -2);
+      g.beginPath();
+      g.rect(-6, -4, 12, 9);
+      fillInk(g, INK, 1.2, INK);
+      circle(g, 0, 0.5, 2.8);
+      fillInk(g, PAPER_SHADE, 0.8, INK);
+      break;
+    }
+    case 'luopan_slip': {
+      for (let i = -1; i <= 1; i++) {
+        g.save();
+        g.rotate(i * 0.24 - 0.25);
+        g.beginPath();
+        g.rect(-1.4, 0, 2.8, 22);
+        fillInk(g, i === 0 ? LANTERN : PAPER_SHADE, 0.9, INK);
+        g.restore();
+      }
       break;
     }
     default:
@@ -1747,6 +1878,118 @@ function drawAttackFx(g, weaponId, A) {
           g.globalAlpha = 1;
           g.restore();
         }
+      }
+      break;
+    }
+    case 'bamboo_pole':
+    case 'mourning_staff': {
+      if (p > 0.18 && p < 0.42) {
+        const f = prog(p, 0.18, 0.42);
+        g.globalAlpha = 1 - f * 0.78;
+        g.fillStyle = weaponId === 'bamboo_pole' ? vp.core : PAPER;
+        g.beginPath();
+        const a0 = -2.1 + f * 0.4;
+        const a1 = 0.65 + f * 0.55;
+        g.arc(hx, hy - 12 * s, 48 * s, a0, a1);
+        g.arc(hx + 4 * s, hy - 10 * s, 33 * s, a1, a0, true);
+        g.closePath();
+        g.fill();
+        ink(g, 2 * s, vp.primary);
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+      if (active) {
+        const u = easeOut(travel);
+        const px = lerp(hx + 18 * s, tx, u);
+        const py = lerp(hy - 6 * s, ty, u);
+        g.save();
+        g.translate(px, py);
+        g.scale(s, s);
+        g.globalAlpha = 1 - u * 0.25;
+        g.beginPath();
+        g.arc(-6, 0, 20, -1.15, 1.15);
+        g.arc(-11, 0, 15, 1.05, -1.05, true);
+        g.closePath();
+        g.fillStyle = weaponId === 'bamboo_pole' ? PAPER : vp.bright;
+        g.fill();
+        ink(g, 2, vp.primary);
+        g.stroke();
+        g.globalAlpha = 1;
+        g.restore();
+      }
+      break;
+    }
+    case 'gold_abacus':
+    case 'luopan_slip': {
+      const cnt = weaponId === 'gold_abacus' ? 4 : 3;
+      for (let i = 0; i < cnt; i++) {
+        const d = i * 0.032;
+        const u = easeInOut(prog(p, rel + d, hitP + d * 0.35));
+        if (u <= 0 || u >= 1) continue;
+        const spread = (i - (cnt - 1) / 2) * 28 * s;
+        const cx = (hx + tx) / 2;
+        const cy = (hy + ty) / 2 + spread;
+        const pts = [];
+        for (let k = 4; k >= 0; k--) pts.push(bezierPt(hx, hy, cx, cy, tx, ty, Math.max(0, u - k * 0.04)));
+        trailDots(g, pts, vp.primary, 3.2 * s);
+        const [px, py] = pts[pts.length - 1];
+        g.save();
+        g.translate(px, py);
+        g.rotate(u * TAU * 2);
+        g.scale(s, s);
+        if (weaponId === 'gold_abacus') {
+          g.beginPath();
+          g.moveTo(0, -6);
+          g.lineTo(6, 0);
+          g.lineTo(0, 6);
+          g.lineTo(-6, 0);
+          g.closePath();
+          fillInk(g, LANTERN, 1.0, INK);
+          circle(g, 0, 0, 1.8);
+          g.fillStyle = vp.primary;
+          g.fill();
+        } else {
+          g.beginPath();
+          g.rect(-7, -2, 14, 4);
+          fillInk(g, LANTERN, 0.9, INK);
+        }
+        g.restore();
+      }
+      break;
+    }
+    case 'carpenter_line': {
+      const u = prog(p, 0.22, hitP + 0.14);
+      if (u > 0 && u < 1) {
+        const fade = 1 - prog(u, 0.55, 1);
+        g.globalAlpha = fade;
+        ink(g, 3.6 * s, INK);
+        g.beginPath();
+        g.moveTo(hx, hy);
+        g.lineTo(tx, ty);
+        g.stroke();
+        ink(g, 1.6 * s, vp.primary);
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+      break;
+    }
+    case 'sky_lantern': {
+      if (active) {
+        const u = travel;
+        const px = lerp(hx, tx, u);
+        const py = lerp(hy, ty, u) - Math.sin(u * Math.PI) * 66 * s;
+        g.save();
+        g.translate(px, py);
+        g.scale(s, s);
+        g.beginPath();
+        g.moveTo(-6, -6);
+        g.lineTo(0, -11);
+        g.lineTo(6, -6);
+        g.lineTo(4.5, 6);
+        g.lineTo(-4.5, 6);
+        g.closePath();
+        fillInk(g, LANTERN, 1.0, INK);
+        g.restore();
       }
       break;
     }

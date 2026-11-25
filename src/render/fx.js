@@ -36,6 +36,8 @@ export const EVOLVED_NAMES = {
   sky_lantern: '九天赤焰灯',
   carpenter_line: '乾坤断魂线',
   luopan_slip: '天罡定穴签',
+  bamboo_pole: '靖海镇浪杆',
+  gold_abacus: '乾坤金算盘',
 };
 
 const SHAKE_CAP = 5.5; // 混合震屏峰值 CSS px（兼顾打击感与防眩晕）

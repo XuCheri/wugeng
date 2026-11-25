@@ -241,6 +241,24 @@ export const ACHIEVEMENTS = [
     reward: { type: 'coins', amount: 380, label: '铜钱 +380' },
     rawCurrent: (s) => Math.max(safeInt(s?.stats?.coopRuns), safeInt(s?.stats?.coopRevives)),
   },
+  {
+    id: 'hedengClear',
+    category: 'challenge',
+    name: '水口破晓',
+    desc: '通关「河灯水口」任意夜色 1 回',
+    target: 1,
+    reward: { type: 'skin', skinId: 'weier_azure_tide', heroId: 'weier', label: '解锁皮肤「沧海踏浪袍」' },
+    rawCurrent: (s) => safeInt(s?.clearsByMap?.hedeng),
+  },
+  {
+    id: 'xpOrbs5000',
+    category: 'arsenal',
+    name: '聚魂成海',
+    desc: '累计拾取 5000 团魂火',
+    target: 5000,
+    reward: { type: 'skin', skinId: 'qiansuanzi_gold_treasury', heroId: 'qiansuanzi', label: '解锁皮肤「鎏金财神袍」' },
+    rawCurrent: (s) => safeInt(s?.stats?.totalXpOrbs),
+  },
 ];
 
 export const ACHIEVEMENT_IDS = ACHIEVEMENTS.map((a) => a.id);

@@ -12,7 +12,7 @@ import {
 } from './copy.js';
 import { icon } from './icons.js';
 
-const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
+const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩', weier: '芦', qiansuanzi: '算' };
 const TABS = [
   { id: 'weapons', label: '兵刃' },
   { id: 'evolutions', label: '开光' },

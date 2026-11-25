@@ -47,6 +47,10 @@ export function createPlayer(heroId, extra = {}) {
     downed: false,
     downedTimer: 0,
     reviveProgress: 0,
+    waveStacks: 0,
+    _waveAcc: 0,
+    _wakeT: 0,
+    _abacusPulseT: 0,
     weapons: Array.isArray(safeExtra.weapons) ? safeExtra.weapons : [],
     relics: Array.isArray(safeExtra.relics) ? safeExtra.relics : [],
     stats: {
@@ -139,15 +143,19 @@ export function recomputeMods(run, opts = {}) {
     cdMulFinal = Math.max(0.46, cdMulFinal * ULT.nuoxi.danceCdMul);
   }
 
+  const waveStacks = activeHeroId === 'weier' ? clamp(Math.floor(run.player?.waveStacks || 0), 0, HEROES.weier.waveMaxStacks || 5) : 0;
+  const waveDmgBonus = waveStacks > 0 ? waveStacks * (HEROES.weier.waveDmgPerStack || 0.07) : 0;
+  const waveAreaBonus = waveStacks > 0 ? waveStacks * (HEROES.weier.waveAreaPerStack || 0.04) : 0;
+
   const mods = {
-    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + (meta.dmgPct || 0) + bl.dmgPct + (rr ? rr.dmgPct : 0),
+    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + waveDmgBonus + (meta.dmgPct || 0) + bl.dmgPct + (rr ? rr.dmgPct : 0),
     summonDmgPct: (hero.summonDmgPct || 0) + syn.summonDmgPct,
     zhizhaDmgPct: syn.zhizhaDmgPct,
     summonHasteMul: syn.summonHasteMul * (summonFrenzyActive ? ULT.mian.frenzyMul : 1),
     cdr: cdrTotal,
     cooldownFloor,
     cdMul: cdMulFinal,
-    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
+    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + waveAreaBonus + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
     durMul: Math.max(0.4, 1 + rel.durPct + (hero.durPct || 0) + syn.durPct),
     amount: rel.amount + syn.amount + bl.amount + (rr ? rr.amount : 0),
     bonusPierce: (rel.bonusPierce || 0) + syn.bonusPierce,
@@ -266,6 +274,61 @@ export function updatePlayer(run, input, dt) {
   p.x += dx;
   p.y += dy;
   p.inWater = run.mapId === 'hedeng' && isRiverWater(p.x, p.y, run._seedNum);
+
+  // 芦二娘被动「推浪」：持续行步叠起身后水浪（最多 5 层），停步渐消；带层行步时身后周期溅起水浪伤敌
+  if ((p.heroId || run.heroId) === 'weier') {
+    const wCfg = HEROES.weier;
+    const maxS = wCfg.waveMaxStacks || 5;
+    const stepSec = wCfg.waveStepSec || 0.5;
+    const decaySec = wCfg.waveDecaySec || 0.5;
+    if (p.moving) {
+      p._waveAcc = (p._waveAcc || 0) + dt;
+      let changed = false;
+      while (p._waveAcc >= stepSec) {
+        p._waveAcc -= stepSec;
+        if ((p.waveStacks || 0) < maxS) {
+          p.waveStacks = (p.waveStacks || 0) + 1;
+          changed = true;
+        }
+      }
+      if (changed) recomputeMods(run);
+      if ((p.waveStacks || 0) > 0 && Array.isArray(run._scheduled)) {
+        p._wakeT = (p._wakeT || 0) + dt;
+        const wakeGap = wCfg.wakeInterval || 0.55;
+        if (p._wakeT >= wakeGap) {
+          p._wakeT -= wakeGap;
+          const stacks = p.waveStacks || 1;
+          const areaMul = run.mods?.areaMul || 1;
+          const wakeR = (34 + stacks * 6) * areaMul;
+          const wakeDmg = (10 + (p.level || 1) * 3) * (0.65 + 0.35 * stacks);
+          run._scheduled.push({
+            delay: 0,
+            type: 'weierWake',
+            x: p.x - (p.facingX || 0) * 24,
+            y: p.y - (p.facingY || -1) * 24,
+            radius: wakeR,
+            dmg: wakeDmg,
+            stacks,
+            ownerSlot: p.slot || 0,
+          });
+        }
+      }
+    } else if ((p.waveStacks || 0) > 0) {
+      p._wakeT = 0;
+      p._waveAcc = (p._waveAcc || 0) + dt;
+      let changed = false;
+      while (p._waveAcc >= decaySec && p.waveStacks > 0) {
+        p._waveAcc -= decaySec;
+        p.waveStacks--;
+        changed = true;
+      }
+      if (p.waveStacks <= 0) p._waveAcc = 0;
+      if (changed) recomputeMods(run);
+    } else {
+      p._waveAcc = 0;
+      p._wakeT = 0;
+    }
+  }
 
   if (p.moving && (run.mods?.watchmanStepStacks || 0) > 0) {
     const stepDist = BLESSING_TUNING.watchman_step.stepDist;

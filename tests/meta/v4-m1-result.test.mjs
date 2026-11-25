@@ -88,7 +88,7 @@ test('M1.5 距下一目标：优先选取最接近完成的解锁目标（英雄
 
   // 5. 全部解锁与拥有时返回 null
   const sFull = defaultSave();
-  sFull.unlockedHeroes = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'];
+  sFull.unlockedHeroes = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi', 'weier', 'qiansuanzi'];
   for (const id of ACHIEVEMENT_IDS) sFull.achievements[id] = 1;
   sFull.cosmetics.owned = [
     ...HERO_SKINS.filter((x) => x.unlock === 'shop').map((x) => x.id),

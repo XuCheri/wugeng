@@ -1552,6 +1552,144 @@ function updateLuopanSlip(run, w, dt) {
   emitFire(run, w, p.x, p.y, baseA);
 }
 
+// ───────────────────────── 21. 破浪竹杆 → 靖海镇浪杆 ─────────────────────────
+
+function updateBambooPole(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  w.cd = cooldown(run, w);
+  const def = WEAPONS.bamboo_pole;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const R = wstat('bamboo_pole', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const spreadDeg = w.evolved ? evo.arcDeg : wstat('bamboo_pole', 'arcDeg', w.level);
+  const spreadRad = Math.min(Math.PI * 1.9, (spreadDeg * Math.PI) / 180 * Math.min(1.4, areaMul));
+  const dmg = baseDmg(w, run);
+
+  const pri = findPriorityTarget(run, p.x, p.y, R + 90, run._sys.scratchW);
+  const aim = pri ? fatan2(pri.y - p.y, pri.x - p.x) : fatan2(p.facingY, p.facingX);
+  w._sweeps = (w._sweeps || 0) + 1;
+
+  hitPropsCircle(run, p.x, p.y, R);
+  const list = run._sys.hash.queryCircle(p.x, p.y, R, run._sys.scratchW);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead) continue;
+    const dx = e.x - p.x;
+    const dy = e.y - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > R + e.r) continue;
+    const da = Math.abs(wrapAngle(fatan2(dy, dx) - aim));
+    if (da > spreadRad * 0.5 && dist > p.r + e.r + 12) continue;
+    applySlow(run, e, def.slowDur);
+    if (w.evolved) {
+      applyStun(run, e, evo.stunDur);
+    }
+    damageEnemy(run, e, dmg, 'bamboo_pole', {
+      knock: def.knockback * (w.evolved ? 1.25 : 1),
+      knockDx: dx || 1,
+      knockDy: dy,
+      armorBreak: w.evolved,
+    });
+  }
+
+  if (w.evolved && evo.clearBullets) {
+    for (let j = 0; j < run.projectiles.length; j++) {
+      const b = run.projectiles[j];
+      if (b.kind === 'enemyBullet' && !b.dead) {
+        const rr = R + (b.r || 0);
+        if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 <= rr * rr) b.dead = true;
+      }
+    }
+  }
+
+  newProj(run, 'mourningSweep', p.x, p.y, R, aim, def.sweepLife, {
+    weaponId: 'bamboo_pole',
+    subKind: 'bambooSweep',
+    radius: R,
+    spread: spreadRad,
+    reverse: (w._sweeps & 1) === 0,
+    evolved: w.evolved,
+  });
+  if (w.evolved) {
+    newProj(run, 'mourningSweep', p.x, p.y, R * 0.9, aim, def.sweepLife, {
+      weaponId: 'bamboo_pole',
+      subKind: 'bambooSweep',
+      radius: R * 0.9,
+      spread: spreadRad * 0.85,
+      reverse: (w._sweeps & 1) === 1,
+      evolved: true,
+    });
+  }
+
+  const waveCount = (w.evolved ? evo.waves : 1) + Math.min(2, Math.max(0, run.mods.amount || 0));
+  const wSpd = (w.evolved ? evo.waveSpeed : def.waveSpeed) * (run.mods?.durMul || 1);
+  const wLife = (w.evolved ? evo.waveLife : def.waveLife) * (run.mods?.durMul || 1);
+  const wR = (w.evolved ? evo.waveR : def.waveR) * areaMul;
+  const wDmg = dmg * (w.evolved ? evo.waveDmgMul : def.waveDmgMul);
+  const fan = w.evolved ? evo.waveFan : 0.24;
+  for (let k = 0; k < waveCount; k++) {
+    const wa = aim + (k - (waveCount - 1) / 2) * fan;
+    newProj(run, 'bambooWave', p.x + fcos(wa) * 18, p.y + fsin(wa) * 18, wR, wa, wLife, {
+      weaponId: 'bamboo_pole',
+      hitR: wR,
+      radius: wR,
+      vx: fcos(wa) * wSpd,
+      vy: fsin(wa) * wSpd,
+      speed: wSpd,
+      dmg: wDmg,
+      stunDur: w.evolved ? evo.stunDur * 0.7 : 0,
+      clearBullets: w.evolved,
+      evolved: w.evolved,
+      _hit: [],
+    });
+  }
+  emitFire(run, w, p.x, p.y, aim);
+}
+
+// ───────────────────────── 22. 金算盘 → 乾坤金算盘 ─────────────────────────
+
+function updateGoldAbacus(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.gold_abacus;
+  const evo = def.evo;
+  const p = run.player;
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = def.seekRange * sigScale;
+  const t0 = findPriorityTarget(run, p.x, p.y, seekR, run._sys.scratchW);
+  if (!t0) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+  w.cd = cooldown(run, w);
+  const n = wstat('gold_abacus', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
+  const bounces = wstat('gold_abacus', 'bounces', w.level) + (w.evolved ? evo.bonusBounces : 0) + (run.mods.bonusPierce || 0);
+  const spd = (w.evolved ? evo.speed : def.speed) * (run.mods?.durMul || 1);
+  const bounceRange = (w.evolved ? evo.bounceRange : def.bounceRange) * weaponAreaMul(run, w);
+  const dmg = baseDmg(w, run);
+  const baseA = fatan2(t0.y - p.y, t0.x - p.x);
+
+  for (let i = 0; i < n; i++) {
+    const a = baseA + (i - (n - 1) / 2) * 0.2;
+    newProj(run, 'abacusBead', p.x, p.y, def.r * sigScale, a, def.life * (run.mods?.durMul || 1), {
+      weaponId: 'gold_abacus',
+      vx: fcos(a) * spd,
+      vy: fsin(a) * spd,
+      speed: spd,
+      bouncesLeft: bounces,
+      bounceCount: 0,
+      bounceRange,
+      dmg,
+      evolved: w.evolved,
+      _hit: [],
+      _tgt: i === 0 ? t0 : null,
+    });
+  }
+  emitFire(run, w, p.x, p.y, baseA);
+}
+
 // ───────────────────────── 持续弹体同步（灯笼、火环、纸扎仪仗）─────────────────────────
 
 function summonKey(run, w) {
@@ -1689,6 +1827,8 @@ const UPDATERS = {
   sky_lantern: updateSkyLantern,
   carpenter_line: updateCarpenterLine,
   luopan_slip: updateLuopanSlip,
+  bamboo_pole: updateBambooPole,
+  gold_abacus: updateGoldAbacus,
 };
 
 export function updateWeapons(run, dt) {

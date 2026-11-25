@@ -84,6 +84,8 @@ const KIND_WEAPON = {
   skyLantern: 'sky_lantern',
   inkLine: 'carpenter_line',
   luopanSlip: 'luopan_slip',
+  bambooWave: 'bamboo_pole',
+  abacusBead: 'gold_abacus',
 };
 
 const GROUND_KINDS = new Set([
@@ -1529,6 +1531,29 @@ export function createRenderer(canvas, opts = {}) {
           ctx.stroke();
         }
         blit(ctx, projSprite(evolved ? 'luopanSlipEvo' : 'luopanSlip'), p.x, p.y, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang);
+        break;
+      }
+      case 'bambooWave': {
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        const fade = k > 0.78 ? (1 - k) / 0.22 : 1;
+        const sc = ((p.radius || 22) / 22) * (evolved ? 1.12 : 1);
+        blit(ctx, projSprite(evolved ? 'bambooWaveEvo' : 'bambooWave'), p.x, p.y, sc, sc, ang, fade * 0.92);
+        break;
+      }
+      case 'abacusBead': {
+        const ang = (p.angle ?? 0) + clock * 14;
+        if (!low) {
+          const vlen = Math.hypot(p.vx || 0, p.vy || 0) || 1;
+          const ux = (p.vx || 1) / vlen;
+          const uy = (p.vy || 0) / vlen;
+          ctx.strokeStyle = evolved ? lanternA(0.78) : paperA(0.5);
+          ctx.lineWidth = evolved ? 2.2 : 1.6;
+          ctx.beginPath();
+          ctx.moveTo(p.x - ux * 16, p.y - uy * 16);
+          ctx.lineTo(p.x - ux * 3, p.y - uy * 3);
+          ctx.stroke();
+        }
+        blit(ctx, projSprite(evolved ? 'abacusBeadEvo' : 'abacusBead'), p.x, p.y, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang);
         break;
       }
       case 'enemyBullet': {

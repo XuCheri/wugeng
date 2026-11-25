@@ -871,6 +871,147 @@ function drawNuoxiGoldNuoGod(g, f) {
   return { handX: 11, handY: -12.5 };
 }
 
+/* ------------------------------------------------------------------ */
+/* 7. 芦二娘 (weier) 三套皮肤                                           */
+/* ------------------------------------------------------------------ */
+
+function drawWeierDefault(g, f, outfit) {
+  // 原装木版 6 色：背斜修竹杆 + 三叠蓑草短衣 + 低檐扁水笠斜插白芦
+  line(g, -9.5, -31, 3.5, -9, 1.7, INK);
+  drawLegs(g, f);
+  drawClassicRobe(g, PAPER_SHADE, outfit);
+  poly(g, [[-7.2, -20.2], [7.2, -20.2], [9.2, -13.5], [-9.2, -13.5]]);
+  fillStroke(g, PAPER, 1.0, INK);
+  vfill(g, () => circ(g, 0, -19.2, 1.5));
+  drawFace(g, -22.2, 3.8, PAPER);
+  line(g, 1.8, -25.5, 8.2, -33.2, 1.1, INK);
+  poly(g, [[5.2, -29.8], [9.5, -34.2], [9.8, -30.8], [5.8, -28.0]]);
+  fillStroke(g, PAPER, 0.8, INK);
+  g.beginPath();
+  g.moveTo(-10.2, -24.8);
+  g.quadraticCurveTo(0, -31.8, 10.2, -24.8);
+  g.quadraticCurveTo(0, -23.2, -10.2, -24.8);
+  g.closePath();
+  fillStroke(g, PAPER_SHADE, 1.2, INK);
+  return { handX: 7.2, handY: -12 };
+}
+
+function drawWeierJadeLotus(g, f) {
+  // 鬼市石绿：横向盛放青莲水袖舞裙 [-19.5..+19.5] + 高耸三瓣翠玉莲花冠 [y=-41]
+  poly(g, [[-8, -19.5], [8, -19.5], [19.5, -4], [14, 3.2], [0, 1.2], [-14, 3.2], [-19.5, -4]]);
+  fillStroke(g, MINERAL.jadeDeep, 1.3, INK);
+  poly(g, [[-6.5, -19], [6.5, -19], [14.5, -1], [0, 2.6], [-14.5, -1]]);
+  fillStroke(g, MINERAL.jade, 1.1, INK);
+  poly(g, [[-11, -20.5], [0, -14.5], [11, -20.5], [7, -22.2], [-7, -22.2]]);
+  fillStroke(g, MINERAL.jadeLight, 1.0, INK);
+  line(g, 7, -17, 13, -12, 2.5, MINERAL.jade);
+  drawFace(g, -22.4, 3.8, PAPER);
+  // 翠玉高莲冠
+  poly(g, [[0, -42], [5.5, -31], [12, -36], [7.5, -25.5], [-7.5, -25.5], [-12, -36], [-5.5, -31]]);
+  fillStroke(g, MINERAL.jadeLight, 1.2, INK);
+  circ(g, 0, -29.5, 2.2);
+  fillStroke(g, MINERAL.goldLight, 0.9, INK);
+  return { handX: 13, handY: -12 };
+}
+
+function drawWeierAzureTide(g, f) {
+  // 功绩石青：背后高悬沧海满月巨环 [-16..+16, y=-46..-16] + 偏左奔涌大浪尾袍 [-22..+9]
+  circ(g, 0, -31, 14.5);
+  strokeCfg(g, 2.8, MINERAL.azureLight);
+  g.stroke();
+  circ(g, 0, -31, 10.5);
+  strokeCfg(g, 1.6, MINERAL.goldLight);
+  g.stroke();
+  // 偏左翻卷镇海巨浪尾裙
+  poly(g, [[-7, -19], [6.5, -19], [9, -3], [-4, 2.5], [-21.5, 3.8], [-18, -7], [-22, -13]]);
+  fillStroke(g, MINERAL.azureDeep, 1.3, INK);
+  poly(g, [[-5.5, -18.5], [5.5, -18.5], [7, -4.5], [-15.5, 1.2], [-13, -8]]);
+  fillStroke(g, MINERAL.azure, 1.1, INK);
+  drawLegs(g, f, INK, 2.2);
+  line(g, 5.5, -17, 11.5, -12, 2.6, MINERAL.azureLight);
+  drawFace(g, -22.4, 3.8, PAPER);
+  // 镇水双翼金印高冠
+  poly(g, [[-17, -30], [-5, -26], [0, -36], [5, -26], [17, -30], [11, -24], [-11, -24]]);
+  fillStroke(g, MINERAL.azure, 1.2, INK);
+  circ(g, 0, -32, 2.6);
+  fillStroke(g, MINERAL.gold, 0.9, INK);
+  return { handX: 11.5, handY: -12 };
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. 钱算子 (qiansuanzi) 三套皮肤                                      */
+/* ------------------------------------------------------------------ */
+
+function drawQiansuanziDefault(g, f, outfit) {
+  // 原装木版 6 色：背负黄铜算盘 + 青墨对襟长衫 + 圆镜黑布小帽
+  poly(g, [[-9.4, -24.5], [-2.5, -24.5], [-2.5, -13.5], [-9.4, -13.5]]);
+  fillStroke(g, INK, 1.1, INK);
+  poly(g, [[-8.3, -23.2], [-3.5, -23.2], [-3.5, -14.8], [-8.3, -14.8]]);
+  fillStroke(g, LANTERN, 0.8, INK);
+  drawLegs(g, f);
+  drawClassicRobe(g, INK, outfit);
+  line(g, 0, -20, 0, -6.5, 1.2, PAPER_SHADE);
+  circ(g, 3.8, -11.5, 1.7);
+  fillStroke(g, LANTERN, 0.7, INK);
+  drawFace(g, -22.2, 3.8, PAPER);
+  circ(g, -1.5, -21.4, 1.3);
+  strokeCfg(g, 0.8, INK);
+  g.stroke();
+  circ(g, 1.6, -21.4, 1.3);
+  g.stroke();
+  g.beginPath();
+  g.moveTo(-4.5, -24.2);
+  g.quadraticCurveTo(-4.2, -29.8, 0, -29.8);
+  g.quadraticCurveTo(4.2, -29.8, 4.5, -24.2);
+  g.closePath();
+  fillStroke(g, INK, 1.1, INK);
+  vfill(g, () => circ(g, 0, -30.8, 1.3));
+  return { handX: 7.2, handY: -12 };
+}
+
+function drawQiansuanziVioletAbacus(g, f) {
+  // 鬼市紫晶：悬浮六枚紫晶星算轮 [-19..+19, y=-38..-14] + 修身窄摆紫电星袍 + 高耸紫玉方冠 [y=-43]
+  for (const [bx, by] of [[-17, -28], [-15, -17], [17, -28], [15, -17], [-10, -37], [10, -37]]) {
+    poly(g, [[bx, by - 3.6], [bx + 3.2, by], [bx, by + 3.6], [bx - 3.2, by]]);
+    fillStroke(g, MINERAL.violetLight, 0.9, INK);
+  }
+  drawLegs(g, f, INK, 2.2);
+  poly(g, [[-6.5, -20], [6.5, -20], [10.5, -2.5], [-10.5, -2.5]]);
+  fillStroke(g, MINERAL.violetDeep, 1.3, INK);
+  poly(g, [[-4.5, -19], [4.5, -19], [6.8, -4.5], [-6.8, -4.5]]);
+  fillStroke(g, MINERAL.violet, 1.0, INK);
+  line(g, 6, -17, 11.8, -12, 2.5, MINERAL.violetLight);
+  drawFace(g, -22.4, 3.8, PAPER);
+  poly(g, [[-4.8, -24.8], [-5.8, -42], [5.8, -42], [4.8, -24.8]]);
+  fillStroke(g, MINERAL.violetDeep, 1.2, INK);
+  circ(g, 0, -34, 2.6);
+  fillStroke(g, MINERAL.goldLight, 0.9, INK);
+  return { handX: 11.8, handY: -12 };
+}
+
+function drawQiansuanziGoldTreasury(g, f) {
+  // 功绩鎏金：超宽双展翅金乌纱帽 [-22..+22] + 宽阔招财元宝曳地大官袍 [-20..+20]
+  poly(g, [[-9, -20], [9, -20], [20.5, -2], [17, 3.6], [-17, 3.6], [-20.5, -2]]);
+  fillStroke(g, MINERAL.goldDeep, 1.3, INK);
+  poly(g, [[-6.5, -19.2], [6.5, -19.2], [13.5, 1.6], [-13.5, 1.6]]);
+  fillStroke(g, VERM, 1.1, INK);
+  // 胸前金元宝大玉带
+  poly(g, [[-7.5, -12.5], [7.5, -12.5], [5.5, -8.5], [-5.5, -8.5]]);
+  fillStroke(g, MINERAL.goldLight, 1.0, INK);
+  line(g, 7.5, -17, 13.2, -12, 2.6, MINERAL.gold);
+  drawFace(g, -22.4, 3.9, PAPER);
+  // 左右平展金翅乌纱官帽
+  poly(g, [[-22, -28.5], [-6, -26.5], [-6, -29.8], [-22, -31.8]]);
+  fillStroke(g, MINERAL.gold, 1.1, INK);
+  poly(g, [[22, -28.5], [6, -26.5], [6, -29.8], [22, -31.8]]);
+  fillStroke(g, MINERAL.gold, 1.1, INK);
+  poly(g, [[-6, -24.5], [-5.5, -34.5], [5.5, -34.5], [6, -24.5]]);
+  fillStroke(g, MINERAL.goldDeep, 1.2, INK);
+  circ(g, 0, -29.5, 2.4);
+  fillStroke(g, MINERAL.goldLight, 0.9, VERM);
+  return { handX: 13.2, handY: -12 };
+}
+
 const SKIN_DRAWERS = {
   zhou_default: (g, f, outfit) => drawZhouDefault(g, f, outfit),
   zhou_jade_watch: (g, f) => drawZhouJadeWatch(g, f),
@@ -896,6 +1037,14 @@ const SKIN_DRAWERS = {
   nuoxi_default: (g, f, outfit) => drawNuoxiDefault(g, f, outfit),
   nuoxi_azure_phoenix: (g, f) => drawNuoxiAzurePhoenix(g, f),
   nuoxi_gold_nuo_god: (g, f) => drawNuoxiGoldNuoGod(g, f),
+
+  weier_default: (g, f, outfit) => drawWeierDefault(g, f, outfit),
+  weier_jade_lotus: (g, f) => drawWeierJadeLotus(g, f),
+  weier_azure_tide: (g, f) => drawWeierAzureTide(g, f),
+
+  qiansuanzi_default: (g, f, outfit) => drawQiansuanziDefault(g, f, outfit),
+  qiansuanzi_violet_abacus: (g, f) => drawQiansuanziVioletAbacus(g, f),
+  qiansuanzi_gold_treasury: (g, f) => drawQiansuanziGoldTreasury(g, f),
 };
 
 export function heroSkinSprite(heroId, skinId = null, frame = 0, flash = false, legacyOutfit = null) {

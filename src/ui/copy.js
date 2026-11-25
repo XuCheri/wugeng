@@ -69,6 +69,26 @@ export const HERO_COPY = {
     ultDesc: '起舞连擂四重逐疫傩鼓随身净弹，五秒内移速与攻速大幅提升',
     unlock: '单局激活任意流派 6 件羁绊',
   },
+  weier: {
+    name: '水路引灯娘·芦二娘',
+    short: '芦二娘',
+    flavor: '水口夜黑浪急，竹杆一点，暗流百祟皆让路。',
+    trait: '推浪：持续行步叠起水浪（至多5层，每层伤害+7%、范围+4%并溅浪伤敌，停步渐消）',
+    weapon: 'bamboo_pole',
+    ultName: '千浪过水口',
+    ultDesc: '激起三叠破煞巨浪横卷全屏净弹定身，并立满五层推浪疾行',
+    unlock: '通关「河灯水口」任意夜色',
+  },
+  qiansuanzi: {
+    name: '账房·钱算子',
+    short: '钱算子',
+    flavor: '阴阳两界千笔旧账，金算一响，分毫不差。',
+    trait: '铁算收魂：寻常不远摄魂火，每3秒集中收魂一回，倍率1+0.08×团数（上限×2）',
+    weapon: 'gold_abacus',
+    ultName: '万贯清账令',
+    ultDesc: '引爆场上魂火与铜钱化作索敌金算子轰击群祟，尽数倍率入账并额外落钱',
+    unlock: '累计拾取 20000 团魂火',
+  },
 };
 
 function own(obj, k) {
@@ -143,6 +163,8 @@ const WEAPON_FALLBACK = {
   sky_lantern: ['孔明灯', '九天赤焰灯'],
   carpenter_line: ['墨斗线', '乾坤断魂线'],
   luopan_slip: ['风水飞签', '天罡定穴签'],
+  bamboo_pole: ['破浪竹杆', '靖海镇浪杆'],
+  gold_abacus: ['金算盘', '乾坤金算盘'],
 };
 
 const RELIC_FALLBACK = {
@@ -166,6 +188,8 @@ const RELIC_FALLBACK = {
   lamp_oil: '长明灯油',
   folk_rice: '百家米',
   cinnabar_pen: '朱砂笔',
+  straw_cape: '防风蓑衣',
+  ledger_book: '阴阳账册',
 };
 
 const PAIRS = {
@@ -189,6 +213,8 @@ const PAIRS = {
   lamp_oil: 'sky_lantern',
   folk_rice: 'carpenter_line',
   cinnabar_pen: 'luopan_slip',
+  straw_cape: 'bamboo_pole',
+  ledger_book: 'gold_abacus',
 };
 
 export const WEAPON_INTRO = {
@@ -212,6 +238,8 @@ export const WEAPON_INTRO = {
   sky_lantern: '放飞孔明灯升空索敌，天火轰落灼燃一片',
   carpenter_line: '弹射笔直墨线贯穿两点之间群祟并附流血',
   luopan_slip: '齐射多枚索敌飞签灵巧穿刺群祟',
+  bamboo_pole: '挥动修竹长杆横抽前方群祟，激起水花震退减速',
+  gold_abacus: '弹出黄铜算子在邪祟之间疾速弹跳穿击',
 };
 
 export const EVOLVE_INTRO = {
@@ -235,6 +263,8 @@ export const EVOLVE_INTRO = {
   sky_lantern: B.WEAPONS?.sky_lantern?.evoDesc || '多枚赤焰天灯升空洒火，轰落引爆阳炎火印并留流火余烬',
   carpenter_line: B.WEAPONS?.carpenter_line?.evoDesc || '布下三才断魂墨阵持续斩裂沿线邪祟，碎甲减速并引爆墨煞',
   luopan_slip: B.WEAPONS?.luopan_slip?.evoDesc || '金朱飞签疾速追踪连穿，三中同祟引爆定穴破脉震晕四邻',
+  bamboo_pole: B.WEAPONS?.bamboo_pole?.evoDesc || '双杆交击横扫净除敌弹，卷起破甲巨浪贯穿定身',
+  gold_abacus: B.WEAPONS?.gold_abacus?.evoDesc || '多枚赤金算子连环弹射，每三跳引爆金光震波并震落铜钱',
 };
 
 export const RECIPE_LABELS = {
@@ -459,6 +489,8 @@ export const ACHIEVEMENT_NAMES = {
   codex30: '百物通晓',
   clears5: '五度破晓',
   coop3: '同守五更灯',
+  hedengClear: '水口破晓',
+  xpOrbs5000: '聚魂成海',
 };
 
 export const ACHIEVEMENT_DESC = {
@@ -482,6 +514,8 @@ export const ACHIEVEMENT_DESC = {
   codex30: '百物谱累计收录达到 30 项',
   clears5: '累计守满五更通关 5 回',
   coop3: '参与同守五更联机或画阵扶起队友累计 3 次',
+  hedengClear: '通关「河灯水口」任意夜色 1 回，解锁皮肤「沧海踏浪袍」',
+  xpOrbs5000: '累计拾取 5000 团魂火，解锁皮肤「鎏金财神袍」',
 };
 
 export const ENEMY_COPY = {

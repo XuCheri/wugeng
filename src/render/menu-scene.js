@@ -404,6 +404,8 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     yinyang: { halo0: paperA(0.24), halo1: lanternA(0.22), sigil: 'stars', accent: PAPER_SHADE },
     tiejiang: { halo0: vermA(0.32), halo1: lanternA(0.20), sigil: 'forge', accent: VERM },
     nuoxi: { halo0: vermA(0.34), halo1: paperA(0.16), sigil: 'drum', accent: VERM },
+    weier: { halo0: paperA(0.28), halo1: lanternA(0.20), sigil: 'waves', accent: PAPER },
+    qiansuanzi: { halo0: lanternA(0.32), halo1: vermA(0.18), sigil: 'abacus', accent: LANTERN },
   };
   const hTheme = heroThemes[heroId] || heroThemes.zhou;
 
@@ -553,6 +555,34 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
         ctx.fillStyle = LANTERN;
         ctx.beginPath();
         ctx.arc(Math.cos(a) * 64, Math.sin(a) * 64, 4.2, 0, TAU);
+        ctx.fill();
+      }
+    } else if (hTheme.sigil === 'waves') {
+      ctx.globalAlpha = 0.26;
+      ctx.lineWidth = 2.2;
+      for (let row = -1; row <= 1; row++) {
+        ctx.beginPath();
+        for (let k = -3; k <= 3; k++) {
+          const wx = k * 24 + Math.sin(tSec * 2 + row) * 6;
+          const wy = row * 22;
+          ctx.arc(wx, wy, 12, Math.PI, TAU);
+        }
+        ctx.stroke();
+      }
+    } else if (hTheme.sigil === 'abacus') {
+      ctx.globalAlpha = 0.28;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-62, -38, 124, 76);
+      for (let r = -2; r <= 2; r++) {
+        const rx = r * 22;
+        ctx.beginPath();
+        ctx.moveTo(rx, -38);
+        ctx.lineTo(rx, 38);
+        ctx.stroke();
+        const by = Math.sin(tSec * 2.4 + r) * 14;
+        ctx.fillStyle = LANTERN;
+        ctx.beginPath();
+        ctx.arc(rx, by, 5.2, 0, TAU);
         ctx.fill();
       }
     }

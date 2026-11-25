@@ -20,11 +20,12 @@ export const DAOTONG_TIME = WATCH5_TIME;
 export const YINYANG_EVOLVES = 2;
 export const TIEJIANG_TOTAL_KILLS = 2500;
 export const NUOXI_SYNERGY_TIER = 6;
+export const QIAN_TOTAL_XP_ORBS = 20000;
 
 const STAT_KEYS = [
   'runs', 'clears', 'firstRunDone', 'totalPlaySec',
   'bestTimeSec', 'bestKills', 'bestHit', 'totalKills', 'totalCoins',
-  'totalEvolutions', 'totalBossKills', 'coopRuns', 'coopRevives', 'totalEvents',
+  'totalEvolutions', 'totalBossKills', 'coopRuns', 'coopRevives', 'totalEvents', 'totalXpOrbs',
 ];
 
 const safeNum = (v, max = 1e15) => {
@@ -103,6 +104,7 @@ function ensureUnlockSave(save) {
   st.coopRuns = safeInt(st.coopRuns, 1e9);
   st.coopRevives = safeInt(st.coopRevives, 1e9);
   st.totalEvents = safeInt(st.totalEvents, 1e9);
+  st.totalXpOrbs = safeInt(st.totalXpOrbs, 1e12);
 
   if (!isPlainObj(save.achievements)) save.achievements = {};
   if (Array.isArray(save.mapsUnlocked) && canMutateArray(save.mapsUnlocked)) {
@@ -213,7 +215,8 @@ export function evaluateUnlocks(save, summary) {
   if (summaryEvolvedCount(summary) >= YINYANG_EVOLVES) unlockHero('yinyang');
   if (Math.max(safeInt(save.stats?.totalKills), safeInt(summary.kills)) >= TIEJIANG_TOTAL_KILLS) unlockHero('tiejiang');
   if (summaryMaxSynergy(summary) >= NUOXI_SYNERGY_TIER) unlockHero('nuoxi');
-  syncUnlockedHeroSignatureWeapons(save);
+  if ((summary.cleared && summary.mapId === 'hedeng') || safeInt(save.clearsByMap?.hedeng) >= 1) unlockHero('weier');
+  if (Math.max(safeInt(save.stats?.totalXpOrbs), safeInt(summary.xpOrbsCollected)) >= QIAN_TOTAL_XP_ORBS) unlockHero('qiansuanzi');
 
   if (summary.cleared) {
     const explicitMap = typeof summary.mapId === 'string';
@@ -221,6 +224,7 @@ export function evaluateUnlocks(save, summary) {
     if (isPlainObj(save.clearsByMap) && canMutateObj(save.clearsByMap) && canWriteProp(save.clearsByMap, clearedMapId)) {
       save.clearsByMap[clearedMapId] = Math.min(1e9, safeInt(save.clearsByMap[clearedMapId], 1e9) + 1);
     }
+    if (clearedMapId === 'hedeng') unlockHero('weier');
     if (clearedMapId === 'qingshi' && Array.isArray(save.mapsUnlocked) && canMutateArray(save.mapsUnlocked) && !save.mapsUnlocked.includes('hedeng')) {
       save.mapsUnlocked.push('hedeng');
       if (explicitMap) out.push({ kind: 'map', id: 'hedeng' });
@@ -235,6 +239,7 @@ export function evaluateUnlocks(save, summary) {
       out.push({ kind: 'night', id: next });
     }
   }
+  syncUnlockedHeroSignatureWeapons(save);
   return out;
 }
 
@@ -243,6 +248,8 @@ export function heroUnlockProgress(save, heroId) {
   const s = isPlainObj(save) && isPlainObj(save.stats) ? save.stats : {};
   if (heroId === 'mian') return { have: Math.min(MIAN_KILLS, safeInt(s.bestKills, MIAN_KILLS)), need: MIAN_KILLS };
   if (heroId === 'tiejiang') return { have: Math.min(TIEJIANG_TOTAL_KILLS, safeInt(s.totalKills, TIEJIANG_TOTAL_KILLS)), need: TIEJIANG_TOTAL_KILLS };
+  if (heroId === 'weier') return { have: Math.min(1, safeInt(save?.clearsByMap?.hedeng, 1)), need: 1 };
+  if (heroId === 'qiansuanzi') return { have: Math.min(QIAN_TOTAL_XP_ORBS, safeInt(s.totalXpOrbs, QIAN_TOTAL_XP_ORBS)), need: QIAN_TOTAL_XP_ORBS };
   return null;
 }
 
@@ -285,6 +292,22 @@ export function findNextUnlockGoal(save) {
         have,
         need: TIEJIANG_TOTAL_KILLS,
         scoreRatio: have / TIEJIANG_TOTAL_KILLS,
+        priority: 3,
+      });
+    }
+  }
+  if (!unlockedHeroes.includes('qiansuanzi')) {
+    const have = Math.min(QIAN_TOTAL_XP_ORBS, safeInt(st.totalXpOrbs, QIAN_TOTAL_XP_ORBS));
+    if (have < QIAN_TOTAL_XP_ORBS) {
+      candidates.push({
+        kind: 'hero',
+        id: 'qiansuanzi',
+        title: '解锁打更人 · 钱算子',
+        hint: `累计拾取 ${QIAN_TOTAL_XP_ORBS} 团魂火`,
+        unit: '团',
+        have,
+        need: QIAN_TOTAL_XP_ORBS,
+        scoreRatio: have / QIAN_TOTAL_XP_ORBS,
         priority: 3,
       });
     }
@@ -402,6 +425,7 @@ export function recordRun(save, summary, now = Date.now()) {
   const coopSize = safeInt(sum.coopSize, 16);
   const revivesDone = safeInt(sum.revivesDone, 1e6);
   const eventsDone = safeInt(sum.eventsCompleted, 1e6);
+  const xpOrbsCollected = safeInt(sum.xpOrbsCollected, 1e9);
 
   save.coins = Math.min(1e12, save.coins + coins);
   const st = save.stats;
@@ -421,6 +445,7 @@ export function recordRun(save, summary, now = Date.now()) {
   if (coopSize >= 2) st.coopRuns = Math.min(1e9, st.coopRuns + 1);
   st.coopRevives = Math.min(1e9, st.coopRevives + revivesDone);
   st.totalEvents = Math.min(1e9, st.totalEvents + eventsDone);
+  st.totalXpOrbs = Math.min(1e12, st.totalXpOrbs + xpOrbsCollected);
   if (sum.cleared) st.clears = Math.min(1e9, st.clears + 1);
 
   recordLeaderboardEntry(save, sum, now);
