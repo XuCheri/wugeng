@@ -526,7 +526,7 @@ export const TIER4_TESTS = [
         }, { enemyTypes: REGULAR_ENEMY_IDS });
 
         assert.equal(perf.enemies, 300);
-        assert.equal(perf.distinctEnemyTypes, 9);
+        assert.equal(perf.distinctEnemyTypes, REGULAR_ENEMY_IDS.length);
         assert.equal(perf.projectiles, 400);
         assert.ok(perf.p50 < 400, `Expected p50 < 400ms, got ${perf.p50.toFixed(1)}ms`);
         s.assertNoErrors('T4-S05');

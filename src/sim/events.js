@@ -139,6 +139,7 @@ export function startWatchEvent(run, kindArg) {
       summoned: true,
     });
     ingot.eventIngot = true;
+    ingot.fleeSign = rng.chance(0.5) ? 1 : -1;
     ingot.xp = 0;
     ingot.dmg = 4;
     ev.targetEnemyId = ingot.id;

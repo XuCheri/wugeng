@@ -945,7 +945,7 @@ export const TIER1_F1_F7 = [
 
         assert.equal(res.state, 'running');
         assert.equal(res.playedBaseline, true, 'Expected all 15 baseline SFX voices to play');
-        assert.equal(res.totalChecked, 16);
+        assert.equal(res.totalChecked, ALL_WEAPON_IDS.length);
         assert.deepEqual(res.missingWeapons, [], `Missing WebAudio fire_<weapon> cues for: ${res.missingWeapons.join(', ')}`);
         s.assertNoErrors('T1-F3-04');
       } finally {
@@ -957,7 +957,7 @@ export const TIER1_F1_F7 = [
     id: 'T1-F3-05',
     tier: 1,
     feature: 'F3',
-    name: 'Codex (百物谱) displays [16, 16, 16, 12, 6] entries (66 total) & 16 unique bespoke evolved weapon icons',
+    name: 'Codex (百物谱) displays full tab entries & unique bespoke evolved weapon icons',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
@@ -980,9 +980,9 @@ export const TIER1_F1_F7 = [
           const n = await s.page.$$eval('.codex-list > .codex-row:not(.codex-row--ach)', (els) => els.length);
           counts.push(n);
         }
-        assert.deepEqual(counts, CODEX_TAB_COUNTS, `Expected Codex counts [16,16,16,12,6], got [${counts.join(',')}]`);
+        assert.deepEqual(counts, CODEX_TAB_COUNTS, `Expected Codex counts [${CODEX_TAB_COUNTS.join(',')}], got [${counts.join(',')}]`);
 
-        // Verify all 16 evolved weapon names are distinct from base weapon names & icons are bespoke
+        // Verify all evolved weapon names are distinct from base weapon names & icons are bespoke
         const grabTab = async (tabIdx) => {
           await s.page.evaluate((idx) => document.querySelectorAll('.codex-tab')[idx]?.click(), tabIdx);
           return s.page.$$eval('.codex-list > .codex-row:not(.codex-row--ach)', (rows) => {
@@ -1026,16 +1026,16 @@ export const TIER1_F1_F7 = [
 
         const baseRows = await grabTab(0);
         const evoRows = await grabTab(1);
-        assert.equal(baseRows.length, 16);
-        assert.equal(evoRows.length, 16);
-        assert.equal(new Set(evoRows.map((x) => x.hash)).size, 16, 'All 16 evolved weapon icons must have unique pixel hashes');
+        assert.equal(baseRows.length, ALL_WEAPON_IDS.length);
+        assert.equal(evoRows.length, ALL_WEAPON_IDS.length);
+        assert.equal(new Set(evoRows.map((x) => x.hash)).size, ALL_WEAPON_IDS.length, 'All evolved weapon icons must have unique pixel hashes');
 
-        // Verify the 4 new base weapon names appear on tab 0 and evolved tab has distinct non-empty Chinese names
+        // Verify base weapon names appear on tab 0 and evolved tab has distinct non-empty Chinese names
         const baseTitles = baseRows.map((r) => r.title);
         for (const wid of V3_NEW_WEAPON_IDS) {
           assert.ok(baseTitles.some((t) => t.includes(V3_BASE_WEAPON_NAMES[wid])), `Missing ${V3_BASE_WEAPON_NAMES[wid]} in Codex tab 0`);
         }
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < ALL_WEAPON_IDS.length; i++) {
           assert.ok(evoRows[i].opaque > 200, `Evo icon #${i} should be non-empty`);
           assert.ok(/[\u4e00-\u9fff]{2,}/.test(evoRows[i].title) && evoRows[i].title !== '？？？', `Invalid evo title '${evoRows[i].title}'`);
           assert.notEqual(evoRows[i].title, baseRows[i].title, `Evolved weapon #${i} title must differ from base weapon '${baseRows[i].title}'`);

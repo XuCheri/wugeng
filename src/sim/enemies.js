@@ -378,7 +378,7 @@ export function updateEnemies(run, dt) {
       let moveY = ty;
 
       if (e.eventIngot) {
-        const sign = e.id & 1 ? 1 : -1;
+        const sign = e.fleeSign || 1;
         spd = e.speed * 1.48 * (e.slowT > 0 ? ai.slowMul : 1);
         if (d < 220) {
           moveX = -tx * 0.86 - ty * sign * 0.5;

@@ -4,6 +4,7 @@
 import { TIER2_F1_F7 } from './tier2-f1-f7.mjs';
 import { TIER2_F8_F15 } from './tier2-f8-f15.mjs';
 import { TIER2_F16 } from './tier2-f16.mjs';
+import { TIER2_F17 } from './tier2-f17.mjs';
 
-export { TIER2_F1_F7, TIER2_F8_F15, TIER2_F16 };
-export const TIER2_TESTS = [...TIER2_F1_F7, ...TIER2_F8_F15, ...TIER2_F16];
+export { TIER2_F1_F7, TIER2_F8_F15, TIER2_F16, TIER2_F17 };
+export const TIER2_TESTS = [...TIER2_F1_F7, ...TIER2_F8_F15, ...TIER2_F16, ...TIER2_F17];

@@ -640,11 +640,11 @@ export const TIER2_F1_F7 = [
         const wHashes = await hashTab(0);
         const rHashes = await hashTab(2);
         const eHashes = await hashTab(3);
-        assert.equal(wHashes.length, 16);
-        assert.equal(rHashes.length, 16);
-        assert.equal(new Set([...wHashes, ...rHashes]).size, 32, 'All 16 weapons + 16 relics must have 32 distinct icon bitmaps');
-        assert.equal(eHashes.length, 12);
-        assert.equal(new Set(eHashes).size, 12, 'All 12 enemy icons must have 12 distinct bitmaps');
+        assert.equal(wHashes.length, ALL_WEAPON_IDS.length);
+        assert.equal(rHashes.length, ALL_RELIC_IDS.length);
+        assert.equal(new Set([...wHashes, ...rHashes]).size, ALL_WEAPON_IDS.length + ALL_RELIC_IDS.length, 'All weapons + relics must have distinct icon bitmaps');
+        assert.equal(eHashes.length, ALL_ENEMY_IDS.length);
+        assert.equal(new Set(eHashes).size, ALL_ENEMY_IDS.length, 'All enemy icons must have distinct bitmaps');
         s.assertNoErrors('T2-F3-05');
       } finally {
         await s.close();

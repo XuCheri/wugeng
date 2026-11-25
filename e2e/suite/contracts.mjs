@@ -5,13 +5,13 @@ export const FEATURE_IDS = [
   'F1', 'F2', 'F3', 'F4', 'F5',
   'F6', 'F7', 'F8', 'F9', 'F10',
   'F11', 'F12', 'F13', 'F14', 'F15',
-  'F16',
+  'F16', 'F17',
 ];
 
 export const FEATURE_TITLES = {
   F1: '加载动画与「剑清酱工作室」Logo 开屏动画',
   F2: '6 名守夜角色与初始武器自选（本命亲和加成）',
-  F3: '6 兵刃 + 6 法器槽位扩容与 16+16 百器扩充',
+  F3: '6 兵刃 + 6 法器槽位扩容与百器扩充',
   F4: '6+6 怪潮密度、巡更头目与数值曲线重调',
   F5: '每角色多套明显差异皮肤（6 角色 × 3 套 = 18 套）',
   F6: '5 套明显差异攻击特效主题',
@@ -25,6 +25,7 @@ export const FEATURE_TITLES = {
   F14: '2–4 人「同守五更」真实多人联机（房间/多通道同步/倒地救援/MVP）',
   F15: '分模块中文 Git 合入 main、实机预览图、零缺字打包与 TapTap 测试包二维码',
   F16: 'v4 M1 体验基础（7 分钟节奏、震动、情境旁白与更房渐进开放、Boss 演出配乐、结算页亮点与一键再守）',
+  F17: 'v4 M2 局内玩法（4 种新邪祟、每更随机异事、20 对兵刃法器开光、留签弃签强化）',
 };
 
 export const MAX_WEAPONS = 6;
@@ -69,6 +70,9 @@ export const V3_NEW_WEAPON_IDS = [
   'taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum',
 ];
 export const V3_WEAPON_IDS = V3_NEW_WEAPON_IDS;
+export const V4_NEW_WEAPON_IDS = [
+  'mourning_staff', 'sky_lantern', 'carpenter_line', 'luopan_slip',
+];
 export const ACHIEVEMENT_WEAPON_IDS = ['taomujian', 'zhinian_kite'];
 export const DEFAULT_UNLOCKED_WEAPON_IDS = [
   'gong', 'lantern', 'talisman', 'brush', 'suohun_chain', 'nuo_drum',
@@ -77,6 +81,7 @@ export const ALL_WEAPON_IDS = [
   ...CLASSIC_WEAPON_IDS,
   ...NEW_WEAPON_IDS,
   ...V3_NEW_WEAPON_IDS,
+  ...V4_NEW_WEAPON_IDS,
 ];
 
 export const V3_BASE_WEAPON_NAMES = {
@@ -84,6 +89,13 @@ export const V3_BASE_WEAPON_NAMES = {
   suohun_chain: '无常锁魂链',
   zhinian_kite: '纸鸢火鸦',
   nuo_drum: '傩神战鼓',
+};
+
+export const V4_BASE_WEAPON_NAMES = {
+  mourning_staff: '引魂丧杆',
+  sky_lantern: '孔明灯',
+  carpenter_line: '墨斗线',
+  luopan_slip: '风水飞签',
 };
 
 export const CLASSIC_RELIC_IDS = [
@@ -98,10 +110,14 @@ export const V3_NEW_RELIC_IDS = [
   'leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask',
 ];
 export const V3_RELIC_IDS = V3_NEW_RELIC_IDS;
+export const V4_NEW_RELIC_IDS = [
+  'altar_mirror', 'lamp_oil', 'folk_rice', 'cinnabar_pen',
+];
 export const ALL_RELIC_IDS = [
   ...CLASSIC_RELIC_IDS,
   ...NEW_RELIC_IDS,
   ...V3_NEW_RELIC_IDS,
+  ...V4_NEW_RELIC_IDS,
 ];
 
 export const V3_RELIC_NAMES = {
@@ -109,6 +125,13 @@ export const V3_RELIC_NAMES = {
   yinpai: '勾魂阴牌',
   huoyao_pouch: '硫磺火药囊',
   wuse_mask: '五色傩面',
+};
+
+export const V4_RELIC_NAMES = {
+  altar_mirror: '镇坛铜镜',
+  lamp_oil: '长明灯油',
+  folk_rice: '百家米',
+  cinnabar_pen: '朱砂笔',
 };
 
 export const WEAPON_PAIRS = {
@@ -128,11 +151,12 @@ export const WEAPON_PAIRS = {
   suohun_chain: 'yinpai',
   zhinian_kite: 'huoyao_pouch',
   nuo_drum: 'wuse_mask',
+  mourning_staff: 'altar_mirror',
+  sky_lantern: 'lamp_oil',
+  carpenter_line: 'folk_rice',
+  luopan_slip: 'cinnabar_pen',
 };
 
-// Note: Only the 12 classic+v2 evolved names are hardcoded prose contracts.
-// For the 4 new v3 weapons (taomujian, suohun_chain, zhinian_kite, nuo_drum),
-// opaque-box tests verify non-empty Chinese evolved names distinct from base weapon names.
 export const WEAPON_EVO_NAMES = {
   gong: '五更鸣锣',
   lantern: '长明灯',
@@ -148,9 +172,6 @@ export const WEAPON_EVO_NAMES = {
   paperhorse: '百鬼夜行图',
 };
 
-// Note: WEAPON_TAGS and RELIC_TAGS list the 12 classic+v2 school tag assignments.
-// PROJECT.md does not hardcode school tags for the 4 new v3 weapons/relics
-// (taomujian/leijimu, suohun_chain/yinpai, zhinian_kite/huoyao_pouch, nuo_drum/wuse_mask).
 export const WEAPON_TAGS = {
   gong: ['zhenhun'],
   bell: ['zhenhun'],
@@ -187,9 +208,13 @@ export const CLASSIC_REGULAR_ENEMY_IDS = [
 export const NEW_REGULAR_ENEMY_IDS = [
   'suona', 'paperbride', 'cinder',
 ];
+export const V4_NEW_REGULAR_ENEMY_IDS = [
+  'archer_ghost', 'firecracker_boy', 'twin_paper', 'shaman',
+];
 export const REGULAR_ENEMY_IDS = [
   ...CLASSIC_REGULAR_ENEMY_IDS,
   ...NEW_REGULAR_ENEMY_IDS,
+  ...V4_NEW_REGULAR_ENEMY_IDS,
 ];
 export const BOSS_ENEMY_IDS = ['horse', 'umbrella', 'youshen'];
 export const ALL_ENEMY_IDS = [...REGULAR_ENEMY_IDS, ...BOSS_ENEMY_IDS];
@@ -199,8 +224,14 @@ export const ELITE_AFFIX_IDS = [
 ];
 export const SHRINE_KINDS = ['altar', 'trial', 'peddler'];
 
-export const CODEX_TAB_COUNTS = [16, 16, 16, 12, 6];
-export const CODEX_TOTAL = 66;
+export const CODEX_TAB_COUNTS = [
+  ALL_WEAPON_IDS.length,
+  ALL_WEAPON_IDS.length,
+  ALL_RELIC_IDS.length,
+  ALL_ENEMY_IDS.length,
+  HERO_IDS.length,
+];
+export const CODEX_TOTAL = CODEX_TAB_COUNTS.reduce((a, b) => a + b, 0);
 
 export const ATTACK_VFX_IDS = [
   'default',
