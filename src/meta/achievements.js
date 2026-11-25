@@ -12,6 +12,7 @@ import {
 } from './save.js';
 import { getCodexCounts } from './codex.js';
 import { grantCosmeticUnlock } from './cosmetics.js';
+import { MAIN_DURATION, WATCH5_TIME } from '../sim/balance.js';
 
 const safeNum = (v, max = 1e15) => {
   const n = toFiniteNumber(v);
@@ -60,23 +61,24 @@ export const ACHIEVEMENTS = [
     id: 'noBun480',
     category: 'challenge',
     name: '饿着肚子守到五更',
-    desc: '前 480 秒滴水不食包子，熬进五更',
-    target: 480,
+    desc: '前 5 分 36 秒滴水不食包子，熬进五更',
+    target: WATCH5_TIME,
     reward: { type: 'coins', amount: 320, label: '铜钱 +320' },
-    rawCurrent: (s) => (s?.achievements?.noBun480 ? 480 : 0),
+    rawCurrent: (s) => (s?.achievements?.noBun480 ? WATCH5_TIME : 0),
   },
   {
     id: 'endless10',
     category: 'challenge',
     name: '残夜又守十分钟',
-    desc: '进入残夜无尽后单局累计撑满 1200 秒（20 分钟）',
-    target: 1200,
+    desc: '进入残夜无尽后再守满 10 分钟（600 秒）',
+    target: MAIN_DURATION + 600,
     reward: { type: 'coins', amount: 420, label: '铜钱 +420' },
     rawCurrent: (s) => {
-      if (s?.achievements?.endless10) return 1200;
+      const target = MAIN_DURATION + 600;
+      if (s?.achievements?.endless10) return target;
       const clears = safeInt(s?.stats?.clears);
       const endlessBest = safeInt(s?.leaderboard?.bestEndlessSec);
-      if (endlessBest >= 600) return 1200;
+      if (endlessBest >= 600) return target;
       return clears > 0 ? Math.floor(safeNum(s?.stats?.bestTimeSec)) : 0;
     },
   },

@@ -1265,18 +1265,18 @@ export const TIER1_F1_F7 = [
             return { label, found: true, type: carrier.type, dropped };
           };
 
-          const m150 = checkExactSec(150, '150s_warder');
-          const m240 = checkExactSec(240, '240s_horse');
-          const m360 = checkExactSec(360, '360s_warder');
+          const m150 = checkExactSec(105, '105s_warder');
+          const m240 = checkExactSec(168, '168s_horse');
+          const m360 = checkExactSec(252, '252s_warder');
 
-          // Scan Watch-4 window (415s..455s) for the new 3rd Mini-Warder
+          // Scan Watch-4 window (285s..320s) for the 3rd Mini-Warder (301s)
           r.enemies.length = 0;
           r.pickups.length = 0;
           r._spawnAcc = -99999;
           r._nextWaveT = 99999;
           r.boss = null;
           let m430 = { label: 'watch4_warder', found: false, dropped: false };
-          for (let sec = 415; sec <= 455; sec += 2) {
+          for (let sec = 285; sec <= 320; sec += 2) {
             r.time = sec - 0.05;
             window.__e2eStepFrames(6, { stopOnOverlay: false });
             while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
@@ -1294,7 +1294,7 @@ export const TIER1_F1_F7 = [
             }
           }
 
-          const m480 = checkExactSec(480, '480s_umbrella');
+          const m480 = checkExactSec(336, '336s_umbrella');
           return [m150, m240, m360, m430, m480];
         });
 
@@ -1338,8 +1338,8 @@ export const TIER1_F1_F7 = [
           };
           return {
             hp0: sampleAt(0),
-            hp240: sampleAt(240),
-            hp540: sampleAt(540),
+            hp240: sampleAt(168),
+            hp540: sampleAt(378),
           };
         });
 
@@ -1362,7 +1362,7 @@ export const TIER1_F1_F7 = [
     id: 'T1-F4-04',
     tier: 1,
     feature: 'F4',
-    name: 'Recalibrated Bosses (horse @ 240s, umbrella @ 480s shield DR, youshen @ 600s 3-phase) scale HP & phase mechanics',
+    name: 'Recalibrated Bosses (horse @ 168s, umbrella @ 336s shield DR, youshen @ 420s 3-phase) scale HP & phase mechanics',
     async run({ browser, baseUrl }) {
       const s = await createIsolatedPage(browser);
       try {
@@ -1383,10 +1383,10 @@ export const TIER1_F1_F7 = [
             return r.enemies.find((e) => e.type === key);
           };
 
-          const horse = spawnBossAt('horse', 240);
+          const horse = spawnBossAt('horse', 168);
           const horseHp = horse?.maxHp || 0;
 
-          const umb = spawnBossAt('umbrella', 480);
+          const umb = spawnBossAt('umbrella', 336);
           const umbHp = umb?.maxHp || 0;
           umb.x = r.player.x + 36;
           umb.y = r.player.y;
@@ -1403,7 +1403,7 @@ export const TIER1_F1_F7 = [
           const dmgShield = hpShield0 - umb.hp;
           r.weapons[0].cd = 9999;
 
-          const ys = spawnBossAt('youshen', 600);
+          const ys = spawnBossAt('youshen', 420);
           const ysHp = ys?.maxHp || 0;
           ys.hp = Math.floor(ys.maxHp * 0.22);
           window.__e2eStepFrames(4, { stopOnOverlay: false });
@@ -1447,7 +1447,7 @@ export const TIER1_F1_F7 = [
           const pk0 = r.enemies[0].speed;
 
           r.enemies.length = 0;
-          r.time = 540;
+          r.time = 378;
           r._spawnQueue.push({ type: 'paperkid', x: r.player.x + 200, y: r.player.y, opts: {} });
           r._spawnQueue.push({ type: 'shade', x: r.player.x + 220, y: r.player.y, opts: {} });
           window.__e2eStepFrames(1, { stopOnOverlay: false });
@@ -1458,7 +1458,7 @@ export const TIER1_F1_F7 = [
           r.enemies.length = 0;
           r.boss = null;
           r._bossSpawned.youshen = false;
-          r.time = 600.2;
+          r.time = 420.2;
           window.__e2eStepFrames(2, { stopOnOverlay: false });
           while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
           const ys = r.enemies.find((e) => e.type === 'youshen');

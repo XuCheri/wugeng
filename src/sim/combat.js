@@ -3,7 +3,7 @@
 
 import {
   PLAYER_BASE, DAMAGE, ULT, PICKUPS, ENEMIES, ENEMY_AI, BOSS_AI, ELITE, ELITE_AFFIXES, WEAPONS, RELICS,
-  enemyDmgScale,
+  enemyDmgScale, designMinutes,
 } from './balance.js';
 import { dropXp, dropPickup } from './pickups.js';
 import { queueSpawn, currentHpScale } from './enemies.js';
@@ -315,7 +315,7 @@ export function killEnemy(run, e, opts) {
   let charge;
   if (e.boss) charge = ULT.bossCharge;
   else if (e.elite) charge = ULT.eliteCharge;
-  else charge = ULT.killCharge / (1 + ULT.decayPerMin * (run.time / 60));
+  else charge = ULT.killCharge / (1 + ULT.decayPerMin * designMinutes(run.time));
   if (!e.summoned || e.elite) {
     p.ult = Math.min(p.ultMax, p.ult + charge * run.mods.ultChargeMul);
     if (coopPartySize(run) > 1) {
@@ -409,7 +409,7 @@ export function killEnemy(run, e, opts) {
   // 阴火骷髅：死亡留下延时爆裂阴火核（敌我皆伤，可引爆周围鬼群）
   if (e.type === 'cinder') {
     const C = ENEMY_AI.cinder;
-    const m = run.mode === 'endless' ? run._endlessStart / 60 : run.time / 60;
+    const m = run.mode === 'endless' ? designMinutes(run._endlessStart) : designMinutes(run.time);
     run.projectiles.push({
       id: run._nextId++,
       kind: 'cinderCore',

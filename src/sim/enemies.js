@@ -3,7 +3,7 @@
 
 import {
   ENEMIES, ELITE, ELITE_AFFIXES, ELITE_AFFIX_IDS, ENEMY_AI, SPAWN, MAX_ENEMY_RADIUS,
-  enemyHpScale, enemySpeedScale, enemyDmgScale,
+  MAIN_DURATION, designMinutes, enemyHpScale, enemySpeedScale, enemyDmgScale,
 } from './balance.js';
 import { clamp } from '../core/math.js';
 import { hurtPlayer } from './player.js';
@@ -14,16 +14,16 @@ import { coopHpScale, coopPartySize, nearestLivingPlayer, hurtTargetPlayer, with
 function resolveEndlessStartSec(run) {
   return Number.isFinite(run._endlessStart) && run._endlessStart > 0
     ? run._endlessStart
-    : Math.min(Math.max(0, run.time || 0), 600);
+    : Math.min(Math.max(0, run.time || 0), MAIN_DURATION);
 }
 
-/** 当前时刻的敌人血量倍率（主线分钟 + 夜色 + 无尽 + 联机人数缩放） */
+/** 当前时刻的敌人血量倍率（主线设计分钟 + 夜色 + 无尽 + 联机人数缩放） */
 export function currentHpScale(run) {
   const es = resolveEndlessStartSec(run);
   const base =
     run.mode === 'endless'
-      ? enemyHpScale(es / 60, run.nightLevel, Math.max(0, run.time - es) / 60)
-      : enemyHpScale(run.time / 60, run.nightLevel, 0);
+      ? enemyHpScale(designMinutes(es), run.nightLevel, Math.max(0, run.time - es) / 60)
+      : enemyHpScale(designMinutes(run.time), run.nightLevel, 0);
   return base * coopHpScale(run);
 }
 
@@ -58,8 +58,10 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     affix = opts.affix !== undefined ? opts.affix : opts.mirrorClone ? null : run.rng.pick(ELITE_AFFIX_IDS);
   }
 
-  const m = run.mode === 'endless' ? resolveEndlessStartSec(run) / 60 : run.time / 60;
-  const speedMin = Math.max(0, run.time || 0) / 60;
+  const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
+  const speedMin = run.mode === 'endless'
+    ? designMinutes(resolveEndlessStartSec(run)) + Math.max(0, (run.time || 0) - resolveEndlessStartSec(run)) / 60
+    : designMinutes(Math.max(0, run.time || 0));
   let hp;
   if (opts.fixedHp !== undefined) {
     hp = opts.fixedHp;
@@ -423,7 +425,7 @@ export function updateEnemies(run, dt) {
         if (e._fireT <= 0 && d <= PB.fireRange) {
           e._fireT = PB.fireCd;
           const a = Math.atan2(p.y - e.y, p.x - e.x);
-          const m = run.mode === 'endless' ? run._endlessStart / 60 : run.time / 60;
+          const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
           const bdmg = Math.max(2, Math.round(PB.bulletDmg * run.night.contactDmgMul * enemyDmgScale(m) * (e.elite ? 1.25 : 1)));
           run.projectiles.push({
             id: run._nextId++,
@@ -449,7 +451,7 @@ export function updateEnemies(run, dt) {
         if (e._affixT <= 0 && d <= SF.fireRange) {
           e._affixT = SF.fireInterval;
           const baseA = Math.atan2(p.y - e.y, p.x - e.x);
-          const m = run.mode === 'endless' ? run._endlessStart / 60 : run.time / 60;
+          const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
           const bdmg = Math.max(2, Math.round(SF.bulletDmg * run.night.contactDmgMul * enemyDmgScale(m)));
           for (let b = 0; b < SF.bulletCount; b++) {
             const a = baseA + (b - (SF.bulletCount - 1) / 2) * SF.spread;

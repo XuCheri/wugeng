@@ -444,8 +444,8 @@ export const ACHIEVEMENT_NAMES = {
 export const ACHIEVEMENT_DESC = {
   firstClear: '守过五更，头一回见到鸡鸣天亮',
   kills800: '单局打散 800 只邪祟',
-  noBun480: '前 8 分钟不吃包子，熬进五更',
-  endless10: '进入残夜无尽后累计撑满 20 分钟',
+  noBun480: '前 5 分 36 秒不吃包子，熬进五更',
+  endless10: '进入残夜无尽后再守满 10 分钟',
   hit10k: '单次伤害突破一万',
   hit100m: '单次伤害突破一亿',
   night10: '通关最高难度「夜色十」',

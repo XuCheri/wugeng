@@ -14,6 +14,7 @@ import { spawnBoss } from '../../src/sim/bosses.js';
 import { killEnemy } from '../../src/sim/combat.js';
 import {
   WEAPON_IDS, RELIC_IDS, MAX_WEAPONS, MAX_RELICS, ENDLESS, REROLL, DAMAGE, DARKNESS, SPAWN,
+  MINI_WARDERS, BOSS_TIMELINE,
 } from '../../src/sim/balance.js';
 import { Rng } from '../../src/core/rng.js';
 
@@ -305,7 +306,7 @@ test('无尽：敌人生命按分钟 ×1.22；溢出签伤害 ×1.12 乘算', ()
   assert.equal(run.mods.overflowStacks, 2);
 });
 
-test('巡更小头目（150s/360s）与 Boss 时间轴（240s/480s/600s）；打败夜游神即天亮', () => {
+test('巡更小头目与 Boss 时间轴按 PACE 触发；打败夜游神即天亮', () => {
   const run = createRun({ seed: 8 });
   const seen = {};
   const warders = {};
@@ -326,14 +327,20 @@ test('巡更小头目（150s/360s）与 Boss 时间轴（240s/480s/600s）；打
     }
   };
 
-  jumpTo(150);
-  assert.ok(warders.warder_150 >= 150 && warders.warder_150 < 150.1, `warder_150 @ ${warders.warder_150}`);
+  const w1Time = MINI_WARDERS[0].time;
+  const w2Time = MINI_WARDERS[1].time;
+  const bHorse = BOSS_TIMELINE[0].time;
+  const bUmb = BOSS_TIMELINE[1].time;
+  const bYs = BOSS_TIMELINE[2].time;
+
+  jumpTo(w1Time);
+  assert.ok(warders.warder_150 >= w1Time && warders.warder_150 < w1Time + 0.1, `warder_150 @ ${warders.warder_150}`);
   assert.equal(run.boss, null, '巡更小头目不占用 Boss 血条');
 
-  jumpTo(240);
-  assert.ok(seen.horse >= 240 && seen.horse < 240.1, `horse @ ${seen.horse}`);
+  jumpTo(bHorse);
+  assert.ok(seen.horse >= bHorse && seen.horse < bHorse + 0.1, `horse @ ${seen.horse}`);
   assert.equal(seen.umbrella, undefined);
-  // 240s 换三更会弹守夜命签，选掉后回到 playing
+  // 换三更会弹守夜命签，选掉后回到 playing
   drain(run);
 
   // 打败纸马：掉供盒，拾取后进入 chest 状态
@@ -349,16 +356,16 @@ test('巡更小头目（150s/360s）与 Boss 时间轴（240s/480s/600s）；打
   openChest(run);
   drain(run);
 
-  jumpTo(360);
-  assert.ok(warders.warder_360 >= 360 && warders.warder_360 < 360.1, `warder_360 @ ${warders.warder_360}`);
+  jumpTo(w2Time);
+  assert.ok(warders.warder_360 >= w2Time && warders.warder_360 < w2Time + 0.1, `warder_360 @ ${warders.warder_360}`);
   drain(run);
 
-  jumpTo(480);
-  assert.ok(seen.umbrella >= 480 && seen.umbrella < 480.1);
+  jumpTo(bUmb);
+  assert.ok(seen.umbrella >= bUmb && seen.umbrella < bUmb + 0.1);
   drain(run);
 
-  jumpTo(600);
-  assert.ok(seen.youshen >= 600 && seen.youshen < 600.1);
+  jumpTo(bYs);
+  assert.ok(seen.youshen >= bYs && seen.youshen < bYs + 0.1);
   assert.equal(run.watch, 5);
   const ys = run.enemies.find((e) => e.type === 'youshen');
   assert.equal(run.boss.type, 'youshen');

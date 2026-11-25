@@ -4,7 +4,7 @@ import { makeCanvas, makeRng, brushStroke, roughRectPath, arcPoints, withMisreg,
 import { drawSeal, drawStamp, measureSeal } from './glyphs.js';
 import { drawIcon } from './icons.js';
 import { BOSS_NAMES } from './fx.js';
-import { MAX_WEAPONS, MAX_RELICS } from '../sim/balance.js';
+import { MAX_WEAPONS, MAX_RELICS, MAIN_DURATION } from '../sim/balance.js';
 
 const TAU = Math.PI * 2;
 const WATCH_CN = ['', '一更', '二更', '三更', '四更', '五更', '天亮'];
@@ -413,7 +413,8 @@ export function createHud() {
       drawSeal(ctx, clock, lx + labelW + 16, ty + th / 2, dSize, INK, 'left');
       let endlessStampRight = 0;
       if (run.mode === 'endless') {
-        const endlessMinStr = String(Math.max(1, Math.floor((run.time - 600) / 60) + 1));
+        const es = Number.isFinite(run._endlessStart) && run._endlessStart > 0 ? run._endlessStart : MAIN_DURATION;
+        const endlessMinStr = String(Math.max(1, Math.floor(Math.max(0, run.time - es) / 60) + 1));
         const stampCx = tx + tw + 14;
         drawStamp(ctx, endlessMinStr, stampCx, ty + th / 2, 10, { seed: 5, rot: 0.08 });
         endlessStampRight = stampCx + Math.ceil((measureSeal(endlessMinStr, 10) + 6.4) / 2) + 1;

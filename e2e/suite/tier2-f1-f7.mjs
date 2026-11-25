@@ -868,11 +868,11 @@ export const TIER2_F1_F7 = [
           r.pickups.length = 0;
           r._spawnAcc = -99999;
           r._nextWaveT = 99999;
-          r.time = 415;
+          r.time = 288;
 
           const seenWarderIds = new Set();
-          for (let step = 0; step < 90; step++) {
-            window.__e2eStepFrames(30, { stopOnOverlay: false }); // +0.5s per loop -> 415..460s
+          for (let step = 0; step < 60; step++) {
+            window.__e2eStepFrames(30, { stopOnOverlay: false }); // +0.5s per loop -> 288..318s
             while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
             for (const e of r.enemies) {
               if (e.chest && !e.boss) {
@@ -885,7 +885,7 @@ export const TIER2_F1_F7 = [
           return seenWarderIds.size;
         });
 
-        assert.equal(spawnedCount, 1, `Expected Watch-4 Mini-Warder to spawn strictly once across 415..460s, got ${spawnedCount}`);
+        assert.equal(spawnedCount, 1, `Expected Watch-4 Mini-Warder to spawn strictly once across 288..318s, got ${spawnedCount}`);
         s.assertNoErrors('T2-F4-03');
       } finally {
         await s.close();
@@ -942,7 +942,7 @@ export const TIER2_F1_F7 = [
           r.weapons.forEach((w) => { w.cd = 9999; });
           r.player.invulnT = 30;
           r._bossSpawned = { horse: true, umbrella: false, youshen: true };
-          r.time = 480.2;
+          r.time = 336.2;
           window.__e2eStepFrames(2, { stopOnOverlay: false });
           while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
 

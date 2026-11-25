@@ -1,6 +1,7 @@
 // mock-run.js —— 风格检查用的假 RunState（对齐 M1/M2 全量新精灵、奇遇、羁绊、预警与 22 种弹体）
 // 仅供 style-lab.html 与渲染预览使用，不参与正式逻辑。
 import { makeRng } from './ink.js';
+import { MAIN_DURATION, WATCH_DURATION } from '../sim/balance.js';
 
 const TAU = Math.PI * 2;
 const DARK = [0, 0.18, 0.34, 0.5, 0.66, 0.84, 0];
@@ -33,7 +34,7 @@ export function createMockRun(o = {}) {
   const isBossScene = scene === 'boss';
   const isDawn = watch >= 6 && !hud;
   const bossType = o.boss || (isBossScene ? 'horse' : hud ? 'umbrella' : 'youshen');
-  const time = hud ? 25 * 60 + 20 : isDawn ? 600 : (watch - 1) * 120 + 72;
+  const time = hud ? 25 * 60 + 20 : isDawn ? MAIN_DURATION : (watch - 1) * WATCH_DURATION + Math.round(WATCH_DURATION * 0.6);
 
   const fullAwakened = !!o.awakened || hud;
   const evolvedCrowd = fullAwakened || watch === 3;

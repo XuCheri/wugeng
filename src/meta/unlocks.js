@@ -12,10 +12,10 @@ import {
 } from './save.js';
 import { recordCodexSummary, canMutateCodex } from './codex.js';
 import { ACHIEVEMENT_IDS, reconcileAchievements } from './achievements.js';
-import { WEAPONS, RELICS, SCHOOL_TAG_IDS } from '../sim/balance.js';
+import { WEAPONS, RELICS, SCHOOL_TAG_IDS, MAIN_DURATION, WATCH5_TIME } from '../sim/balance.js';
 
 export const MIAN_KILLS = 800;
-export const DAOTONG_TIME = 480;
+export const DAOTONG_TIME = WATCH5_TIME;
 export const YINYANG_EVOLVES = 2;
 export const TIEJIANG_TOTAL_KILLS = 2500;
 export const NUOXI_SYNERGY_TIER = 6;
@@ -240,7 +240,7 @@ function recordLeaderboardEntry(save, sum, now) {
   if (canWriteProp(lb, 'bestScore')) lb.bestScore = Math.max(safeInt(lb.bestScore, 1e12), score);
   if (canWriteProp(lb, 'bestKills')) lb.bestKills = Math.max(safeInt(lb.bestKills, 1e12), kills);
   if (sum.mode === 'endless' && canWriteProp(lb, 'bestEndlessSec')) {
-    lb.bestEndlessSec = Math.max(safeInt(lb.bestEndlessSec, 1e9), Math.max(0, timeSec - 600));
+    lb.bestEndlessSec = Math.max(safeInt(lb.bestEndlessSec, 1e9), Math.max(0, timeSec - MAIN_DURATION));
   }
   if (!Array.isArray(lb.history) && canWriteProp(lb, 'history')) lb.history = [];
   if (Array.isArray(lb.history) && canMutateArray(lb.history)) {
@@ -303,7 +303,7 @@ export function recordRun(save, summary, now = Date.now()) {
   ach('firstClear', Boolean(sum.cleared));
   ach('kills800', kills >= MIAN_KILLS);
   ach('noBun480', isNoBunDawn(sum));
-  ach('endless10', sum.mode === 'endless' && timeSec >= 1200);
+  ach('endless10', sum.mode === 'endless' && timeSec >= MAIN_DURATION + 600);
   ach('hit10k', maxHit >= 1e4);
   ach('hit100m', maxHit >= 1e8);
   ach('night10', Boolean(sum.cleared) && safeInt(sum.nightLevel, NIGHT_MAX) >= NIGHT_MAX);

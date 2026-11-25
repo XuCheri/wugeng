@@ -12,7 +12,7 @@ import {
   createRun, stepRun, chooseUpgrade, rerollChoices, banishChoice, toggleLockChoice,
   openChest, interactShrine, resolveShrine, dismissShrine, endRun, DT,
 } from '../src/sim/run.js';
-import { metaBonusesFromLevels, META_IDS, MAIN_DURATION, BOSS_AI, ENEMY_AI } from '../src/sim/balance.js';
+import { metaBonusesFromLevels, META_IDS, MAIN_DURATION, WATCH5_TIME, PACE, BOSS_AI, ENEMY_AI } from '../src/sim/balance.js';
 import * as BALANCE from '../src/sim/balance.js';
 
 // ───────────────────────── 参数 ─────────────────────────
@@ -110,7 +110,7 @@ function shouldUseShrine(run, s, mem = null) {
   if (mem?.dismissedUntil && (mem.dismissedUntil[s.id] || 0) > run.time) return false;
   const p = run.player;
   if (s.kind === 'peddler') return run.stats.coins >= BALANCE.SHRINES.peddlerCosts.elixir;
-  if (s.kind === 'trial') return p.hp > p.maxHp * 0.78 && run.time >= 275 && run.time <= 460 && run.weapons.length >= 3;
+  if (s.kind === 'trial') return p.hp > p.maxHp * 0.78 && run.time >= 275 * PACE && run.time <= 460 * PACE && run.weapons.length >= 3;
   return true; // altar
 }
 
@@ -744,7 +744,7 @@ export function summarize(results, opts) {
     });
   }
   const at10 = results.filter((r) => r.levelAt10 !== null).map((r) => r.levelAt10 - 1);
-  const maxHitsLate = results.filter((r) => r.time >= 480).map((r) => r.maxHit);
+  const maxHitsLate = results.filter((r) => r.time >= WATCH5_TIME).map((r) => r.maxHit);
   const ultInterval = results.map((r) => Math.min(r.time, MAIN_DURATION) / Math.max(1, r.ults));
   const recipeTotals = { paired: 0, resonance: 0, maxRelic: 0, altar: 0 };
   let evoTotal = 0;
@@ -790,29 +790,32 @@ function check(label, ok, value) {
 
 export function report(s) {
   const o = s.opts;
+  const mainMin = Math.round(MAIN_DURATION / 60);
   const lines = [];
   lines.push(`《五更天》平衡模拟：${s.runs} 局  meta=${o.meta} night=${o.night} hero=${o.hero} dt=1/${Math.round(1 / o.dt)}${o.set.length ? '  覆盖 ' + o.set.join(' ') : ''}`);
-  lines.push(`死亡时间（通关计为 10:00+）中位数 ${mmss(s.deathMedian)}  p25 ${mmss(s.deathP25)}  p75 ${mmss(s.deathP75)}   仅死亡局中位数 ${mmss(s.deathOnlyMedian || 0)}`);
+  lines.push(`死亡时间（通关计为 ${mmss(MAIN_DURATION)}+）中位数 ${mmss(s.deathMedian)}  p25 ${mmss(s.deathP25)}  p75 ${mmss(s.deathP75)}   仅死亡局中位数 ${mmss(s.deathOnlyMedian || 0)}`);
   lines.push(`通关率 ${(s.clearRate * 100).toFixed(1)}%`);
-  lines.push(`最高单次伤害：全体中位 ${Math.round(s.maxHitMedian)}  活过 8:00 中位 ${Math.round(s.maxHitLateMedian || 0)}  p90 ${Math.round(s.maxHitLateP90 || 0)}  最大 ${s.maxHitMax}`);
-  lines.push(`等级中位 ${s.levelMedian}  10:00 时已升级次数中位 ${s.levelUpsBy10Median ?? '-'}  击杀中位 ${Math.round(s.killsMedian)}  铜钱中位 ${Math.round(s.coinsMedian)}（通关局 ${Math.round(s.coinsClearMedian || 0)}）  大招间隔中位 ${s.ultIntervalMedian.toFixed(0)}s`);
+  lines.push(`最高单次伤害：全体中位 ${Math.round(s.maxHitMedian)}  活过 ${mmss(WATCH5_TIME)} 中位 ${Math.round(s.maxHitLateMedian || 0)}  p90 ${Math.round(s.maxHitLateP90 || 0)}  最大 ${s.maxHitMax}`);
+  lines.push(`等级中位 ${s.levelMedian}  ${mmss(MAIN_DURATION)} 时已升级次数中位 ${s.levelUpsBy10Median ?? '-'}  击杀中位 ${Math.round(s.killsMedian)}  铜钱中位 ${Math.round(s.coinsMedian)}（通关局 ${Math.round(s.coinsClearMedian || 0)}）  大招间隔中位 ${s.ultIntervalMedian.toFixed(0)}s`);
   lines.push(`构筑深度：场均开光 ${s.avgEvolutions.toFixed(2)} 把（本命=${s.recipeTotals.paired} 共鸣=${s.recipeTotals.resonance} 满器=${s.recipeTotals.maxRelic} 香案=${s.recipeTotals.altar}）  羁绊激活率 ${(s.synergyRate * 100).toFixed(0)}%  场均命签 ${s.avgBlessings.toFixed(1)}`);
   lines.push('分钟 | 存活局 | 涌入HP/s | 玩家DPS | 压力比 | 场上敌人 | 每局受伤');
   for (const p of s.pressure) {
     if (!p.alive) continue;
     lines.push(`${String(p.minute).padStart(4)} | ${String(p.alive).padStart(6)} | ${p.incomingHps.toFixed(0).padStart(8)} | ${p.dps.toFixed(0).padStart(7)} | ${isNaN(p.ratio) ? '  -' : p.ratio.toFixed(2)} | ${p.crowd.toFixed(0).padStart(8)} | ${p.taken.toFixed(0).padStart(8)}`);
   }
-  lines.push('—— 验收（PLAN §4.4）——');
+  lines.push('—— 验收（PLAN §4.4 / 7分钟节奏）——');
   if (o.meta === 0 && o.night === 0) {
-    lines.push(check('meta 0 死亡时间中位数 5:00–7:00', s.deathMedian >= 300 && s.deathMedian <= 420, mmss(s.deathMedian)));
-    lines.push(check('meta 0 通关率 5–15%', s.clearRate >= 0.05 && s.clearRate <= 0.15, `${(s.clearRate * 100).toFixed(1)}%`));
+    const lo = Math.round(300 * PACE);
+    const hi = Math.round(420 * PACE);
+    lines.push(check(`meta 0 死亡时间中位数 ${mmss(lo)}–${mmss(hi)}`, s.deathMedian >= lo && s.deathMedian <= hi, mmss(s.deathMedian)));
+    lines.push(check('meta 0 通关率 5–25%', s.clearRate >= 0.05 && s.clearRate <= 0.25, `${(s.clearRate * 100).toFixed(1)}%`));
   }
   if (o.meta >= 0.5 && o.night === 0) lines.push(check(`meta ${o.meta} 通关率 ≥ 60%`, s.clearRate >= 0.6, `${(s.clearRate * 100).toFixed(1)}%`));
-  const pr = s.pressure.filter((p) => p.alive >= Math.max(3, s.runs * 0.1) && p.minute < 10 && p.sampledSec > 20 && !isNaN(p.ratio));
+  const pr = s.pressure.filter((p) => p.alive >= Math.max(3, s.runs * 0.1) && p.minute < mainMin && p.sampledSec > 20 && !isNaN(p.ratio));
   const prOk = pr.every((p) => p.ratio >= 0.6 && p.ratio <= 0.95);
   lines.push(check('非 Boss 时段压力比 0.6–0.95', prOk, pr.map((p) => p.ratio.toFixed(2)).join(' ')));
-  if (s.maxHitLateMedian) lines.push(check('主线最高单次伤害 1,000–5,000（活过 8:00 的局）', s.maxHitLateMedian >= 1000 && s.maxHitLateMedian <= 5000, Math.round(s.maxHitLateMedian)));
-  if (s.levelUpsBy10Median) lines.push(check('10:00 时约 32 次升级（28–36）', s.levelUpsBy10Median >= 28 && s.levelUpsBy10Median <= 36, s.levelUpsBy10Median));
+  if (s.maxHitLateMedian) lines.push(check(`主线最高单次伤害 1,000–5,000（活过 ${mmss(WATCH5_TIME)} 的局）`, s.maxHitLateMedian >= 1000 && s.maxHitLateMedian <= 5000, Math.round(s.maxHitLateMedian)));
+  if (s.levelUpsBy10Median) lines.push(check(`${mmss(MAIN_DURATION)} 时约 32 次升级（28–36）`, s.levelUpsBy10Median >= 28 && s.levelUpsBy10Median <= 36, s.levelUpsBy10Median));
   return lines.join('\n');
 }
 

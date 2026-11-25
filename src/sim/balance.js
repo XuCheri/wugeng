@@ -4,8 +4,13 @@
 
 // ───────────────────────── 基础 ─────────────────────────
 export const DT = 1 / 60;
-export const MAIN_DURATION = 600; // 主线 10 分钟
-export const WATCH_DURATION = 120; // 每更 2 分钟
+export const PACE = 0.7; // 10 分钟设计刻度 → 7 分钟实际时长
+export const MAIN_DURATION = Math.round(600 * PACE); // 主线 7 分钟（420 秒）
+export const WATCH_DURATION = Math.round(120 * PACE); // 每更 84 秒（1 分 24 秒）
+export const WATCH5_TIME = WATCH_DURATION * 4; // 五更起点（336 秒）
+export const XP_PACE_MUL = 1.38; // 魂火经验补偿倍率，经模拟器校准使 7 分钟升级次数落在 32–36
+export const designTime = (t) => (Number.isFinite(t) ? t / PACE : 0);
+export const designMinutes = (t) => designTime(t) / 60;
 export const WATCH_NAMES = ['', '一更', '二更', '三更', '四更', '五更', '鸡鸣'];
 
 // 夜色遮罩：一更 0.15 → 五更 0.75，鸡鸣归 0；无尽模式为「残夜」
@@ -156,7 +161,7 @@ export const BOSS_AI = {
     ringInterval: 0.39, ringCount: 24, bulletSpeed: 212, bulletDmg: 50, bulletR: 7, bulletLife: 6,
   },
   youshen: {
-    hpMul: 3.56,
+    hpMul: 2.95,
     phase2At: 0.88, phase3At: 0.73,
     summonInterval: 2.55, summonCount: 14, summonTypes: ['shade', 'weasel', 'drowned', 'lanternghost'], summonDist: 135,
     spiralInterval: 0.069, spiralArms: 4, spiralTurn: 0.33,
@@ -191,11 +196,11 @@ export const ELITE_AFFIXES = {
 };
 export const ELITE_AFFIX_IDS = Object.keys(ELITE_AFFIXES);
 
-// 巡更小头目：2:30、6:00 与 7:10（四更）必落供盒，扩充 6+6 开光节奏
+// 巡更小头目：按 0.7 节奏落在 1:45、4:12 与 5:01 必落供盒，扩充 6+6 开光节奏
 export const MINI_WARDERS = [
-  { id: 'warder_150', time: 150, type: 'sedan', affix: 'paper_armor', name: '巡街轿头', hpMul: 1.55, rMul: 1.15, chest: true },
-  { id: 'warder_360', time: 360, type: 'paperbride', affix: 'soul_fire', name: '冥婚喜娘', hpMul: 2.85, rMul: 1.2, chest: true },
-  { id: 'warder_430', time: 430, type: 'suona', affix: 'mirror_twin', name: '催命吹鼓头', hpMul: 3.0, rMul: 1.22, chest: true },
+  { id: 'warder_150', time: Math.round(150 * PACE), type: 'sedan', affix: 'paper_armor', name: '巡街轿头', hpMul: 1.55, rMul: 1.15, chest: true },
+  { id: 'warder_360', time: Math.round(360 * PACE), type: 'paperbride', affix: 'soul_fire', name: '冥婚喜娘', hpMul: 2.85, rMul: 1.2, chest: true },
+  { id: 'warder_430', time: Math.round(430 * PACE), type: 'suona', affix: 'mirror_twin', name: '催命吹鼓头', hpMul: 3.0, rMul: 1.22, chest: true },
 ];
 
 // ───────────────────────── 刷怪（PLAN §4.3 + §4.4 + v3 6+6 校准）─────────────────────────
@@ -213,10 +218,10 @@ export const SPAWN = {
   rateB: 0.62,
   rateC: 0.043,
   rateMul: 0.805,
-  hpMul: 2.04,
-  watch1LateAt: 52, // 一更后半（玩家升到 3–4 级后）灯笼鬼开始从巷口飘出
-  watch2LateAt: 202, // 二更后半纸轿与黄皮子先遣队入场，衔接三更压力
-  watch3LateAt: 300, // 三更后半（纸马将军退场后）红衣纸新娘与水鬼冥婚仪仗入场
+  hpMul: 1.92,
+  watch1LateAt: Math.round(52 * PACE), // 一更后半（36s）灯笼鬼开始从巷口飘出
+  watch2LateAt: Math.round(202 * PACE), // 二更后半（141s）纸轿与黄皮子先遣队入场
+  watch3LateAt: Math.round(300 * PACE), // 三更后半（210s）红衣纸新娘与水鬼冥婚仪仗入场
   // 平滑移速成长曲线：杜绝后期全屏超速粘死
   minuteSpeedGrowth: 0.032,
   speedGrowthCap: 1.35,
@@ -228,11 +233,11 @@ export const SPAWN = {
 // 合围：每隔一段时间在玩家四周刷一圈同种敌人向内收拢（考验突围走位）
 export const WAVES = {
   enabled: true,
-  firstAt: 95,
-  every: 26,
+  firstAt: Math.round(95 * PACE),
+  every: Math.round(26 * PACE),
   baseCount: 18,
-  perMinute: 5.7, // 每分钟多几只
-  maxCount: 68,
+  perMinute: 5.5, // 每分钟多几只
+  maxCount: 66,
   radius: 315,
   types: { 1: 'paperkid', 2: 'paperkid', 3: 'lanternghost', 4: 'weasel', 5: 'drowned' },
 };
@@ -269,11 +274,11 @@ export const ROSTER = {
   5: { paperkid: 7, shade: 13, lanternghost: 12, weasel: 16, sedan: 9, drowned: 18, cinder: 10, suona: 6, paperbride: 9 },
 };
 
-// Boss 时间轴
+// Boss 时间轴（按 7 分钟主线比例落在 2:48 / 5:36 / 7:00）
 export const BOSS_TIMELINE = [
-  { time: 240, type: 'horse', chest: true },
-  { time: 480, type: 'umbrella', chest: true },
-  { time: 600, type: 'youshen', chest: false, final: true },
+  { time: Math.round(240 * PACE), type: 'horse', chest: true },
+  { time: WATCH5_TIME, type: 'umbrella', chest: true },
+  { time: MAIN_DURATION, type: 'youshen', chest: false, final: true },
 ];
 
 // ───────────────────────── 无尽（PLAN §4.5）─────────────────────────
@@ -536,7 +541,7 @@ export const HEROES = {
   daotong: {
     id: 'daotong', name: '小道童', short: '小道童', startWeapon: 'talisman',
     trait: '暴击率 +10%', mods: { critChance: 0.1 },
-    unlock: { kind: 'noBunWatch5', value: 480, desc: '不吃一个包子守到五更（撑到 8:00）' },
+    unlock: { kind: 'noBunWatch5', value: WATCH5_TIME, desc: '不吃一个包子守到五更（撑到 5:36）' },
   },
   yinyang: {
     id: 'yinyang', name: '阴阳先生·沈观星', short: '沈观星', startWeapon: 'compass',
@@ -753,14 +758,14 @@ export const CHEST = {
 
 // ───────────────────────── 铜钱结算与守夜总榜计分 ─────────────────────────
 export const COIN_REWARD = {
-  perMinute: 5, // 每坚持 1 分钟的基础铜钱（6 分钟死约 140–160，通关约 350–420）
-  clearBonus: 55, // 通关额外
+  perMinute: 7, // 每坚持 1 分钟的基础铜钱（7 分钟通关单局收益不缩水）
+  clearBonus: 80, // 通关额外
   endlessPerMinute: 12,
   nightPct: 0.15, // 夜色每级 +15%
 };
 
 export const SCORE_TUNING = {
-  perMainSec: 10, // 主线存活每秒 +10 分
+  perMainSec: 14, // 主线存活每秒 +14 分（420s ≈ 5880，与原 600s×10 同量级）
   perEndlessSec: 18, // 无尽残夜每秒 +18 分
   perKill: 6, // 每斩散 1 只邪祟 +6 分
   perBossKill: 1200, // 每讨伐 1 尊夜主 +1200 分

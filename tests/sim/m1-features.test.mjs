@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { SpatialHash } from '../../src/core/spatial-hash.js';
 import {
   PLAYER_BASE, ENEMY_AI, BOSS_AI, WEAPONS, WEAPON_IDS, RELICS, RELIC_IDS, EVOLUTION, ULT, SHRINES, SPAWN, ENEMIES,
-  DAMAGE, MAX_NIGHT, nightModifiers,
+  DAMAGE, MAX_NIGHT, MINI_WARDERS, WATCH_DURATION, MAIN_DURATION, nightModifiers,
 } from '../../src/sim/balance.js';
 import {
   createRun, stepRun, chooseUpgrade, rerollChoices, banishChoice, toggleLockChoice,
@@ -268,10 +268,10 @@ test('F3: getEvolutionRecipe 四路径（paired / resonance / maxRelic / altar�
   stepRun(rChest, {}, DT);
   assert.ok(rChest.events.some((e) => e.type === 'evolve' && e.weaponId === 'talisman' && e.recipe === 'paired'));
 
-  // 5) 150s 与 360s 小头目击杀必掉供盒
+  // 5) 前两名巡更小头目击杀必掉供盒
   const rWarder = createRun({ seed: 305 });
   rWarder.player.invulnT = 999;
-  rWarder.time = 149.99;
+  rWarder.time = MINI_WARDERS[0].time - 0.01;
   stepRun(rWarder, {}, DT);
   const w150 = rWarder.enemies.find((e) => e.warder);
   assert.ok(w150 && w150.chest);
@@ -281,7 +281,7 @@ test('F3: getEvolutionRecipe 四路径（paired / resonance / maxRelic / altar�
   rWarder.pickups.length = 0;
   rWarder._pendingBlessings = 0;
   rWarder.status = 'playing';
-  rWarder.time = 359.99;
+  rWarder.time = MINI_WARDERS[1].time - 0.01;
   stepRun(rWarder, {}, DT);
   const w360 = rWarder.enemies.find((e) => e.warder && !e.dead);
   assert.ok(w360 && w360.chest);
@@ -623,9 +623,10 @@ test('F7 & F8: 18 命签全表、四次换更（120/240/360/480s）触发与 602
   assert.equal(rAllB.relics.length, 0);
   assert.equal(rAllB.blessings.length, 18);
 
-  // 验证 120s / 240s / 360s / 480s 四个换更节点依次触发命签
+  // 验证四个换更节点（WATCH_DURATION × 1..4）依次触发命签
   const run = createRun({ seed: 701, heroId: 'zhou' });
-  for (const boundary of [120, 240, 360, 480]) {
+  for (const w of [1, 2, 3, 4]) {
+    const boundary = w * WATCH_DURATION;
     run.time = boundary - 0.01;
     run.player.invulnT = 999;
     stepRun(run, {}, DT);
@@ -636,9 +637,9 @@ test('F7 & F8: 18 命签全表、四次换更（120/240/360/480s）触发与 602
     assert.ok(run.events.some((e) => e.type === 'blessingPick'));
   }
 
-  // 602s 烟雾测试跳转保护
+  // 主线终点后（MAIN_DURATION + 2）烟雾测试跳转保护
   const smokeRun = createRun({ seed: 702 });
-  smokeRun.time = 602;
+  smokeRun.time = MAIN_DURATION + 2;
   smokeRun.player.invulnT = 99;
   stepRun(smokeRun, {}, DT);
   assert.equal(smokeRun.status, 'playing');

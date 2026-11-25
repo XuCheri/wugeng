@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultSave } from '../../src/meta/save.js';
-import { evaluateUnlocks, recordRun, grantDoubleCoins } from '../../src/meta/unlocks.js';
+import { evaluateUnlocks, recordRun, grantDoubleCoins, DAOTONG_TIME } from '../../src/meta/unlocks.js';
+import { MAIN_DURATION } from '../../src/sim/balance.js';
 
 const summary = (o = {}) => ({
-  heroId: 'zhou', nightLevel: 0, cleared: false, mode: 'main', timeSec: 300, reachedWatch: 3,
+  heroId: 'zhou', nightLevel: 0, cleared: false, mode: 'main', timeSec: 210, reachedWatch: 3,
   level: 12, kills: 200, coins: 100, bunsEaten: 1, maxHit: 400, killsByType: {}, weapons: [], relics: [],
   ...o,
 });
@@ -17,24 +18,24 @@ test('阿绵：单局 800 杀', () => {
   assert.deepEqual(evaluateUnlocks(s, summary({ kills: 900 })), [], '不重复解锁');
 });
 
-test('小道童：不吃包子守到 8:00', () => {
+test('小道童：不吃包子守到五更起点（5:36）', () => {
   const s = defaultSave();
-  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: 480, bunsEaten: 1 })), []);
-  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: 479.9, bunsEaten: 0 })), []);
-  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: 480, bunsEaten: 0 })), [{ kind: 'hero', id: 'daotong' }]);
+  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: DAOTONG_TIME, bunsEaten: 1 })), []);
+  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: DAOTONG_TIME - 0.1, bunsEaten: 0 })), []);
+  assert.deepEqual(evaluateUnlocks(s, summary({ timeSec: DAOTONG_TIME, bunsEaten: 0 })), [{ kind: 'hero', id: 'daotong' }]);
 });
 
-test('小道童：firstBunTime 优先，480 秒后吃包子不算破戒', () => {
+test('小道童：firstBunTime 优先，五更起点后吃包子不算破戒', () => {
   const fresh = () => defaultSave();
   const hit = [{ kind: 'hero', id: 'daotong' }];
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 600, bunsEaten: 0, firstBunTime: null })), hit);
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 600, bunsEaten: 3, firstBunTime: 480 })), hit);
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 600, bunsEaten: 2, firstBunTime: 520.5 })), hit);
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 600, bunsEaten: 1, firstBunTime: 479.9 })), []);
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 470, bunsEaten: 0, firstBunTime: null })), []);
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 0, firstBunTime: null })), hit);
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 3, firstBunTime: DAOTONG_TIME })), hit);
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 2, firstBunTime: DAOTONG_TIME + 40.5 })), hit);
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 1, firstBunTime: DAOTONG_TIME - 0.1 })), []);
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: DAOTONG_TIME - 10, bunsEaten: 0, firstBunTime: null })), []);
   // 字段缺失 → 回退 bunsEaten
-  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: 600, bunsEaten: 1, firstBunTime: undefined })), []);
-  const r = recordRun(fresh(), summary({ timeSec: 600, bunsEaten: 2, firstBunTime: 500 }));
+  assert.deepEqual(evaluateUnlocks(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 1, firstBunTime: undefined })), []);
+  const r = recordRun(fresh(), summary({ timeSec: MAIN_DURATION, bunsEaten: 2, firstBunTime: DAOTONG_TIME + 20 }));
   assert.ok(r.achievements.includes('noBun480'));
 });
 

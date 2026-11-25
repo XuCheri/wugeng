@@ -123,12 +123,12 @@ export const TIER4_TESTS = [
           await grantItemViaLevelUp(s.page, 'relic', rid, 1);
         }
 
-        // 120s Watch Blessing
+        // 84s Watch Blessing
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.time = 119.97;
+          r.time = 83.97;
           window.__e2eStepFrames(4);
         });
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');
@@ -156,14 +156,14 @@ export const TIER4_TESTS = [
         }
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.weapons.find((w) => w.id === 'gong')?.evolved), true);
 
-        // Defeat Youshen at 600s -> Dawn Clear -> Endless -> Settle
+        // Defeat Youshen at 420s -> Dawn Clear -> Endless -> Settle
         await suppressWardersInPage(s.page);
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
           r._bossSpawned = { horse: true, umbrella: true, youshen: false };
-          r.time = 601;
+          r.time = 421;
           window.__e2eStepFrames(2, { stopOnOverlay: false });
           while (window.__wugeng.overlay === 'levelup') document.querySelector('.qian')?.click();
           const ys = r.enemies.find((e) => e.type === 'youshen');

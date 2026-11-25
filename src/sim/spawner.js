@@ -1,6 +1,6 @@
 // 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷巡更小头目与 Boss。
 
-import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate } from './balance.js';
+import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate, designMinutes } from './balance.js';
 import { spawnEnemy, ringPoint } from './enemies.js';
 import { spawnBoss } from './bosses.js';
 import { findWell } from './props.js';
@@ -16,13 +16,13 @@ const ROSTER_LISTS = Object.fromEntries(
   Object.entries(ROSTER).map(([w, tbl]) => [w, Object.entries(tbl).map(([type, weight]) => ({ type, weight }))]),
 );
 
-/** 当前用于刷怪公式的分钟数 */
+/** 当前用于刷怪公式的设计分钟数（按 PACE 换算，保证 7 分钟曲线形状与原 10 分钟一致） */
 export function spawnMinutes(run) {
   if (run.mode === 'endless') {
     const k = (run.time - run._endlessStart) / 60;
-    return Math.min(run._endlessStart / 60 + k, ENDLESS.rateMinuteCap);
+    return Math.min(designMinutes(run._endlessStart) + k, ENDLESS.rateMinuteCap);
   }
-  return run.time / 60;
+  return designMinutes(run.time);
 }
 
 export function rosterFor(run) {

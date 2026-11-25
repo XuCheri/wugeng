@@ -1204,12 +1204,12 @@ export const TIER1_F8_F15 = [
         await grantItemViaLevelUp(s.page, 'relic', 'clapper', 1);
         await grantItemViaLevelUp(s.page, 'relic', 'cinnabar', 1);
 
-        // A) Watch Blessing at 120s
+        // A) Watch Blessing at 84s (WATCH_DURATION)
         await s.page.evaluate(() => {
           const r = window.__wugeng.game.run;
           r.enemies.length = 0;
           r._spawnAcc = -99999;
-          r.time = 119.97;
+          r.time = 83.97;
           window.__e2eStepFrames(4);
         });
         assert.equal(await s.page.evaluate(() => window.__wugeng.game.run.choiceMode), 'blessing');

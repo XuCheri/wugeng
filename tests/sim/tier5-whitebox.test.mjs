@@ -144,7 +144,8 @@ test('T5-03: 吉凶命签叠加上限、护甲清零与残血扣上限保护、�
   assert.equal(applyBlessingChoice(r, 'blood_oath', { recomputeMods }), true);
   assert.ok(r.player.hp >= 1 && r.player.hp <= r.player.maxHp);
 
-  for (const t of [120, 240, 360, 480]) {
+  for (const w of [1, 2, 3, 4]) {
+    const t = w * B.WATCH_DURATION;
     r.player.hp = 10;
     r.player.invulnT = 999;
     r.time = t - 0.01;

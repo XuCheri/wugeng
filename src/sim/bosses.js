@@ -1,7 +1,7 @@
 // Boss：纸马将军（三连冲锋 + 预警走廊）、无面伞女（撑伞减伤 + 纸钱弹幕）、
 // 夜游神（召唤 → 弹幕 → 狂暴追击 + 蓄力挥戟突刺预警）。
 
-import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS } from './balance.js';
+import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS, MAIN_DURATION } from './balance.js';
 import { clamp } from '../core/math.js';
 import { spawnEnemy, queueSpawn, setTelegraph, clearTelegraph } from './enemies.js';
 import { dropPickup } from './pickups.js';
@@ -27,7 +27,7 @@ export function spawnBoss(run, type, opts = {}) {
   if (run.mode === 'endless') {
     const es = Number.isFinite(run._endlessStart) && run._endlessStart > 0
       ? run._endlessStart
-      : Math.min(Math.max(0, run.time || 0), 600);
+      : Math.min(Math.max(0, run.time || 0), MAIN_DURATION);
     hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - es) / 60));
   }
   e.hp = e.maxHp = Math.round(hp);

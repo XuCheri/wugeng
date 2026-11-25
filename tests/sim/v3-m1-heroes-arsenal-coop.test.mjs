@@ -43,7 +43,7 @@ test('V3-M1-01: 6+6 器物栏上限、16 对本命双射、新四法器精确数
   assert.equal(RELIC_IDS.length, 16);
   assert.equal(MINI_WARDERS.length, 3);
   assert.equal(MINI_WARDERS[2].id, 'warder_430');
-  assert.equal(MINI_WARDERS[2].time, 430);
+  assert.equal(MINI_WARDERS[2].time, Math.round(430 * B.PACE));
   assert.equal(MINI_WARDERS[2].chest, true);
 
   const run = createRun({ seed: 3001, heroId: 'zhou' });
@@ -82,9 +82,9 @@ test('V3-M1-01: 6+6 器物栏上限、16 对本命双射、新四法器精确数
   near(relicEffect('wuse_mask', 5).speedPct, 0.20);
   near(relicEffect('wuse_mask', 5).ultChargePct, 0.40);
 
-  // 430s 催命吹鼓头小头目刷新且必带供盒
+  // 第 3 名巡更小头目（催命吹鼓头）刷新且必带供盒
   const rWarder = createRun({ seed: 3002, heroId: 'zhou' });
-  rWarder.time = 429.96;
+  rWarder.time = MINI_WARDERS[2].time - 0.04;
   for (let s = 0; s < 5; s++) {
     rWarder.player.invulnT = 99;
     stepRun(rWarder, {}, DT);
@@ -262,6 +262,7 @@ test('V3-M1-03: 新三名守夜人（沈观星 / 石敢当 / 柳青衣）被动�
     nightLevel: 0,
     cleared: false,
     timeSec: 360,
+    bunsEaten: 1,
     kills: 550,
     coins: 120,
     evolvedCount: 2,
