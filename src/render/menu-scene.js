@@ -716,7 +716,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     attackT,
     weaponId: starterWeapon,
     vfxPal,
-    targetX: w * (isTall ? 0.68 : 0.76),
+    targetX: w * (isTall ? 0.635 : 0.76),
     targetY: daisY - (isTall ? 34 : 22) * heroScale * 0.85,
     targetScale: isTall ? 0.95 : 0.8,
   });

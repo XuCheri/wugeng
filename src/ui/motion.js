@@ -39,7 +39,7 @@ export function purgeExitGhosts(root) {
 }
 
 /**
- * 为即将关闭的 .veil 创建纯视觉离场残影（200ms 卷轴收起 + 淡出），
+ * 为即将关闭的 .veil 创建纯视觉离场残影（约 240ms 合卷收拢 + 淡出），
  * 原 .veil 可立即从 DOM 同步卸载，兼顾丝滑离场动画与 0 竞态。
  * @param {HTMLElement} veilEl
  */
@@ -103,7 +103,7 @@ export function spawnVeilExitGhost(veilEl) {
   ghost.addEventListener('animationend', (e) => {
     if (e.target === ghost) cleanup();
   }, { once: true });
-  setTimeout(cleanup, 230);
+  setTimeout(cleanup, 290);
 }
 
 /**
