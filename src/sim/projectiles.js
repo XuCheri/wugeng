@@ -1,7 +1,7 @@
 // 弹体更新：移动、碰撞、持续场域、视觉寿命；以及延迟动作（连环莲花爆、阴火自爆、摄魂回响、天雷轰击等）。
 
 import { WEAPONS, FX, ULT } from './balance.js';
-import { turnToward } from '../core/math.js';
+import { turnToward, fsin, fcos, fatan2 } from '../core/math.js';
 import { damageEnemy, damageCircle, knockback, applySlow } from './combat.js';
 import { hurtPlayer } from './player.js';
 import { hitPropsCircle } from './props.js';
@@ -138,7 +138,7 @@ export function processScheduled(run, dt) {
             t: 0,
             life: 0.22,
             points: [
-              { x: tgt.x + Math.cos(ang) * 28, y: tgt.y + Math.sin(ang) * 28 },
+              { x: tgt.x + fcos(ang) * 28, y: tgt.y + fsin(ang) * 28 },
               { x: tgt.x, y: tgt.y },
             ],
           });
@@ -205,8 +205,8 @@ export function processScheduled(run, dt) {
         } else {
           const a = run.rng.range(0, Math.PI * 2);
           const d = run.rng.range(45, 190);
-          tx = p.x + Math.cos(a) * d;
-          ty = p.y + Math.sin(a) * d;
+          tx = p.x + fcos(a) * d;
+          ty = p.y + fsin(a) * d;
         }
         damageCircle(run, tx, ty, s.radius, s.dmg, 'ult', { knock: 140, stun: s.stun || 0.6 });
         run.projectiles.push({
@@ -316,8 +316,8 @@ export function updateProjectiles(run, dt) {
         const lv = lanternW ? lanternW.level : 1;
         const R = WEAPONS.lantern.orbitR[lv - 1] * weaponAreaMul(run, lanternW);
         pr.angle = lanternBase + (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
-        pr.x = p.x + Math.cos(pr.angle) * R;
-        pr.y = p.y + Math.sin(pr.angle) * R;
+        pr.x = p.x + fcos(pr.angle) * R;
+        pr.y = p.y + fsin(pr.angle) * R;
         break;
       }
 
@@ -399,8 +399,8 @@ export function updateProjectiles(run, dt) {
                 evolved: true,
                 explosionKind: 'firecrackerLotus',
                 knock: 90,
-                x: pr.toX + Math.cos(a) * d,
-                y: pr.toY + Math.sin(a) * d,
+                x: pr.toX + fcos(a) * d,
+                y: pr.toY + fsin(a) * d,
                 radius: pr.radius * evo.lotusRadiusMul,
                 dmg: pr.dmg * evo.lotusDmgMul,
                 ownerSlot: pr.ownerSlot || 0,
@@ -546,13 +546,13 @@ function updateTalismanProj(run, pr, dt, hash, near) {
     t = pr._tgt = hash.nearest(pr.x, pr.y, def.seekRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
   }
   if (t) {
-    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    const want = fatan2(t.y - pr.y, t.x - pr.x);
     let da = want - pr.angle;
-    da = Math.atan2(Math.sin(da), Math.cos(da));
+    da = fatan2(fsin(da), fcos(da));
     const maxTurn = def.turnRate * dt;
     pr.angle += Math.max(-maxTurn, Math.min(maxTurn, da));
-    pr.vx = Math.cos(pr.angle) * pr.speed;
-    pr.vy = Math.sin(pr.angle) * pr.speed;
+    pr.vx = fcos(pr.angle) * pr.speed;
+    pr.vy = fsin(pr.angle) * pr.speed;
   }
   pr.x += pr.vx * dt;
   pr.y += pr.vy * dt;
@@ -758,8 +758,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     pr.chargeT = 0;
     const idleR = pr.role === 'guard' ? evo.guardR * 0.75 : FX.summonOffset;
     const oa = run.time * 1.1 + ((pr.orbitIndex || 0) / Math.max(1, pr.orbitCount || 1)) * Math.PI * 2;
-    const tx = owner.x + Math.cos(oa) * idleR;
-    const ty = owner.y + Math.sin(oa) * idleR;
+    const tx = owner.x + fcos(oa) * idleR;
+    const ty = owner.y + fsin(oa) * idleR;
     const dx = tx - pr.x;
     const dy = ty - pr.y;
     const d = Math.hypot(dx, dy);
@@ -770,7 +770,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
       const step = Math.min(d, def.speed * 0.75 * dt);
       pr.x += (dx / d) * step;
       pr.y += (dy / d) * step;
-      pr.angle = Math.atan2(dy, dx);
+      pr.angle = fatan2(dy, dx);
     }
     return;
   }
@@ -785,7 +785,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
       const d = Math.hypot(dx, dy) || 1;
       pr.x += (dx / d) * Math.min(d, spd * dt);
       pr.y += (dy / d) * Math.min(d, spd * dt);
-      pr.angle = Math.atan2(dy, dx);
+      pr.angle = fatan2(dy, dx);
       if (d <= pr.r + t.r + 6) {
         pr.dead = true;
         explode(run, pr.x, pr.y, pr.blastR || 54, pr.dmg || 30, 'paperman', {
@@ -795,8 +795,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
         });
       }
     } else {
-      pr.x += Math.cos(pr.angle) * spd * dt;
-      pr.y += Math.sin(pr.angle) * spd * dt;
+      pr.x += fcos(pr.angle) * spd * dt;
+      pr.y += fsin(pr.angle) * spd * dt;
     }
     return;
   }
@@ -810,8 +810,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
   if (pr.role === 'guard') {
     const R = evo.guardR * weaponAreaMul(run, w);
     pr.angle = run.time * evo.guardAngSpeed * haste + (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
-    pr.x = p.x + Math.cos(pr.angle) * R;
-    pr.y = p.y + Math.sin(pr.angle) * R;
+    pr.x = p.x + fcos(pr.angle) * R;
+    pr.y = p.y + fsin(pr.angle) * R;
 
     if (pr._blockCd > 0) pr._blockCd -= dt;
     if (!(pr._blockCd > 0)) {
@@ -880,7 +880,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
         const d = Math.hypot(dx, dy) || 1;
         const ux = dx / d;
         const uy = dy / d;
-        pr.angle = Math.atan2(uy, ux);
+        pr.angle = fatan2(uy, ux);
         if (d <= 120) {
           pr.vx = ux * spd;
           pr.vy = uy * spd;
@@ -893,8 +893,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
         pr.mode = 'follow';
         pr.targetId = null;
         const oa = run.time * 1.9 + (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
-        const tx = p.x + Math.cos(oa) * 90;
-        const ty = p.y + Math.sin(oa) * 90;
+        const tx = p.x + fcos(oa) * 90;
+        const ty = p.y + fsin(oa) * 90;
         const dx = tx - pr.x;
         const dy = ty - pr.y;
         const d = Math.hypot(dx, dy);
@@ -902,7 +902,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
           const step = Math.min(d, spd * dt);
           pr.x += (dx / d) * step;
           pr.y += (dy / d) * step;
-          pr.angle = Math.atan2(dy, dx);
+          pr.angle = fatan2(dy, dx);
         }
       }
     }
@@ -914,8 +914,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
       pr._hitUntil.set(e.id, run.time + (evo.cavalryHitCd * sigCdMul) / haste);
       damageEnemy(run, e, dmg * evo.cavalryDmgMul, 'paperman', {
         knock: evo.cavalryKnock,
-        knockDx: Math.cos(pr.angle),
-        knockDy: Math.sin(pr.angle),
+        knockDx: fcos(pr.angle),
+        knockDy: fsin(pr.angle),
       });
       if (w && (run._papermanFireT || 0) <= run.time) {
         run._papermanFireT = run.time + 0.45;
@@ -942,8 +942,8 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     pr.mode = 'follow';
     pr.targetId = null;
     const a = (pr.orbitIndex / pr.orbitCount) * Math.PI * 2;
-    tx = p.x + Math.cos(a) * FX.summonOffset;
-    ty = p.y + Math.sin(a) * FX.summonOffset;
+    tx = p.x + fcos(a) * FX.summonOffset;
+    ty = p.y + fsin(a) * FX.summonOffset;
   }
   const dx = tx - pr.x;
   const dy = ty - pr.y;
@@ -953,7 +953,7 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     const step = Math.min(d, spd * dt);
     pr.x += (dx / d) * step;
     pr.y += (dy / d) * step;
-    pr.angle = Math.atan2(dy, dx);
+    pr.angle = fatan2(dy, dx);
   }
   if (t && pr.atkT <= 0 && d <= pr.r + t.r + FX.summonReach) {
     damageEnemy(run, t, dmg, 'paperman');
@@ -1050,12 +1050,12 @@ function updateMirrorBeam(run, pr, dt, hash, near) {
     pr._aimTarget = pri;
   }
   if (pr._aimTarget && !pr._aimTarget.dead) {
-    const want = Math.atan2(pr._aimTarget.y - p.y, pr._aimTarget.x - p.x);
+    const want = fatan2(pr._aimTarget.y - p.y, pr._aimTarget.x - p.x);
     pr.baseAngle = turnToward(pr.baseAngle, want, def.turnSpeed * dt);
   }
   pr.angle = pr.baseAngle + (pr.angleOffset || 0);
-  pr.endX = p.x + Math.cos(pr.angle) * pr.length;
-  pr.endY = p.y + Math.sin(pr.angle) * pr.length;
+  pr.endX = p.x + fcos(pr.angle) * pr.length;
+  pr.endY = p.y + fsin(pr.angle) * pr.length;
 
   // 焚毁与光束胶囊体相交的敌方弹幕（每道光束有净除上限，保留夜主弹幕压迫感）
   if (pr._burnsLeft === undefined) pr._burnsLeft = pr.evolved ? 8 : 4;
@@ -1098,8 +1098,8 @@ function updateMirrorBeam(run, pr, dt, hash, near) {
         e.yangyanBurstR = Math.max(e.yangyanBurstR || 0, 64 * run.mods.areaMul);
       }
       damageEnemy(run, e, pr.dmg * mult, 'bronze_mirror', {
-        knockDx: Math.cos(pr.angle),
-        knockDy: Math.sin(pr.angle),
+        knockDx: fcos(pr.angle),
+        knockDy: fsin(pr.angle),
       });
 
       if (pr.evolved && e._mirrorStacks % evo.solarEvery === 0) {
@@ -1183,10 +1183,10 @@ function updateFlyingSwordProj(run, pr, dt, hash, near) {
     t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
   }
   if (t) {
-    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    const want = fatan2(t.y - pr.y, t.x - pr.x);
     pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
-    pr.vx = Math.cos(pr.angle) * pr.speed;
-    pr.vy = Math.sin(pr.angle) * pr.speed;
+    pr.vx = fcos(pr.angle) * pr.speed;
+    pr.vy = fsin(pr.angle) * pr.speed;
   }
   pr.x += pr.vx * dt;
   pr.y += pr.vy * dt;
@@ -1243,10 +1243,10 @@ function updateFireCrowProj(run, pr, dt, hash, near) {
     t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead);
   }
   if (t) {
-    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    const want = fatan2(t.y - pr.y, t.x - pr.x);
     pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
-    pr.vx = Math.cos(pr.angle) * pr.speed;
-    pr.vy = Math.sin(pr.angle) * pr.speed;
+    pr.vx = fcos(pr.angle) * pr.speed;
+    pr.vy = fsin(pr.angle) * pr.speed;
   }
   pr.x += pr.vx * dt;
   pr.y += pr.vy * dt;
@@ -1361,8 +1361,8 @@ function updateNuoDrumProj(run, pr, dt) {
         run._scheduled.push({
           delay: 0.06 * (m + 1),
           type: 'explosion',
-          x: pr.x + Math.cos(ma) * md,
-          y: pr.y + Math.sin(ma) * md,
+          x: pr.x + fcos(ma) * md,
+          y: pr.y + fsin(ma) * md,
           radius: burstR,
           dmg: pr.dmg * evo.maskBurstMul,
           weaponId: 'nuo_drum',
@@ -1489,10 +1489,10 @@ function updateLuopanSlipProj(run, pr, dt, hash, near) {
     t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
   }
   if (t) {
-    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    const want = fatan2(t.y - pr.y, t.x - pr.x);
     pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
-    pr.vx = Math.cos(pr.angle) * pr.speed;
-    pr.vy = Math.sin(pr.angle) * pr.speed;
+    pr.vx = fcos(pr.angle) * pr.speed;
+    pr.vy = fsin(pr.angle) * pr.speed;
   }
   pr.x += pr.vx * dt;
   pr.y += pr.vy * dt;

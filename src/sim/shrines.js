@@ -2,6 +2,7 @@
 // 采用独立派生随机流（mixSeed）确定性生成，绝不扰动 run.rng 主随机序列。
 
 import { SHRINES, SHRINE_KINDS, SPAWN, DAMAGE, MAX_WEAPON_LEVEL, MAX_RELIC_LEVEL } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { Rng, mixSeed } from '../core/rng.js';
 import { spawnEnemy } from './enemies.js';
 import { dropPickup } from './pickups.js';
@@ -40,8 +41,8 @@ function ensureStarterShrines(run) {
     for (let tries = 0; tries < 8; tries++) {
       const a = baseA + (k * Math.PI * 2) / 3 + rng.range(-0.32, 0.32);
       const d = rng.range(SHRINES.starterMinDist, SHRINES.starterMaxDist);
-      const cx = Math.cos(a) * d;
-      const cy = Math.sin(a) * d;
+      const cx = fcos(a) * d;
+      const cy = fsin(a) * d;
       const clash = run.props.some((pr) => (pr.x - cx) ** 2 + (pr.y - cy) ** 2 < (pr.r + SHRINES.radius + 32) ** 2);
       x = cx;
       y = cy;
@@ -103,7 +104,7 @@ function spawnTrialElites(run, centerX, centerY, count) {
     const a = (i / count) * Math.PI * 2 + run.rng.range(-0.35, 0.35);
     const d = run.rng.range(250, 330);
     const type = run.watch <= 1 ? 'lanternghost' : run.rng.pick(roster);
-    spawnEnemy(run, type, centerX + Math.cos(a) * d, centerY + Math.sin(a) * d, { elite: true });
+    spawnEnemy(run, type, centerX + fcos(a) * d, centerY + fsin(a) * d, { elite: true });
   }
 }
 

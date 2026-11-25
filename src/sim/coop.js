@@ -6,6 +6,7 @@
 // - 严守 T5-WB-07 纯净度：零宿主/浏览器/定时器/非确定性全局对象。
 
 import { HEROES, WEAPONS, RELICS, WEAPON_IDS, ULT, ENEMIES, isHeroSignatureWeapon } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { Rng, mixSeed } from '../core/rng.js';
 import { createPlayer, recomputeMods, updatePlayer, hurtPlayer } from './player.js';
 import { addOrUpgradeWeapon } from './weapons.js';
@@ -28,7 +29,7 @@ const BOT_DIRS = (() => {
   const dirs = [{ x: 0, y: 0 }];
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    dirs.push({ x: Math.cos(a), y: Math.sin(a) });
+    dirs.push({ x: fcos(a), y: fsin(a) });
   }
   return dirs;
 })();
@@ -209,8 +210,8 @@ export function initCoopPlayers(run, coop, charm = null) {
         ? entry.startWeapon
         : HEROES[allyHero].startWeapon;
     const formAngle = ((slot - 1) / Math.max(1, allyCount)) * Math.PI * 2;
-    const sx = Math.round(Math.cos(formAngle) * 28 * 100) / 100;
-    const sy = Math.round(Math.sin(formAngle) * 28 * 100) / 100;
+    const sx = Math.round(fcos(formAngle) * 28 * 100) / 100;
+    const sy = Math.round(fsin(formAngle) * 28 * 100) / 100;
 
     const ally = createPlayer(allyHero, {
       slot,

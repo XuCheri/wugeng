@@ -5,6 +5,7 @@
 // 4. ghost_parade（阴兵借道）：12 秒内避开横穿长街的无敌阴兵列，未受冲撞礼成回血赐包。
 
 import { WATCH_DURATION, enemyDmgScale, designMinutes } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { spawnEnemy, currentHpScale } from './enemies.js';
 import { killEnemy } from './combat.js';
 import { earnCoins, healPlayer, hurtPlayer } from './player.js';
@@ -96,16 +97,16 @@ export function startWatchEvent(run, kindArg) {
   };
 
   if (kind === 'escort_peddler') {
-    const sx = p.x + Math.cos(baseA) * 95;
-    const sy = p.y + Math.sin(baseA) * 95;
+    const sx = p.x + fcos(baseA) * 95;
+    const sy = p.y + fsin(baseA) * 95;
     const ga = baseA + rng.range(-0.45, 0.45);
     const dist = 340;
     ev.x = sx;
     ev.y = sy;
     ev.startX = sx;
     ev.startY = sy;
-    ev.goalX = sx + Math.cos(ga) * dist;
-    ev.goalY = sy + Math.sin(ga) * dist;
+    ev.goalX = sx + fcos(ga) * dist;
+    ev.goalY = sy + fsin(ga) * dist;
     ev.totalDist = dist;
     ev.hp = 260;
     ev.maxHp = 260;
@@ -119,8 +120,8 @@ export function startWatchEvent(run, kindArg) {
       const a = baseA + (i * Math.PI * 2) / 3 + rng.range(-0.18, 0.18);
       const d = rng.range(165, 205);
       nodes.push({
-        x: p.x + Math.cos(a) * d,
-        y: p.y + Math.sin(a) * d,
+        x: p.x + fcos(a) * d,
+        y: p.y + fsin(a) * d,
         lit: false,
       });
     }
@@ -129,8 +130,8 @@ export function startWatchEvent(run, kindArg) {
     ev.targetX = nodes[0].x;
     ev.targetY = nodes[0].y;
   } else if (kind === 'chase_ingot') {
-    const ix = p.x + Math.cos(baseA) * 155;
-    const iy = p.y + Math.sin(baseA) * 155;
+    const ix = p.x + fcos(baseA) * 155;
+    const iy = p.y + fsin(baseA) * 155;
     const hp = Math.max(85, Math.round(52 * currentHpScale(run)));
     const ingot = spawnEnemy(run, 'paperkid', ix, iy, {
       fixedHp: hp,
@@ -150,8 +151,8 @@ export function startWatchEvent(run, kindArg) {
     ev.targetX = ix;
     ev.targetY = iy;
   } else if (kind === 'ghost_parade') {
-    const ux = Math.cos(baseA);
-    const uy = Math.sin(baseA);
+    const ux = fcos(baseA);
+    const uy = fsin(baseA);
     ev.cx = p.x;
     ev.cy = p.y;
     ev.ux = ux;
@@ -293,7 +294,7 @@ export function updateWatchEvents(run, dt) {
       }
       for (let k = 0; k < 10; k++) {
         const a = (k / 10) * Math.PI * 2;
-        dropXp(run, p0.x + Math.cos(a) * 42, p0.y + Math.sin(a) * 42, 5, 1);
+        dropXp(run, p0.x + fcos(a) * 42, p0.y + fsin(a) * 42, 5, 1);
       }
       finishWatchEvent(run, ev, true);
       return;

@@ -2,6 +2,7 @@
 // 同时结算引魂灯芯的武器冷却返还与五雷号令命签的极速暴伤增益。
 
 import { ULT } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { damageCircle } from './combat.js';
 import { weaponFullCooldown } from './weapons.js';
 import { recomputeMods } from './player.js';
@@ -72,8 +73,8 @@ export function castUlt(run, force = false) {
     const hitR = M.horseHitR * areaMul;
     for (let i = 0; i < M.horses; i++) {
       const a = (i / M.horses) * Math.PI * 2;
-      const cosA = Math.cos(a);
-      const sinA = Math.sin(a);
+      const cosA = fcos(a);
+      const sinA = fsin(a);
       run.projectiles.push({
         id: run._nextId++,
         kind: 'paperHorse',
@@ -184,8 +185,8 @@ export function castUlt(run, force = false) {
       run._scheduled.push({
         delay: Y.gateDelay * (i + 1),
         type: 'explosion',
-        x: p.x + Math.cos(a) * gd,
-        y: p.y + Math.sin(a) * gd,
+        x: p.x + fcos(a) * gd,
+        y: p.y + fsin(a) * gd,
         radius: Y.gateRadius * areaMul,
         dmg: dmg * Y.gateDmgMul,
         weaponId: 'ult',
@@ -250,8 +251,8 @@ export function castUlt(run, force = false) {
       run._scheduled.push({
         delay: (i + 1) * T.anvilInterval,
         type: 'explosion',
-        x: p.x + Math.cos(a) * rd,
-        y: p.y + Math.sin(a) * rd,
+        x: p.x + fcos(a) * rd,
+        y: p.y + fsin(a) * rd,
         radius: T.anvilRadius * areaMul,
         dmg: dmg * T.anvilDmgMul,
         weaponId: 'ult',

@@ -7,7 +7,7 @@ import {
 import { damageCircle, damageEnemy, knockback, applyStun, applySlow, applyVuln } from './combat.js';
 import { hasRelic } from './relics.js';
 import { hitPropsCircle } from './props.js';
-import { wrapAngle } from '../core/math.js';
+import { wrapAngle, fsin, fcos, fatan2 } from '../core/math.js';
 
 /** 取武器某项属性在 level 级时的数值（数组按级取，标量直接返回） */
 export function wstat(id, key, level) {
@@ -415,13 +415,13 @@ function updateTalisman(run, w, dt) {
 
   for (let i = 0; i < n; i++) {
     const t = targets[i % targets.length];
-    const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+    const baseA = fatan2(t.y - p.y, t.x - p.x);
     if (i === 0) mainAngle = baseA;
     const a = baseA + (i - (n - 1) / 2) * FX.talismanFan;
     newProj(run, 'talisman', p.x, p.y, projR, a, def.life * run.mods.durMul, {
       weaponId: 'talisman',
-      vx: Math.cos(a) * spd,
-      vy: Math.sin(a) * spd,
+      vx: fcos(a) * spd,
+      vy: fsin(a) * spd,
       speed: spd,
       pierce,
       dmg,
@@ -448,12 +448,12 @@ export function damageSector(run, x, y, R, angle, spread, raw, weaponId, opts) {
     if (e.dead) continue;
     const d = Math.hypot(e.x - x, e.y - y) || 1;
     const tol = Math.asin(Math.min(1, e.r / d));
-    if (Math.abs(wrapAngle(Math.atan2(e.y - y, e.x - x) - angle)) <= half + tol) {
+    if (Math.abs(wrapAngle(fatan2(e.y - y, e.x - x) - angle)) <= half + tol) {
       damageEnemy(run, e, raw, weaponId, subOpts);
       hits++;
     }
   }
-  hitPropsCircle(run, x + Math.cos(angle) * R * 0.5, y + Math.sin(angle) * R * 0.5, R * 0.5);
+  hitPropsCircle(run, x + fcos(angle) * R * 0.5, y + fsin(angle) * R * 0.5, R * 0.5);
   return hits;
 }
 
@@ -469,7 +469,7 @@ function updateBrush(run, w, dt) {
   if (!w.evolved) {
     const R = wstat('brush', 'radius', w.level) * areaMul;
     const spread = (wstat('brush', 'spread', w.level) * Math.PI) / 180;
-    const base = Math.atan2(p.facingY, p.facingX);
+    const base = fatan2(p.facingY, p.facingX);
     damageSector(run, p.x, p.y, R, base, spread, dmg, 'brush', { knock: def.knockback });
     newProj(run, 'brushArc', p.x, p.y, R, base, def.arcLife, {
       weaponId: 'brush',
@@ -485,7 +485,7 @@ function updateBrush(run, w, dt) {
   const evo = def.evo;
   const R = (wstat('brush', 'radius', w.level) + evo.slashRadiusBonus) * areaMul;
   const pri = findPriorityTarget(run, p.x, p.y, 380, run._sys.scratchW);
-  const aimAngle = pri ? Math.atan2(pri.y - p.y, pri.x - p.x) : Math.atan2(p.facingY, p.facingX);
+  const aimAngle = pri ? fatan2(pri.y - p.y, pri.x - p.x) : fatan2(p.facingY, p.facingX);
 
   damageCircle(run, p.x, p.y, R, dmg, 'brush', { knock: 125, slow: 0.7 });
   newProj(run, 'brushArc', p.x, p.y, R, aimAngle, evo.arcLife, {
@@ -505,8 +505,8 @@ function updateBrush(run, w, dt) {
       weaponId: 'brush',
       hitR: waveHitR,
       radius: waveHitR,
-      vx: Math.cos(a) * evo.waveSpeed,
-      vy: Math.sin(a) * evo.waveSpeed,
+      vx: fcos(a) * evo.waveSpeed,
+      vy: fsin(a) * evo.waveSpeed,
       speed: evo.waveSpeed,
       dmg: dmg * evo.waveDmgMul,
       evolved: true,
@@ -519,8 +519,8 @@ function updateBrush(run, w, dt) {
     newProj(
       run,
       'inkPool',
-      p.x + Math.cos(aimAngle) * dist,
-      p.y + Math.sin(aimAngle) * dist,
+      p.x + fcos(aimAngle) * dist,
+      p.y + fsin(aimAngle) * dist,
       poolR,
       aimAngle,
       evo.poolLife * run.mods.durMul,
@@ -563,13 +563,13 @@ function updateCoinsword(run, w, dt) {
       return (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
     });
 
-    const fallbackBase = Math.atan2(p.facingY, p.facingX);
+    const fallbackBase = fatan2(p.facingY, p.facingX);
     let primaryAngle = fallbackBase;
     for (let i = 0; i < n; i++) {
       let a;
       if (threats.length > 0) {
         const t = threats[i % Math.min(threats.length, 4)];
-        const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+        const baseA = fatan2(t.y - p.y, t.x - p.x);
         if (i === 0) primaryAngle = baseA;
         const fan = threats.length === 1 ? 0.055 : 0.09;
         a = baseA + (i - (n - 1) / 2) * fan;
@@ -577,12 +577,12 @@ function updateCoinsword(run, w, dt) {
         a = fallbackBase + (i - (n - 1) / 2) * 0.18;
       }
       const ringA = primaryAngle + (i / n) * Math.PI * 2;
-      const sx = p.x + Math.cos(ringA) * 20;
-      const sy = p.y + Math.sin(ringA) * 20;
+      const sx = p.x + fcos(ringA) * 20;
+      const sy = p.y + fsin(ringA) * 20;
       newProj(run, 'coinsword', sx, sy, def.r, a, FX.coinswordMaxLife, {
         weaponId: 'coinsword',
-        vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd,
+        vx: fcos(a) * spd,
+        vy: fsin(a) * spd,
         returning: false,
         phase: 'fly',
         speed: spd,
@@ -598,13 +598,13 @@ function updateCoinsword(run, w, dt) {
     const spd = def.speed * run.mods.durMul;
     const n = wstat('coinsword', 'count', w.level) + run.mods.amount;
     const t = run._sys.hash.nearest(p.x, p.y, def.range * 1.5, run._sys.scratchW, (e) => !e.dead);
-    const base = t ? Math.atan2(t.y - p.y, t.x - p.x) : Math.atan2(p.facingY, p.facingX);
+    const base = t ? fatan2(t.y - p.y, t.x - p.x) : fatan2(p.facingY, p.facingX);
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * def.spreadAngle;
       newProj(run, 'coinsword', p.x, p.y, def.r, a, FX.coinswordMaxLife, {
         weaponId: 'coinsword',
-        vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd,
+        vx: fcos(a) * spd,
+        vy: fsin(a) * spd,
         returning: false,
         phase: 'fly',
         speed: spd,
@@ -654,7 +654,7 @@ function updateFirecracker(run, w, dt) {
     const t = scored[i % scored.length].e;
     const jx = i > 0 ? run.rng.range(-R * 0.75, R * 0.75) : 0;
     const jy = i > 0 ? run.rng.range(-R * 0.75, R * 0.75) : 0;
-    newProj(run, 'firecracker', p.x, p.y, FX.firecrackerR, Math.atan2(t.y - p.y, t.x - p.x), flight, {
+    newProj(run, 'firecracker', p.x, p.y, FX.firecrackerR, fatan2(t.y - p.y, t.x - p.x), flight, {
       weaponId: 'firecracker',
       fromX: p.x,
       fromY: p.y,
@@ -665,7 +665,7 @@ function updateFirecracker(run, w, dt) {
       evolved: w.evolved,
     });
   }
-  emitFire(run, w, p.x, p.y, Math.atan2(firstT.y - p.y, firstT.x - p.x));
+  emitFire(run, w, p.x, p.y, fatan2(firstT.y - p.y, firstT.x - p.x));
 }
 
 // ───────────────────────── 8. 铜铃 → 千铃引魂 ─────────────────────────
@@ -745,7 +745,7 @@ function updateBell(run, w, dt) {
       }
     }
   }
-  emitFire(run, w, p.x, p.y, Math.atan2(first.y - p.y, first.x - p.x));
+  emitFire(run, w, p.x, p.y, fatan2(first.y - p.y, first.x - p.x));
 }
 
 // ───────────────────────── 9. 罗盘 → 天星定穴盘 ─────────────────────────
@@ -792,7 +792,7 @@ function updateCompass(run, w, dt) {
     const jy = i > 0 ? run.rng.range(-45, 45) : 0;
     const tx = t.x + jx;
     const ty = t.y + jy;
-    const a = Math.atan2(ty - p.y, tx - p.x);
+    const a = fatan2(ty - p.y, tx - p.x);
     if (i === 0) firstAngle = a;
     newProj(run, 'compassField', tx, ty, 12, a, life, {
       weaponId: 'compass',
@@ -824,7 +824,7 @@ export function sweepSoulbanner(run, w, x, y, R, aimAngle, spreadRad, dmg, isSec
     if (e.dead) continue;
     const d = Math.hypot(e.x - x, e.y - y) || 1;
     const tol = Math.asin(Math.min(1, e.r / d));
-    if (Math.abs(wrapAngle(Math.atan2(e.y - y, e.x - x) - aimAngle)) > half + tol) continue;
+    if (Math.abs(wrapAngle(fatan2(e.y - y, e.x - x) - aimAngle)) > half + tol) continue;
 
     applyVuln(e, vulnDur, vulnPct);
     if (evolved && !e.boss) applyStun(run, e, evo.stunDur);
@@ -843,7 +843,7 @@ export function sweepSoulbanner(run, w, x, y, R, aimAngle, spreadRad, dmg, isSec
     }
   }
 
-  hitPropsCircle(run, x + Math.cos(aimAngle) * R * 0.5, y + Math.sin(aimAngle) * R * 0.5, R * 0.5);
+  hitPropsCircle(run, x + fcos(aimAngle) * R * 0.5, y + fsin(aimAngle) * R * 0.5, R * 0.5);
   newProj(run, 'soulSweep', x, y, 10, aimAngle, def.sweepLife, {
     weaponId: 'soulbanner',
     radius: R,
@@ -864,7 +864,7 @@ function updateSoulbanner(run, w, dt) {
   const spreadDeg = w.evolved ? evo.spread : wstat('soulbanner', 'spread', w.level);
   const spreadRad = (spreadDeg * Math.PI) / 180;
   const pri = findPriorityTarget(run, p.x, p.y, R * 1.35, run._sys.scratchW);
-  const aimAngle = pri ? Math.atan2(pri.y - p.y, pri.x - p.x) : Math.atan2(p.facingY, p.facingX);
+  const aimAngle = pri ? fatan2(pri.y - p.y, pri.x - p.x) : fatan2(p.facingY, p.facingX);
   const dmg = baseDmg(w, run);
 
   sweepSoulbanner(run, w, p.x, p.y, R, aimAngle, spreadRad, dmg, false);
@@ -900,7 +900,7 @@ function updateBronzeMirror(run, w, dt) {
   }
 
   w.cd = cooldown(run, w);
-  const aimAngle = Math.atan2(pri.y - p.y, pri.x - p.x);
+  const aimAngle = fatan2(pri.y - p.y, pri.x - p.x);
   const count = 1 + Math.min(2, (w.evolved ? 1 : 0) + run.mods.amount);
   const life = (w.evolved ? evo.beamLife : def.beamLife) * run.mods.durMul;
   const tick = w.evolved ? evo.tick : def.tick;
@@ -916,8 +916,8 @@ function updateBronzeMirror(run, w, dt) {
       width: W,
       baseAngle: aimAngle,
       angleOffset,
-      endX: p.x + Math.cos(a) * L,
-      endY: p.y + Math.sin(a) * L,
+      endX: p.x + fcos(a) * L,
+      endY: p.y + fsin(a) * L,
       tick,
       _tickT: 0,
       dmg,
@@ -942,14 +942,14 @@ function updatePaperhorse(run, w, dt) {
   }
 
   w.cd = cooldown(run, w);
-  const mainAngle = Math.atan2(pri.y - p.y, pri.x - p.x);
+  const mainAngle = fatan2(pri.y - p.y, pri.x - p.x);
   const n = wstat('paperhorse', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
   const spd = (w.evolved ? evo.speed : def.speed) * run.mods.durMul;
   const span = (w.evolved ? evo.span : def.span) * run.mods.durMul;
   const hitR = (w.evolved ? evo.r : def.r) * weaponAreaMul(run, w);
   const dmg = baseDmg(w, run);
-  const cosA = Math.cos(mainAngle);
-  const sinA = Math.sin(mainAngle);
+  const cosA = fcos(mainAngle);
+  const sinA = fsin(mainAngle);
   const perpX = -sinA;
   const perpY = cosA;
 
@@ -1009,13 +1009,13 @@ function updateTaomujian(run, w, dt) {
 
   for (let i = 0; i < n; i++) {
     const t = targets[i % targets.length];
-    const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+    const baseA = fatan2(t.y - p.y, t.x - p.x);
     if (i === 0) mainAngle = baseA;
     const a = baseA + (i - (n - 1) / 2) * 0.14;
     newProj(run, 'flyingSword', p.x, p.y, hitR, a, def.life * run.mods.durMul, {
       weaponId: 'taomujian',
-      vx: Math.cos(a) * spd,
-      vy: Math.sin(a) * spd,
+      vx: fcos(a) * spd,
+      vy: fsin(a) * spd,
       speed: spd,
       turnRate: w.evolved ? evo.turnRate : def.turnRate,
       seekRange: seekR,
@@ -1056,7 +1056,7 @@ function updateSuohunChain(run, w, dt) {
   }
 
   w.cd = cooldown(run, w);
-  const baseAngle = Math.atan2(pri.y - p.y, pri.x - p.x);
+  const baseAngle = fatan2(pri.y - p.y, pri.x - p.x);
   const n = wstat('suohun_chain', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + Math.min(2, run.mods.amount);
   const dmg = baseDmg(w, run);
   const pullForce = w.evolved ? evo.pullForce : def.pullForce;
@@ -1065,8 +1065,8 @@ function updateSuohunChain(run, w, dt) {
 
   for (let i = 0; i < n; i++) {
     const a = n === 1 ? baseAngle : baseAngle + (i - (n - 1) / 2) * (w.evolved ? 0.34 : 0.42);
-    const endX = p.x + Math.cos(a) * L;
-    const endY = p.y + Math.sin(a) * L;
+    const endX = p.x + fcos(a) * L;
+    const endY = p.y + fsin(a) * L;
     const mx = (p.x + endX) * 0.5;
     const my = (p.y + endY) * 0.5;
     const cands = run._sys.hash.queryCircle(mx, my, L * 0.5 + W, run._sys.scratchW2);
@@ -1091,8 +1091,8 @@ function updateSuohunChain(run, w, dt) {
       run._scheduled.push({
         delay: 0.14,
         type: 'explosion',
-        x: p.x + Math.cos(a) * (L * 0.62),
-        y: p.y + Math.sin(a) * (L * 0.62),
+        x: p.x + fcos(a) * (L * 0.62),
+        y: p.y + fsin(a) * (L * 0.62),
         radius: evo.burstRadius * areaMul,
         dmg: dmg * evo.burstDmgMul,
         weaponId: 'suohun_chain',
@@ -1154,13 +1154,13 @@ function updateZhinianKite(run, w, dt) {
 
   for (let i = 0; i < n; i++) {
     const t = targets[i % targets.length];
-    const baseA = Math.atan2(t.y - p.y, t.x - p.x);
+    const baseA = fatan2(t.y - p.y, t.x - p.x);
     if (i === 0) mainAngle = baseA;
     const a = baseA + (i - (n - 1) / 2) * 0.22;
     newProj(run, 'fireCrow', p.x, p.y, def.r * sigScale, a, def.life * run.mods.durMul, {
       weaponId: 'zhinian_kite',
-      vx: Math.cos(a) * spd,
-      vy: Math.sin(a) * spd,
+      vx: fcos(a) * spd,
+      vy: fsin(a) * spd,
       speed: spd,
       turnRate: def.turnRate,
       seekRange: seekR,
@@ -1193,13 +1193,13 @@ function updateNuoDrum(run, w, dt) {
   const pri = findPriorityTarget(run, p.x, p.y, def.placeRange + R, run._sys.scratchW);
   let tx = p.x;
   let ty = p.y;
-  let aimAngle = Math.atan2(p.facingY, p.facingX);
+  let aimAngle = fatan2(p.facingY, p.facingX);
   if (pri) {
     const dx = pri.x - p.x;
     const dy = pri.y - p.y;
     const d = Math.hypot(dx, dy);
     if (d > 1) {
-      aimAngle = Math.atan2(dy, dx);
+      aimAngle = fatan2(dy, dx);
       const stepD = Math.min(d, def.placeRange);
       tx = p.x + (dx / d) * stepD;
       ty = p.y + (dy / d) * stepD;
@@ -1244,7 +1244,7 @@ function updateMourningStaff(run, w, dt) {
   const dmg = baseDmg(w, run);
 
   const pri = findPriorityTarget(run, p.x, p.y, R + 60, run._sys.scratchW);
-  const aim = pri ? Math.atan2(pri.y - p.y, pri.x - p.x) : Math.atan2(p.facingY, p.facingX);
+  const aim = pri ? fatan2(pri.y - p.y, pri.x - p.x) : fatan2(p.facingY, p.facingX);
   w._sweeps = (w._sweeps || 0) + 1;
 
   hitPropsCircle(run, p.x, p.y, R);
@@ -1257,7 +1257,7 @@ function updateMourningStaff(run, w, dt) {
     const dist = Math.hypot(dx, dy);
     if (dist > R + e.r) continue;
     if (!w.evolved) {
-      const da = Math.abs(wrapAngle(Math.atan2(dy, dx) - aim));
+      const da = Math.abs(wrapAngle(fatan2(dy, dx) - aim));
       if (da > spreadRad * 0.5 && dist > p.r + e.r + 10) continue;
     }
     applySlow(run, e, 0.9);
@@ -1335,15 +1335,15 @@ function updateSkyLantern(run, w, dt) {
       const pick = live[(i * 3) % live.length];
       const jitterA = (i / Math.max(1, n)) * Math.PI * 2;
       const jitterD = i === 0 ? 0 : 24;
-      tx = pick.x + Math.cos(jitterA) * jitterD;
-      ty = pick.y + Math.sin(jitterA) * jitterD;
+      tx = pick.x + fcos(jitterA) * jitterD;
+      ty = pick.y + fsin(jitterA) * jitterD;
     } else {
       const a = run.rng.range(0, Math.PI * 2);
       const d = run.rng.range(75, Math.max(95, seekR * 0.72));
-      tx = p.x + Math.cos(a) * d;
-      ty = p.y + Math.sin(a) * d;
+      tx = p.x + fcos(a) * d;
+      ty = p.y + fsin(a) * d;
     }
-    if (i === 0) mainAngle = Math.atan2(ty - p.y, tx - p.x);
+    if (i === 0) mainAngle = fatan2(ty - p.y, tx - p.x);
     newProj(run, 'skyLantern', p.x, p.y, 10, 0, flight, {
       weaponId: 'sky_lantern',
       fromX: p.x,
@@ -1423,7 +1423,7 @@ function updateCarpenterLine(run, w, dt) {
   const lineCount = (w.evolved ? evo.lines : wstat('carpenter_line', 'count', w.level)) + run.mods.amount;
   const life = (w.evolved ? evo.life : def.life) * (run.mods?.durMul || 1);
   const anchor = live[0];
-  const baseAngle = Math.atan2(anchor.y - p.y, anchor.x - p.x);
+  const baseAngle = fatan2(anchor.y - p.y, anchor.x - p.x);
 
   if (w.evolved && lineCount >= 3) {
     // 乾坤断魂线：以首目标为中心结成贯穿心腹的三才/多向断魂星墨阵并持续斩裂
@@ -1432,8 +1432,8 @@ function updateCarpenterLine(run, w, dt) {
     const halfSpan = Math.max(72, L * 0.5);
     for (let i = 0; i < lineCount; i++) {
       const a = baseAngle + (i / lineCount) * Math.PI;
-      const v0 = { x: cx - Math.cos(a) * halfSpan, y: cy - Math.sin(a) * halfSpan };
-      const v1 = { x: cx + Math.cos(a) * halfSpan, y: cy + Math.sin(a) * halfSpan };
+      const v0 = { x: cx - fcos(a) * halfSpan, y: cy - fsin(a) * halfSpan };
+      const v1 = { x: cx + fcos(a) * halfSpan, y: cy + fsin(a) * halfSpan };
       sliceAlongInkSegment(run, v0.x, v0.y, v1.x, v1.y, W * 0.5, dmg, bleedDps, bleedDur, true);
       newProj(run, 'inkLine', cx, cy, W * 0.5, a, life, {
         weaponId: 'carpenter_line',
@@ -1475,20 +1475,20 @@ function updateCarpenterLine(run, w, dt) {
           by = eB.y + uy * pad;
         } else {
           const ang = baseAngle + Math.PI * 0.5 + i * 0.55;
-          ax = eA.x - Math.cos(ang) * L * 0.5;
-          ay = eA.y - Math.sin(ang) * L * 0.5;
-          bx = eA.x + Math.cos(ang) * L * 0.5;
-          by = eA.y + Math.sin(ang) * L * 0.5;
+          ax = eA.x - fcos(ang) * L * 0.5;
+          ay = eA.y - fsin(ang) * L * 0.5;
+          bx = eA.x + fcos(ang) * L * 0.5;
+          by = eA.y + fsin(ang) * L * 0.5;
         }
       } else {
         const ang = baseAngle + Math.PI * 0.5 + i * 0.62;
-        ax = eA.x - Math.cos(ang) * L * 0.5;
-        ay = eA.y - Math.sin(ang) * L * 0.5;
-        bx = eA.x + Math.cos(ang) * L * 0.5;
-        by = eA.y + Math.sin(ang) * L * 0.5;
+        ax = eA.x - fcos(ang) * L * 0.5;
+        ay = eA.y - fsin(ang) * L * 0.5;
+        bx = eA.x + fcos(ang) * L * 0.5;
+        by = eA.y + fsin(ang) * L * 0.5;
       }
       sliceAlongInkSegment(run, ax, ay, bx, by, W * 0.5, dmg, bleedDps, bleedDur, false);
-      newProj(run, 'inkLine', (ax + bx) * 0.5, (ay + by) * 0.5, W * 0.5, Math.atan2(by - ay, bx - ax), life, {
+      newProj(run, 'inkLine', (ax + bx) * 0.5, (ay + by) * 0.5, W * 0.5, fatan2(by - ay, bx - ax), life, {
         weaponId: 'carpenter_line',
         ax,
         ay,
@@ -1531,14 +1531,14 @@ function updateLuopanSlip(run, w, dt) {
   const pierce = (w.evolved ? evo.pierce : def.pierce) + (run.mods.bonusPierce || 0);
   const turnRate = w.evolved ? evo.turnRate : def.turnRate;
   const dmg = baseDmg(w, run);
-  const baseA = Math.atan2(t0.y - p.y, t0.x - p.x);
+  const baseA = fatan2(t0.y - p.y, t0.x - p.x);
 
   for (let i = 0; i < n; i++) {
     const a = baseA + (i - (n - 1) / 2) * 0.16;
     newProj(run, 'luopanSlip', p.x, p.y, def.r * sigScale, a, def.life * run.mods.durMul, {
       weaponId: 'luopan_slip',
-      vx: Math.cos(a) * spd,
-      vy: Math.sin(a) * spd,
+      vx: fcos(a) * spd,
+      vy: fsin(a) * spd,
       speed: spd,
       turnRate,
       seekRange: seekR,
@@ -1613,7 +1613,7 @@ function syncSummons(run, w) {
       const n = wstat('paperman', 'count', w.level) + run.mods.amount;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * FX.summonOffset, p.y + Math.sin(a) * FX.summonOffset, def.r * sigScale, a, 1, {
+        newProj(run, 'paperman', p.x + fcos(a) * FX.summonOffset, p.y + fsin(a) * FX.summonOffset, def.r * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'seeker',
           targetId: null,
@@ -1631,7 +1631,7 @@ function syncSummons(run, w) {
       const evo = def.evo;
       for (let g = 0; g < evo.guards; g++) {
         const a = (g / evo.guards) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * evo.guardR * areaMul, p.y + Math.sin(a) * evo.guardR * areaMul, def.r * sigScale, a, 1, {
+        newProj(run, 'paperman', p.x + fcos(a) * evo.guardR * areaMul, p.y + fsin(a) * evo.guardR * areaMul, def.r * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'guard',
           mode: 'guard',
@@ -1647,7 +1647,7 @@ function syncSummons(run, w) {
       const cN = evo.cavalry + run.mods.amount;
       for (let c = 0; c < cN; c++) {
         const a = (c / cN) * Math.PI * 2;
-        newProj(run, 'paperman', p.x + Math.cos(a) * 84, p.y + Math.sin(a) * 84, (def.r + 1) * sigScale, a, 1, {
+        newProj(run, 'paperman', p.x + fcos(a) * 84, p.y + fsin(a) * 84, (def.r + 1) * sigScale, a, 1, {
           weaponId: 'paperman',
           role: 'cavalry',
           mode: 'follow',

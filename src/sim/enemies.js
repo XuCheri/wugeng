@@ -5,7 +5,7 @@ import {
   ENEMIES, ELITE, ELITE_AFFIXES, ELITE_AFFIX_IDS, ENEMY_AI, SPAWN, MAX_ENEMY_RADIUS,
   MAIN_DURATION, designMinutes, enemyHpScale, enemySpeedScale, enemyDmgScale,
 } from './balance.js';
-import { clamp } from '../core/math.js';
+import { clamp, fsin, fcos, fatan2 } from '../core/math.js';
 import { hurtPlayer } from './player.js';
 import { updateBoss } from './bosses.js';
 import { damageEnemy, knockback } from './combat.js';
@@ -130,7 +130,7 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     _bleedTick: 0,
     buffedT: 0,
     state: 'move',
-    angle: Math.atan2(run.player.y - sy, run.player.x - sx),
+    angle: fatan2(run.player.y - sy, run.player.x - sx),
     telegraphX: 0,
     telegraphY: 0,
     telegraphProgress: 0,
@@ -246,10 +246,10 @@ export function ringPoint(run, min = SPAWN.ringMin, max = SPAWN.ringMax, biasFor
     anchorPlayer ||
     (run.player?.downed && coopPartySize(run) > 1 ? nearestLivingPlayer(run, run.player.x, run.player.y) : run.player);
   let a;
-  if (biasForward && p.moving) a = Math.atan2(p.facingY, p.facingX) + run.rng.range(-1.2, 1.2);
+  if (biasForward && p.moving) a = fatan2(p.facingY, p.facingX) + run.rng.range(-1.2, 1.2);
   else a = run.rng.range(0, Math.PI * 2);
   const d = run.rng.range(min, max);
-  return { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
+  return { x: p.x + fcos(a) * d, y: p.y + fsin(a) * d };
 }
 
 export function updateEnemies(run, dt) {
@@ -397,7 +397,7 @@ export function updateEnemies(run, dt) {
           e.stateT = W.pause;
           e.dx = tx;
           e.dy = ty;
-          e.angle = Math.atan2(ty, tx);
+          e.angle = fatan2(ty, tx);
           setTelegraph(e, telLen, telWid, 0.02);
           spd = 0;
         } else if (e.state === 'pause') {
@@ -451,7 +451,7 @@ export function updateEnemies(run, dt) {
         e._fireT -= dt;
         if (e._fireT <= 0 && d <= PB.fireRange) {
           e._fireT = PB.fireCd;
-          const a = Math.atan2(p.y - e.y, p.x - e.x);
+          const a = fatan2(p.y - e.y, p.x - e.x);
           const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
           const bdmg = Math.max(2, Math.round(PB.bulletDmg * run.night.contactDmgMul * enemyDmgScale(m) * (e.elite ? 1.25 : 1)));
           run.projectiles.push({
@@ -464,8 +464,8 @@ export function updateEnemies(run, dt) {
             angle: a,
             t: 0,
             life: PB.bulletLife,
-            vx: Math.cos(a) * PB.bulletSpeed,
-            vy: Math.sin(a) * PB.bulletSpeed,
+            vx: fcos(a) * PB.bulletSpeed,
+            vy: fsin(a) * PB.bulletSpeed,
             style: PB.bulletStyle,
             dmg: bdmg,
           });
@@ -494,8 +494,8 @@ export function updateEnemies(run, dt) {
                 angle: a,
                 t: 0,
                 life: AG.bulletLife,
-                vx: Math.cos(a) * AG.bulletSpeed,
-                vy: Math.sin(a) * AG.bulletSpeed,
+                vx: fcos(a) * AG.bulletSpeed,
+                vy: fsin(a) * AG.bulletSpeed,
                 style: AG.bulletStyle,
                 dmg: bdmg,
               });
@@ -517,7 +517,7 @@ export function updateEnemies(run, dt) {
             e.stateT = AG.windup;
             e.dx = tx;
             e.dy = ty;
-            e.angle = Math.atan2(ty, tx);
+            e.angle = fatan2(ty, tx);
             setTelegraph(e, AG.telegraphLen, AG.telegraphWidth, 0.02);
             spd = 0;
           }
@@ -568,7 +568,7 @@ export function updateEnemies(run, dt) {
           const baseA = run.rng.range(0, Math.PI * 2);
           for (let sIdx = 0; sIdx < SH.summonCount; sIdx++) {
             const sa = baseA + (sIdx / SH.summonCount) * Math.PI * 2;
-            queueSpawn(run, 'paperkid', e.x + Math.cos(sa) * SH.summonDist, e.y + Math.sin(sa) * SH.summonDist, {
+            queueSpawn(run, 'paperkid', e.x + fcos(sa) * SH.summonDist, e.y + fsin(sa) * SH.summonDist, {
               summoned: true,
               mirrorClone: true,
               atkT: 0.35,
@@ -591,7 +591,7 @@ export function updateEnemies(run, dt) {
         e._affixT -= dt;
         if (e._affixT <= 0 && d <= SF.fireRange) {
           e._affixT = SF.fireInterval;
-          const baseA = Math.atan2(p.y - e.y, p.x - e.x);
+          const baseA = fatan2(p.y - e.y, p.x - e.x);
           const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
           const bdmg = Math.max(2, Math.round(SF.bulletDmg * run.night.contactDmgMul * enemyDmgScale(m)));
           for (let b = 0; b < SF.bulletCount; b++) {
@@ -606,8 +606,8 @@ export function updateEnemies(run, dt) {
               angle: a,
               t: 0,
               life: SF.bulletLife,
-              vx: Math.cos(a) * SF.bulletSpeed,
-              vy: Math.sin(a) * SF.bulletSpeed,
+              vx: fcos(a) * SF.bulletSpeed,
+              vy: fsin(a) * SF.bulletSpeed,
               style: 'ink',
               dmg: bdmg,
             });
@@ -618,7 +618,7 @@ export function updateEnemies(run, dt) {
       vx = moveX * spd;
       vy = moveY * spd;
       if ((e.type === 'weasel' || e.type === 'archer_ghost') && spd > 0 && e.state !== 'dash' && e.state !== 'aim') {
-        e.angle = Math.atan2(ty, tx);
+        e.angle = fatan2(ty, tx);
       }
     }
 
@@ -701,8 +701,8 @@ export function updateEnemies(run, dt) {
       let outY = -ty;
       if (d2 < 1e-6) {
         const fa = (e.id % 8) * (Math.PI / 4);
-        outX = Math.cos(fa);
-        outY = Math.sin(fa);
+        outX = fcos(fa);
+        outY = fsin(fa);
       }
       const pen = minDist - (d2 < 1e-6 ? 0 : d);
       const push = pen * (e.boss ? 0.35 : ai.playerSoftPush);

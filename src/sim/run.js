@@ -37,8 +37,9 @@ import {
   syncAlliesOnTeamProgress,
   buildSquadSummary,
 } from './coop.js';
+import { computeRunHash } from './hash.js';
 
-export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution, WATCH_EVENT_KINDS, startWatchEvent };
+export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution, WATCH_EVENT_KINDS, startWatchEvent, computeRunHash };
 
 /**
  * 创建一局（100% 向后兼容旧版单人参表，并支持自选初始武器、解锁池过滤与 2–4 人协同联机）。

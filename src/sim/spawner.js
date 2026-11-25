@@ -1,6 +1,7 @@
 // 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷巡更小头目与 Boss。
 
 import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate, designMinutes } from './balance.js';
+import { fsin, fcos, fatan2 } from '../core/math.js';
 import { spawnEnemy, ringPoint } from './enemies.js';
 import { spawnBoss } from './bosses.js';
 import { findWell } from './props.js';
@@ -70,15 +71,15 @@ function ambientSpawnPoint(run) {
     a = base + tri(rng, 0.62);
     d = rng.range(SPAWN.ringMin - 20, SPAWN.ringMax + 65);
   } else if (roll < 0.80 && p.moving) {
-    a = Math.atan2(p.facingY, p.facingX) + tri(rng, 1.18);
+    a = fatan2(p.facingY, p.facingX) + tri(rng, 1.18);
     d = rng.range(SPAWN.ringMin - 10, SPAWN.ringMax + 55);
   } else {
     a = rng.range(0, Math.PI * 2);
     d = rng.range(SPAWN.ringMin - 15, SPAWN.ringMax + 75);
   }
   return {
-    x: p.x + Math.cos(a) * d + rng.range(-24, 24),
-    y: p.y + Math.sin(a) * d + rng.range(-24, 24),
+    x: p.x + fcos(a) * d + rng.range(-24, 24),
+    y: p.y + fsin(a) * d + rng.range(-24, 24),
   };
 }
 
@@ -183,7 +184,7 @@ function updateWaves(run) {
   const pickWaveType = () => (rng.chance(0.78) ? mainType : rng.weighted(roster).type);
 
   const p = spawnAnchorPlayer(run);
-  const heading = p.moving ? Math.atan2(p.facingY, p.facingX) : rng.range(0, Math.PI * 2);
+  const heading = p.moving ? fatan2(p.facingY, p.facingX) : rng.range(0, Math.PI * 2);
   const R = WAVES.radius;
   const styleRoll = rng.next();
   let pattern = 'alley';
@@ -205,8 +206,8 @@ function updateWaves(run) {
       for (let i = 0; i < cnt; i++) {
         const a = baseA + tri(rng, 0.38);
         const d = baseD + i * rng.range(3.2, 7.5) + rng.range(-18, 36);
-        const x = p.x + Math.cos(a) * d + rng.range(-24, 24);
-        const y = p.y + Math.sin(a) * d + rng.range(-24, 24);
+        const x = p.x + fcos(a) * d + rng.range(-24, 24);
+        const y = p.y + fsin(a) * d + rng.range(-24, 24);
         spawnEnemy(run, pickWaveType(), x, y);
       }
     }
@@ -219,8 +220,8 @@ function updateWaves(run) {
       const knot = (i % 2 === 0 ? -1 : 1) * rng.range(0.08, 0.36);
       const a = side + knot + tri(rng, 0.26);
       const d = R * rng.range(0.86, 1.36);
-      const x = p.x + Math.cos(a) * d + rng.range(-26, 26);
-      const y = p.y + Math.sin(a) * d + rng.range(-26, 26);
+      const x = p.x + fcos(a) * d + rng.range(-26, 26);
+      const y = p.y + fsin(a) * d + rng.range(-26, 26);
       spawnEnemy(run, pickWaveType(), x, y);
     }
   } else {
@@ -231,13 +232,13 @@ function updateWaves(run) {
     for (let k = 0; k < packs; k++) {
       curA += rng.range(0.85, 1.85);
       const dist = R * rng.range(0.88, 1.40);
-      anchors.push({ x: p.x + Math.cos(curA) * dist, y: p.y + Math.sin(curA) * dist });
+      anchors.push({ x: p.x + fcos(curA) * dist, y: p.y + fsin(curA) * dist });
     }
     for (let i = 0; i < n; i++) {
       const anc = anchors[i % packs];
       const oa = rng.range(0, Math.PI * 2);
       const od = rng.range(10, 64);
-      spawnEnemy(run, pickWaveType(), anc.x + Math.cos(oa) * od, anc.y + Math.sin(oa) * od);
+      spawnEnemy(run, pickWaveType(), anc.x + fcos(oa) * od, anc.y + fsin(oa) * od);
     }
   }
   run.events.push({ type: 'wave', count: n, enemyType: mainType, pattern });

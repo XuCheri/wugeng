@@ -2,6 +2,7 @@
 // 统计当前已拥有的武器与法器流派标签，激活 2 / 4 / 6 件阶梯效果（同门内各阶效果累加）。
 
 import { WEAPONS, RELICS, SCHOOL_TAG_IDS, SCHOOL_TAGS, DAMAGE, ENEMY_AI } from './balance.js';
+import { fsin, fcos, fatan2 } from '../core/math.js';
 import { damageCircle } from './combat.js';
 
 const pct = (v) => Math.round(v * 100);
@@ -250,7 +251,7 @@ export function updateSynergyRuntime(run, dt) {
       const tgt = run._sys.hash.nearest(p.x, p.y, 460, scratch, (e) => !e.dead);
       if (tgt) {
         run._zhizhaImpT = T.zhizha4.intervalSec;
-        const a = Math.atan2(tgt.y - p.y, tgt.x - p.x);
+        const a = fatan2(tgt.y - p.y, tgt.x - p.x);
         run.projectiles.push({
           id: run._nextId++,
           kind: 'paperman',
@@ -260,8 +261,8 @@ export function updateSynergyRuntime(run, dt) {
           mode: 'imp',
           persistent: false,
           evolved: true,
-          x: p.x + Math.cos(a) * 18,
-          y: p.y + Math.sin(a) * 18,
+          x: p.x + fcos(a) * 18,
+          y: p.y + fsin(a) * 18,
           r: 12,
           angle: a,
           t: 0,

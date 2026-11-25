@@ -5,6 +5,7 @@ import {
   PLAYER_BASE, DAMAGE, ULT, PICKUPS, ENEMIES, ENEMY_AI, BOSS_AI, ELITE, ELITE_AFFIXES, WEAPONS, RELICS,
   enemyDmgScale, designMinutes,
 } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { dropXp, dropPickup } from './pickups.js';
 import { queueSpawn, currentHpScale } from './enemies.js';
 import { onBossKilled } from './bosses.js';
@@ -235,8 +236,8 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
       e._mirrored = true;
       const mt = ELITE_AFFIXES.mirror_twin;
       const a = run.rng.range(0, Math.PI * 2);
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
+      const ca = fcos(a);
+      const sa = fsin(a);
       queueSpawn(run, e.type, e.x + ca * mt.twinOffset, e.y + sa * mt.twinOffset, {
         elite: true,
         affix: null,
@@ -401,8 +402,8 @@ export function killEnemy(run, e, opts) {
     const s = ENEMY_AI.sedan;
     for (let i = 0; i < s.splitCount; i++) {
       const a = (i / s.splitCount) * Math.PI * 2 + run.rng.range(-0.3, 0.3);
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
+      const ca = fcos(a);
+      const sa = fsin(a);
       queueSpawn(run, s.splitType, e.x + ca * s.splitSpread, e.y + sa * s.splitSpread, {
         summoned: false,
         split: true,
@@ -421,8 +422,8 @@ export function killEnemy(run, e, opts) {
       const baseA = run.rng.range(0, Math.PI * 2);
       for (let i = 0; i < tp.splitCount; i++) {
         const a = baseA + i * Math.PI + run.rng.range(-0.22, 0.22);
-        const ca = Math.cos(a);
-        const sa = Math.sin(a);
+        const ca = fcos(a);
+        const sa = fsin(a);
         queueSpawn(run, 'twin_paper', e.x + ca * tp.spread, e.y + sa * tp.spread, {
           splitDepth: nextDepth,
           mirrorClone: true,

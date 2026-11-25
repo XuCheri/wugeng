@@ -2,7 +2,7 @@
 // 夜游神（召唤 → 弹幕 → 狂暴追击 + 蓄力挥戟突刺预警）。
 
 import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS, MAIN_DURATION } from './balance.js';
-import { clamp } from '../core/math.js';
+import { clamp, fsin, fcos, fatan2 } from '../core/math.js';
 import { spawnEnemy, queueSpawn, setTelegraph, clearTelegraph } from './enemies.js';
 import { dropPickup } from './pickups.js';
 import { coopHpScale, coopPartySize, nearestLivingPlayer } from './coop.js';
@@ -16,7 +16,7 @@ export function spawnBoss(run, type, opts = {}) {
       ? nearestLivingPlayer(run, run.player.x, run.player.y)
       : run.player;
   const a = run.rng.range(0, Math.PI * 2);
-  const e = spawnEnemy(run, type, p.x + Math.cos(a) * BOSS_AI.spawnDist, p.y + Math.sin(a) * BOSS_AI.spawnDist);
+  const e = spawnEnemy(run, type, p.x + fcos(a) * BOSS_AI.spawnDist, p.y + fsin(a) * BOSS_AI.spawnDist);
   let hp =
     ENEMIES[type].hp *
     (1 + SPAWN.nightHpGrowth * run.nightLevel) *
@@ -65,8 +65,8 @@ function fireBullet(run, x, y, angle, speed, dmg, r, life, style) {
     angle,
     t: 0,
     life,
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
+    vx: fcos(angle) * speed,
+    vy: fsin(angle) * speed,
     style,
     dmg,
   });
@@ -100,7 +100,7 @@ export function updateBoss(run, e, dt, tx, ty, d) {
 function lockCharge(e, tx, ty) {
   e.dx = tx;
   e.dy = ty;
-  e.angle = Math.atan2(ty, tx);
+  e.angle = fatan2(ty, tx);
 }
 
 function horse(run, e, dt, tx, ty) {
@@ -113,7 +113,7 @@ function horse(run, e, dt, tx, ty) {
       clearTelegraph(e);
       V.x = tx * e.speed;
       V.y = ty * e.speed;
-      e.angle = Math.atan2(ty, tx);
+      e.angle = fatan2(ty, tx);
       if (e.stateT <= 0) {
         e.state = 'windup';
         e.stateT = H.windup;
@@ -202,7 +202,7 @@ function youshen(run, e, dt, tx, ty, d) {
     clearTelegraph(e);
     V.x = tx * e.speed;
     V.y = ty * e.speed;
-    e.angle = Math.atan2(ty, tx);
+    e.angle = fatan2(ty, tx);
   } else {
     if (e.phase !== 3) {
       e.phase = 3;
@@ -239,7 +239,7 @@ function youshen(run, e, dt, tx, ty, d) {
       const spd = e.speed * Y.enrageSpeedMul * 0.35;
       V.x = tx * spd;
       V.y = ty * spd;
-      e.angle = Math.atan2(ty, tx);
+      e.angle = fatan2(ty, tx);
       if (e.stateT <= 0) {
         e.state = 'enrage';
       }
@@ -250,7 +250,7 @@ function youshen(run, e, dt, tx, ty, d) {
       const spd = e.speed * Y.enrageSpeedMul;
       V.x = tx * spd;
       V.y = ty * spd;
-      e.angle = Math.atan2(ty, tx);
+      e.angle = fatan2(ty, tx);
       e._lungeCd = (e._lungeCd ?? Y.lungeEvery) - dt;
       if (e._lungeCd <= 0 && d <= 340) {
         e.state = 'windup';
@@ -269,7 +269,7 @@ function youshen(run, e, dt, tx, ty, d) {
       const type = run.rng.pick(Y.summonTypes);
       for (let i = 0; i < Y.summonCount; i++) {
         const a = (i / Y.summonCount) * Math.PI * 2;
-        queueSpawn(run, type, e.x + Math.cos(a) * Y.summonDist, e.y + Math.sin(a) * Y.summonDist, { summoned: true });
+        queueSpawn(run, type, e.x + fcos(a) * Y.summonDist, e.y + fsin(a) * Y.summonDist, { summoned: true });
       }
     }
   }

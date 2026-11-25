@@ -1,6 +1,7 @@
 // 拾取物（PLAN §3.6）：魂火（三档）、铜钱（支持五帝钱加成）、包子、招魂幡、供盒。
 
 import { PICKUPS } from './balance.js';
+import { fsin, fcos } from '../core/math.js';
 import { gainXp } from './xp.js';
 import { healPlayer, earnCoins } from './player.js';
 import { BLESSING_TUNING } from './blessings.js';
@@ -27,7 +28,7 @@ export function dropXp(run, x, y, value, split = 1) {
     const each = value / split;
     for (let i = 0; i < split; i++) {
       const a = (i / split) * Math.PI * 2;
-      dropXp(run, x + Math.cos(a) * 30, y + Math.sin(a) * 30, each, 1);
+      dropXp(run, x + fcos(a) * 30, y + fsin(a) * 30, each, 1);
     }
     return;
   }
