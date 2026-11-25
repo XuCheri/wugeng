@@ -501,7 +501,7 @@ export function createLeaderboard({
       return `天榜尚未向当前账号开放（码 ${code}），先为你展示本机荣誉榜，榜单发布后自动同步。`;
     }
     if (code === 'timeout') {
-      return '天榜回信稍慢，先为你展示本机荣誉榜，可点「重新展卷」再试。';
+      return '天榜回信较缓，先为你展示本机荣誉榜，可点「重新展卷」再试。';
     }
     const codeTxt = code !== undefined && code !== null && code !== -1 && code !== 'exception' ? `（码 ${code}）` : '';
     return col === LEADERBOARD_COLLECTIONS.FRIENDS

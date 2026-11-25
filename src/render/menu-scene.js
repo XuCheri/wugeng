@@ -7,14 +7,13 @@ import {
   INK, PAPER, PAPER_SHADE, VERM, VERM_DARK, LANTERN,
   inkA, paperA, vermA, lanternA,
 } from './palette.js';
-import { drawHeroWithSkin } from './skins.js';
+import { drawHeroShowcase } from './hero-showcase.js';
 import {
   getVfxPalette,
   vfxArraySprite,
   vfxRingSprite,
   vfxSlashSprite,
 } from './vfx-themes.js';
-import * as Sprites from './sprites.js';
 
 const TAU = Math.PI * 2;
 
@@ -385,6 +384,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     legacyOutfit = null,
     legacyLantern = null,
     burstProgress = 1, // 0..1 切换角色/兵刃时的破墨金芒涟漪
+    attackT = tSec, // 自上次切换起的秒数：0 时立刻打出一记招牌招式
   } = state;
 
   const isTall = h >= 145;
@@ -392,8 +392,8 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, w, h);
 
-  const cx = w * (isTall ? 0.44 : 0.5);
-  const cy = h * (isTall ? 0.44 : 0.56);
+  const cx = mode === 'vfx' ? w * 0.5 : w * (isTall ? 0.33 : 0.34);
+  const cy = h * (isTall ? 0.5 : 0.56);
   const vfxPal = getVfxPalette(attackVfx);
 
   // 角色专属演武场氛围色与背后法相阵纹（六名守夜人各有独特舞台气场）
@@ -649,9 +649,9 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   }
 
   // 青石八卦演武石台基座（高舞台居中偏上，稳稳压住视觉中心）
-  const daisY = h * (isTall ? 0.55 : 0.78);
-  const daisRx = isTall ? 92 : 68;
-  const daisRy = isTall ? 22 : 18;
+  const daisY = h * (isTall ? 0.66 : 0.84);
+  const daisRx = isTall ? 72 : 52;
+  const daisRy = isTall ? 17 : 13;
   ctx.save();
   ctx.translate(cx, daisY);
   ctx.fillStyle = isSignature ? vermA(0.24) : lanternA(0.14);
@@ -701,74 +701,35 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     ctx.restore();
   }
 
-  // 角色主体（呼吸起伏 + 四帧步态 + 切换时的弹性落台缩放）
-  const stepFrame = Math.floor(tSec * 4.2) % 4;
-  const bobY = Math.sin(tSec * 3.2) * (isTall ? 2.6 : 1.8);
-  const swing = Math.sin(tSec * 2.6) * 0.18;
+  // 精绘法相（矢量逐帧绘制）+ 手持起手兵刃实战演武，右侧纸祟靶子受击反馈
   const popScale = burstProgress < 1
-    ? 1 + Math.sin(burstProgress * Math.PI) * 0.14
+    ? 1 + Math.sin(burstProgress * Math.PI) * 0.06
     : 1;
-  const baseScale = isTall ? Math.min(2.60, Math.max(2.15, h / 128)) : 1.52;
-  drawHeroWithSkin(ctx, {
+  const heroScale = (isTall ? Math.max(1.35, Math.min(2.1, h * 0.0042)) : Math.max(0.9, h * 0.0062)) * popScale;
+  drawHeroShowcase(ctx, {
     heroId,
     skinId,
     x: cx,
-    y: daisY + bobY,
-    frame: stepFrame,
-    flip: 1,
-    lean: Math.sin(tSec * 1.7) * 0.03,
-    swing,
-    scale: baseScale * popScale,
-    auraRot: tSec * 3.0,
-    showAura: true,
-    legacyOutfit,
-    legacyLantern,
+    y: daisY,
+    scale: heroScale,
+    t: tSec,
+    attackT,
+    weaponId: starterWeapon,
+    vfxPal,
+    targetX: w * (isTall ? 0.68 : 0.76),
+    targetY: daisY - (isTall ? 34 : 22) * heroScale * 0.85,
+    targetScale: isTall ? 0.95 : 0.8,
   });
 
-  // 环绕演武的当前自选初始兵刃图标 + 灵火轨迹
-  if (starterWeapon && typeof Sprites.drawIcon === 'function') {
-    const orbitA = tSec * 1.85;
-    const orbitRx = isTall ? 78 : 52;
-    const orbitRy = isTall ? 18 : 12;
-    const wx = cx + Math.cos(orbitA) * orbitRx;
-    const wy = daisY - (isTall ? 38 : 22) + Math.sin(orbitA) * orbitRy;
+  // 起手兵刃铭牌（本命兵刃加朱印）
+  if (isTall && starterWeapon) {
     ctx.save();
-    ctx.fillStyle = vfxPal.bright;
-    ctx.globalAlpha = 0.85;
-    ctx.beginPath();
-    ctx.arc(wx, wy, isTall ? 16.5 : 13.5, 0, TAU);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    const badgeSpr = getOrbitWeaponBadge(starterWeapon, isSignature);
-    if (badgeSpr) {
-      const sz = isTall ? 34 : 28;
-      ctx.drawImage(badgeSpr, wx - sz * 0.5, wy - sz * 0.5, sz, sz);
-    }
+    ctx.font = '12px "WenKai", serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = isSignature ? lanternA(0.85) : paperA(0.55);
+    ctx.fillText(isSignature ? '本命 · 演武' : '演武', cx, daisY + daisRy + 16);
     ctx.restore();
   }
-}
-
-const orbitBadgeCache = new Map();
-function getOrbitWeaponBadge(weaponId, isSignature) {
-  if (typeof document === 'undefined') return null;
-  const key = `${weaponId}:${isSignature ? 1 : 0}`;
-  if (orbitBadgeCache.has(key)) return orbitBadgeCache.get(key);
-  const c = document.createElement('canvas');
-  c.width = 56;
-  c.height = 56;
-  const g = c.getContext('2d');
-  if (!g) return null;
-  g.scale(2, 2);
-  g.fillStyle = PAPER;
-  g.strokeStyle = isSignature ? VERM : INK;
-  g.lineWidth = 1.6;
-  g.beginPath();
-  g.arc(14, 14, 12, 0, TAU);
-  g.fill();
-  g.stroke();
-  Sprites.drawIcon(g, 'weapon', weaponId, 14, 14, 18);
-  orbitBadgeCache.set(key, c);
-  return c;
 }
 
 export function createHeroStage(canvas, getState) {
@@ -777,6 +738,7 @@ export function createHeroStage(canvas, getState) {
   let active = true;
   let startMs = 0;
   let burstStartMs = -9999;
+  let attackStartMs = typeof performance !== 'undefined' ? performance.now() - 200 : 0;
   const BURST_MS = 420;
 
   function syncCanvasDims() {
@@ -801,6 +763,7 @@ export function createHeroStage(canvas, getState) {
     renderStagePreviewFrame(ctx, cssW, cssH, tSec, {
       ...(getState?.() || {}),
       burstProgress,
+      attackT: Math.max(0, (nowMs - attackStartMs) / 1000),
     });
     ctx.restore();
   }
@@ -840,6 +803,7 @@ export function createHeroStage(canvas, getState) {
 
   function triggerBurst() {
     burstStartMs = typeof performance !== 'undefined' ? performance.now() : 16;
+    attackStartMs = burstStartMs; // 切换即刻起手出招
     refreshNow();
   }
 
