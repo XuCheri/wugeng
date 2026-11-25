@@ -557,6 +557,8 @@ export function createAudio() {
           else play('evolve');
           break;
         case 'playerHurt': play('hurt'); break;
+        case 'watchEventStart': play('gongSmall'); break;
+        case 'watchEventEnd': play(e.ok ? 'evolve' : 'woodblock'); break;
         default: break;
       }
     }

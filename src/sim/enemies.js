@@ -377,7 +377,18 @@ export function updateEnemies(run, dt) {
       let moveX = tx;
       let moveY = ty;
 
-      if (e.type === 'weasel') {
+      if (e.eventIngot) {
+        const sign = e.id & 1 ? 1 : -1;
+        spd = e.speed * 1.48 * (e.slowT > 0 ? ai.slowMul : 1);
+        if (d < 220) {
+          moveX = -tx * 0.86 - ty * sign * 0.5;
+          moveY = -ty * 0.86 + tx * sign * 0.5;
+        } else {
+          moveX = -ty * sign;
+          moveY = tx * sign;
+          spd *= 0.85;
+        }
+      } else if (e.type === 'weasel') {
         const W = ai.weasel;
         const telLen = W.dashSpeed * W.dashTime + e.r;
         const telWid = e.r * 2;
@@ -732,7 +743,7 @@ export function updateEnemies(run, dt) {
     }
 
     // 远距离回收：普通敌人挪到最近存活玩家前方的圆环上（防队长倒地时无穷瞬移循环）
-    if (!e.boss && cd2 > despawn2) {
+    if (!e.boss && !e.eventIngot && cd2 > despawn2) {
       const pt = ringPoint(run, SPAWN.ringMin, SPAWN.ringMax, true, p);
       e.x = pt.x;
       e.y = pt.y;

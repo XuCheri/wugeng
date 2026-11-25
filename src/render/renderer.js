@@ -439,6 +439,21 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
+    // 追斩纸元宝奇遇目标：琥珀朱砂宝气环与头顶「宝」字方印
+    if (e.eventIngot) {
+      const pulse = 0.85 + 0.15 * Math.sin(clock * 8);
+      ctx.save();
+      ctx.strokeStyle = LANTERN;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(x, feetY, er * 1.45 * pulse, er * 0.68 * pulse, 0, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      blit(ctx, pickupSprite('coin'), x - 11, feetY - d.h * s - 6 + Math.sin(clock * 6) * 2, 0.9, 0.9);
+      blit(ctx, pickupSprite('coin'), x + 11, feetY - d.h * s - 6 - Math.sin(clock * 6) * 2, 0.9, 0.9);
+      drawStamp(ctx, '宝', x, feetY - d.h * s - 10, 10, { color: VERM, seed: 8 });
+    }
+
     // 小头目名牌（巡街轿头 / 冥婚喜娘）
     if (e.warder && e.warderName) {
       const ty = feetY - d.h * s - 10;
@@ -1542,7 +1557,7 @@ export function createRenderer(canvas, opts = {}) {
     g.arc(lx, ly, R * 1.3, 0, TAU);
     g.fill();
 
-    // 视野内未使用的神龛香烛微光挖空
+    // 视野内未使用的神龛香烛微光挖空 + 奇遇事件光源挖空
     if (shrines && shrines.length) {
       for (let i = 0; i < shrines.length; i++) {
         const s = shrines[i];
@@ -1561,20 +1576,21 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
-    // 联机存活队友的提灯光圈挖空
+    // 联机存活队友与异事火坛/货郎的提灯光圈挖空
     if (allyScreenLights && allyScreenLights.length) {
       const ar = Math.max(8, lightR * 0.72 * S);
       for (let i = 0; i < allyScreenLights.length; i++) {
         const alPt = allyScreenLights[i];
         const ax = alPt.x * S;
         const ay = alPt.y * S;
-        if (ax < -ar || ax > dw + ar || ay < -ar || ay > dh + ar) continue;
-        const ac = g.createRadialGradient(ax, ay, ar * 0.25, ax, ay, ar);
+        const rUse = alPt.r ? alPt.r * S : ar;
+        if (ax < -rUse || ax > dw + rUse || ay < -rUse || ay > dh + rUse) continue;
+        const ac = g.createRadialGradient(ax, ay, rUse * 0.25, ax, ay, rUse);
         ac.addColorStop(0, 'rgba(0,0,0,0.92)');
         ac.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = ac;
         g.beginPath();
-        g.arc(ax, ay, ar, 0, TAU);
+        g.arc(ax, ay, rUse, 0, TAU);
         g.fill();
       }
     }
@@ -1596,6 +1612,153 @@ export function createRenderer(canvas, opts = {}) {
     grd.addColorStop(1, lanternA(0));
     ctx.fillStyle = grd;
     ctx.fillRect(lsx - R, lsy - R, R * 2, R * 2);
+  }
+
+  /** 每更随机异事的世界地面与实体绘制 */
+  function drawWatchEventGround(ev) {
+    if (!ev) return;
+    if (ev.kind === 'escort_peddler') {
+      ctx.save();
+      ctx.strokeStyle = vermA(0.35);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(ev.x, ev.y);
+      ctx.lineTo(ev.goalX, ev.goalY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 终点街口法阵
+      const pulse = 0.88 + 0.12 * Math.sin(clock * 5);
+      ctx.strokeStyle = VERM;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.ellipse(ev.goalX, ev.goalY, 28 * pulse, 14 * pulse, 0, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = LANTERN;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.ellipse(ev.goalX, ev.goalY, 20, 10, 0, 0, TAU);
+      ctx.stroke();
+      drawStamp(ctx, '礼', ev.goalX, ev.goalY - 18, 10, { color: VERM, seed: 4 });
+
+      // 护送光环
+      ctx.strokeStyle = ev.escorting ? lanternA(0.55) : inkA(0.28);
+      ctx.lineWidth = ev.escorting ? 2 : 1.3;
+      ctx.beginPath();
+      ctx.arc(ev.x, ev.y, 145, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    } else if (ev.kind === 'light_bonfires' && Array.isArray(ev.nodes)) {
+      for (let i = 0; i < ev.nodes.length; i++) {
+        const n = ev.nodes[i];
+        const lit = !!n.lit;
+        ctx.save();
+        if (lit) {
+          blit(ctx, emberPoolSprite((i % 2) + 1), n.x, n.y, 0.42, 0.3, clock * 0.4 + i, 0.72);
+        }
+        ctx.strokeStyle = lit ? LANTERN : VERM;
+        ctx.lineWidth = lit ? 2.4 : 1.8;
+        ctx.beginPath();
+        ctx.ellipse(n.x, n.y, 32, 16, 0, 0, TAU);
+        ctx.stroke();
+        // 石火坛底座
+        ctx.fillStyle = INK;
+        ctx.beginPath();
+        ctx.ellipse(n.x, n.y, 14, 7.5, 0, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = PAPER;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        if (lit) {
+          const fl = 1 + Math.sin(clock * 14 + i) * 0.14;
+          blit(ctx, projSprite('flame'), n.x, n.y - 12, 1.35 * fl, 1.45 * fl, Math.sin(clock * 9 + i) * 0.12);
+          drawStamp(ctx, '火', n.x, n.y - 30, 9, { color: VERM, seed: 6 + i });
+        } else {
+          drawStamp(ctx, '火', n.x, n.y - 22, 9, { color: INK, seed: 6 + i });
+        }
+        ctx.restore();
+      }
+    } else if (ev.kind === 'ghost_parade') {
+      const ang = Math.atan2(ev.uy || 0, ev.ux || 1);
+      const hw = ev.halfW || 34;
+      const hl = ev.halfLen || 380;
+      ctx.save();
+      ctx.translate(ev.cx, ev.cy);
+      ctx.rotate(ang);
+      ctx.fillStyle = vermA(ev.phase === 'warn' ? 0.32 : 0.2);
+      ctx.fillRect(-hl, -hw, hl * 2, hw * 2);
+      ctx.strokeStyle = VERM;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-hl, -hw);
+      ctx.lineTo(hl, -hw);
+      ctx.moveTo(-hl, hw);
+      ctx.lineTo(hl, hw);
+      for (let d = -hl + 28; d < hl - 16; d += 48) {
+        ctx.moveTo(d - 10, -12);
+        ctx.lineTo(d + 6, 0);
+        ctx.lineTo(d - 10, 12);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawWatchEventActors(ev) {
+    if (!ev) return;
+    if (ev.kind === 'escort_peddler') {
+      const bob = ev.escorting ? Math.abs(Math.sin(clock * 9)) * 2.2 : 0;
+      blit(ctx, shadowSprite(20), ev.x, ev.y + 4, 1, 1, 0, 0.8);
+      blit(ctx, shrineSprite('peddler', false, !!ev.escorting), ev.x, ev.y - bob, 0.92, 0.92);
+      // 货郎气血条与「送」字朱印
+      const bw = 36;
+      const bh = 5;
+      const by = ev.y - 62;
+      const ratio = ev.maxHp > 0 ? Math.max(0, Math.min(1, ev.hp / ev.maxHp)) : 0;
+      ctx.save();
+      ctx.fillStyle = INK;
+      ctx.fillRect(ev.x - bw / 2, by, bw, bh);
+      if (ratio > 0) {
+        ctx.fillStyle = ev.escorting ? LANTERN : VERM;
+        ctx.fillRect(ev.x - bw / 2 + 1, by + 1, Math.max(1, (bw - 2) * ratio), bh - 2);
+      }
+      ctx.restore();
+      drawStamp(ctx, '送', ev.x, by - 11, 9.5, { color: VERM, seed: 3 });
+    } else if (ev.kind === 'ghost_parade' && Array.isArray(ev.soldiers) && ev.soldiers.length > 0) {
+      const flip = (ev.ux || 1) < 0 ? -1 : 1;
+      for (let i = 0; i < ev.soldiers.length; i++) {
+        const sol = ev.soldiers[i];
+        const type = i % 2 === 0 ? 'sedan' : 'shade';
+        const d = enemyDef(type);
+        const frame = Math.floor(clock * 8 + i) % d.frames;
+        blit(ctx, shadowSprite(14), sol.x, sol.y + 8, 1, 1, 0, 0.65);
+        blit(ctx, enemySprite(type, frame, false, ''), sol.x, sol.y + 8, flip * 1.05, 1.05, 0, 0.84);
+        ctx.fillStyle = VERM;
+        ctx.beginPath();
+        ctx.arc(sol.x + flip * 4, sol.y - 12, 2.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawGhostParadeAboveDarkness(ev) {
+    if (!ev || ev.kind !== 'ghost_parade') return;
+    const ang = Math.atan2(ev.uy || 0, ev.ux || 1);
+    const hw = ev.halfW || 34;
+    const hl = ev.halfLen || 380;
+    ctx.save();
+    ctx.translate(ev.cx, ev.cy);
+    ctx.rotate(ang);
+    ctx.strokeStyle = VERM;
+    ctx.lineWidth = ev.phase === 'warn' ? 2.8 : 2.0;
+    ctx.beginPath();
+    ctx.moveTo(-hl, -hw);
+    ctx.lineTo(hl, -hw);
+    ctx.moveTo(-hl, hw);
+    ctx.lineTo(hl, hw);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** 穿透夜色的朱砂冲锋预警走廊与蓄力红眼（T1-F2-05，低画质同样必画！） */
@@ -1706,77 +1869,81 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
-  /** 屏幕边缘奇遇方向朱砂路引标（T1-F9-05，夜色遮罩之上） */
+  function drawEdgePointer(sx, sy, glyph, highlight, minX, maxX, minY, maxY, st, sb) {
+    if (sx >= 20 && sx <= W - 20 && sy >= st + 76 && sy <= H - sb - 76) return;
+    const cx = W / 2;
+    const cy = H / 2;
+    const dx = sx - cx;
+    const dy = sy - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+
+    let tEdge = Infinity;
+    if (ux > 0.001) tEdge = Math.min(tEdge, (maxX - cx) / ux);
+    else if (ux < -0.001) tEdge = Math.min(tEdge, (minX - cx) / ux);
+    if (uy > 0.001) tEdge = Math.min(tEdge, (maxY - cy) / uy);
+    else if (uy < -0.001) tEdge = Math.min(tEdge, (minY - cy) / uy);
+    if (!Number.isFinite(tEdge)) return;
+
+    const ax = Math.max(minX, Math.min(maxX, cx + ux * tEdge));
+    const ay = Math.max(minY, Math.min(maxY, cy + uy * tEdge));
+    const ang = Math.atan2(uy, ux);
+
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.fillStyle = VERM;
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(19, 0);
+    ctx.lineTo(1, -10);
+    ctx.lineTo(4, 0);
+    ctx.lineTo(1, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    const bx = ax - ux * 11;
+    const by = ay - uy * 11;
+    ctx.save();
+    ctx.fillStyle = VERM;
+    ctx.fillRect(bx - 11, by - 11, 22, 22);
+    ctx.strokeStyle = highlight ? LANTERN : PAPER;
+    ctx.lineWidth = 1.3;
+    ctx.strokeRect(bx - 9.5, by - 9.5, 19, 19);
+    ctx.font = `12px ${FONT_CN}`;
+    ctx.fillStyle = PAPER;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(glyph || '奇', bx, by + 0.5);
+    ctx.restore();
+  }
+
+  /** 屏幕边缘奇遇方向朱砂路引标（T1-F9-05 + M2.2 异事方向标，夜色遮罩之上） */
   function drawShrinePointers(run, ox, oy, settings) {
     const shrines = run.shrines;
-    if (!shrines || !shrines.length) return;
+    const ev = run.watchEvent;
+    const hasEventTarget = ev && Number.isFinite(ev.targetX) && Number.isFinite(ev.targetY);
+    if ((!shrines || !shrines.length) && !hasEventTarget) return;
     const st = settings.safeTop || 0;
     const sb = settings.safeBottom || 0;
     const minX = 24;
     const maxX = W - 24;
     const minY = st + (run.boss ? 130 : 88);
     const maxY = H - sb - 110;
-    const cx = W / 2;
-    const cy = H / 2;
 
-    for (let i = 0; i < shrines.length; i++) {
-      const s = shrines[i];
-      if (s.used && !s.active) continue;
-      const sx = s.x + ox;
-      const sy = s.y + oy;
-      // 已在可视区中心内则无需屏幕边缘箭头
-      if (sx >= 20 && sx <= W - 20 && sy >= st + 76 && sy <= H - sb - 76) continue;
-
-      const dx = sx - cx;
-      const dy = sy - cy;
-      const len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len;
-      const uy = dy / len;
-
-      // 射线与安全内框求交
-      let tEdge = Infinity;
-      if (ux > 0.001) tEdge = Math.min(tEdge, (maxX - cx) / ux);
-      else if (ux < -0.001) tEdge = Math.min(tEdge, (minX - cx) / ux);
-      if (uy > 0.001) tEdge = Math.min(tEdge, (maxY - cy) / uy);
-      else if (uy < -0.001) tEdge = Math.min(tEdge, (minY - cy) / uy);
-      if (!Number.isFinite(tEdge)) continue;
-
-      const ax = Math.max(minX, Math.min(maxX, cx + ux * tEdge));
-      const ay = Math.max(minY, Math.min(maxY, cy + uy * tEdge));
-      const ang = Math.atan2(uy, ux);
-
-      // 向外探出直抵屏边 5px 的纯朱红木刻三角锋标（确保屏边采样区富含 #C23B26 像素）
-      ctx.save();
-      ctx.translate(ax, ay);
-      ctx.rotate(ang);
-      ctx.fillStyle = VERM;
-      ctx.strokeStyle = PAPER;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(19, 0);
-      ctx.lineTo(1, -10);
-      ctx.lineTo(4, 0);
-      ctx.lineTo(1, 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-
-      // 内侧紧邻的朱底方印（香 / 碑 / 货）
-      const bx = ax - ux * 11;
-      const by = ay - uy * 11;
-      ctx.save();
-      ctx.fillStyle = VERM;
-      ctx.fillRect(bx - 11, by - 11, 22, 22);
-      ctx.strokeStyle = s.active ? LANTERN : PAPER;
-      ctx.lineWidth = 1.3;
-      ctx.strokeRect(bx - 9.5, by - 9.5, 19, 19);
-      ctx.font = `12px ${FONT_CN}`;
-      ctx.fillStyle = PAPER;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(SHRINE_GLYPH[s.kind] || '奇', bx, by + 0.5);
-      ctx.restore();
+    if (shrines && shrines.length) {
+      for (let i = 0; i < shrines.length; i++) {
+        const s = shrines[i];
+        if (s.used && !s.active) continue;
+        drawEdgePointer(s.x + ox, s.y + oy, SHRINE_GLYPH[s.kind] || '奇', !!s.active, minX, maxX, minY, maxY, st, sb);
+      }
+    }
+    if (hasEventTarget) {
+      drawEdgePointer(ev.targetX + ox, ev.targetY + oy, ev.stamp || '异', true, minX, maxX, minY, maxY, st, sb);
     }
   }
 
@@ -1861,6 +2028,7 @@ export function createRenderer(canvas, opts = {}) {
       ctx.fillRect(vx - 8, vy - 8, W + 16, H + 16);
     }
     fx.drawDecals(ctx);
+    if (run.watchEvent) drawWatchEventGround(run.watchEvent);
 
     const evo = new Set();
     for (const w of run.weapons || []) if (w.evolved) evo.add(w.id);
@@ -1937,6 +2105,21 @@ export function createRenderer(canvas, opts = {}) {
         }
       }
     }
+    if (run.watchEvent) {
+      const ev = run.watchEvent;
+      if (ev.kind === 'escort_peddler') {
+        if (!allyScreenLights) allyScreenLights = [];
+        allyScreenLights.push({ x: ev.x + ox, y: ev.y - 16 + oy, r: 72 });
+      } else if (ev.kind === 'light_bonfires' && Array.isArray(ev.nodes)) {
+        for (let i = 0; i < ev.nodes.length; i++) {
+          const n = ev.nodes[i];
+          if (n.lit) {
+            if (!allyScreenLights) allyScreenLights = [];
+            allyScreenLights.push({ x: n.x + ox, y: n.y - 10 + oy, r: 64 });
+          }
+        }
+      }
+    }
     drawList.sort((a, b) => a.y - b.y);
 
     const nearbyShrineId = run.nearbyShrine ? run.nearbyShrine.id : null;
@@ -1958,6 +2141,7 @@ export function createRenderer(canvas, opts = {}) {
         }
       }
     }
+    if (run.watchEvent) drawWatchEventActors(run.watchEvent);
 
     // 空中弹体 / 光束 / 雷柱
     for (let i = 0; i < projs.length; i++) {
@@ -2005,9 +2189,10 @@ export function createRenderer(canvas, opts = {}) {
       ctx.globalAlpha = 1;
     }
 
-    if (ens.length > 0) {
+    if (ens.length > 0 || (run.watchEvent && run.watchEvent.kind === 'ghost_parade')) {
       ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
-      drawTelegraphsAboveDarkness(ens, pxI, pyI, vx, vy, al);
+      if (ens.length > 0) drawTelegraphsAboveDarkness(ens, pxI, pyI, vx, vy, al);
+      if (run.watchEvent && run.watchEvent.kind === 'ghost_parade') drawGhostParadeAboveDarkness(run.watchEvent);
     }
 
     // 天亮的朱红日印

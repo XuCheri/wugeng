@@ -24,7 +24,7 @@ export const NUOXI_SYNERGY_TIER = 6;
 const STAT_KEYS = [
   'runs', 'clears', 'firstRunDone', 'totalPlaySec',
   'bestTimeSec', 'bestKills', 'bestHit', 'totalKills', 'totalCoins',
-  'totalEvolutions', 'totalBossKills', 'coopRuns', 'coopRevives',
+  'totalEvolutions', 'totalBossKills', 'coopRuns', 'coopRevives', 'totalEvents',
 ];
 
 const safeNum = (v, max = 1e15) => {
@@ -102,6 +102,7 @@ function ensureUnlockSave(save) {
   st.totalBossKills = safeInt(st.totalBossKills, 1e9);
   st.coopRuns = safeInt(st.coopRuns, 1e9);
   st.coopRevives = safeInt(st.coopRevives, 1e9);
+  st.totalEvents = safeInt(st.totalEvents, 1e9);
 
   if (!isPlainObj(save.achievements)) save.achievements = {};
 }
@@ -382,6 +383,7 @@ export function recordRun(save, summary, now = Date.now()) {
   const bossKills = summaryBossKillCount(sum);
   const coopSize = safeInt(sum.coopSize, 16);
   const revivesDone = safeInt(sum.revivesDone, 1e6);
+  const eventsDone = safeInt(sum.eventsCompleted, 1e6);
 
   save.coins = Math.min(1e12, save.coins + coins);
   const st = save.stats;
@@ -400,6 +402,7 @@ export function recordRun(save, summary, now = Date.now()) {
   st.totalBossKills = Math.min(1e9, st.totalBossKills + bossKills);
   if (coopSize >= 2) st.coopRuns = Math.min(1e9, st.coopRuns + 1);
   st.coopRevives = Math.min(1e9, st.coopRevives + revivesDone);
+  st.totalEvents = Math.min(1e9, st.totalEvents + eventsDone);
   if (sum.cleared) st.clears = Math.min(1e9, st.clears + 1);
 
   recordLeaderboardEntry(save, sum, now);

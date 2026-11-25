@@ -494,13 +494,64 @@ export function createHud() {
         ctx.textAlign = 'left';
         ctx.fillText(name, bx + 10, by + 21);
         const phase = run.boss.phase || 1;
-        if (run.boss.type === 'youshen') {
-          for (let i = 1; i <= 3; i++) {
-            ctx.fillStyle = i <= phase ? INK : inkA(0.25);
-            ctx.fillRect(bx + bw - 10 - (3 - i) * 7, by + 30, 4, 4);
+          if (run.boss.type === 'youshen') {
+            for (let i = 1; i <= 3; i++) {
+              ctx.fillStyle = i <= phase ? INK : inkA(0.25);
+              ctx.fillRect(bx + bw - 10 - (3 - i) * 7, by + 30, 4, 4);
+            }
           }
         }
-      }
+
+        /* ---------- 今夜异事横幅（倒计时与进度条） ---------- */
+        const ev = run.watchEvent;
+        const evRes = !ev ? run.watchEventResult : null;
+        if (ev || evRes) {
+          const ew = Math.min(340, Math.round(W - 36));
+          const ex = Math.round((W - ew) / 2);
+          const ey = ty + th + (run.boss ? 54 : 10);
+          const eh = 34;
+          ctx.save();
+          ctx.fillStyle = PAPER;
+          ctx.fillRect(ex, ey, ew, eh);
+          ctx.strokeStyle = evRes ? (evRes.ok ? VERM : INK) : VERM;
+          ctx.lineWidth = 1.6;
+          ctx.strokeRect(ex, ey, ew, eh);
+          ctx.fillStyle = INK;
+          ctx.fillRect(ex - 2, ey + 2, 3, eh - 4);
+          ctx.fillRect(ex + ew - 1, ey + 2, 3, eh - 4);
+          if (ev) {
+            drawStamp(ctx, ev.stamp || '异', ex + 15, ey + eh / 2, 10, { color: VERM, seed: 5 });
+            ctx.font = `13px ${FONT_CN}`;
+            ctx.fillStyle = INK;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            const sub = ev.kind === 'light_bonfires'
+              ? `${ev.name} · ${ev.litCount || 0}/3`
+              : `${ev.name} · ${ev.hint || ''}`;
+            ctx.fillText(sub, ex + 30, ey + 12);
+            const tStr = formatClock(Math.ceil(Math.max(0, ev.timer || 0)));
+            ctx.textAlign = 'right';
+            ctx.fillStyle = (ev.timer || 0) <= 6 ? VERM : VERM_DARK;
+            ctx.fillText(tStr, ex + ew - 8, ey + 12);
+            // 底部朱红进度槽
+            const barX = ex + 30;
+            const barW = Math.max(40, ew - 38);
+            ctx.fillStyle = PAPER_SHADE;
+            ctx.fillRect(barX, ey + 24, barW, 5);
+            const prog = Math.max(0, Math.min(1, ev.progress || 0));
+            if (prog > 0) {
+              ctx.fillStyle = VERM;
+              ctx.fillRect(barX, ey + 24, Math.round(barW * prog), 5);
+            }
+          } else if (evRes) {
+            ctx.font = `13.5px ${FONT_CN}`;
+            ctx.fillStyle = evRes.ok ? VERM : INK;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(evRes.text || '', ex + ew / 2, ey + eh / 2 + 0.5);
+          }
+          ctx.restore();
+        }
 
       /* ---------- 左下：朱印血量 ---------- */
       const hs = 58;

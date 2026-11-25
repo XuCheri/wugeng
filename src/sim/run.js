@@ -24,6 +24,7 @@ import { resolveChest, buildChestChoices } from './evolutions.js';
 import { updateSynergyRuntime, computeSynergies } from './synergies.js';
 import { generateBlessingChoices, BLESSING_TUNING } from './blessings.js';
 import { updateShrines, interactShrineImpl, resolveShrineImpl, dismissShrineImpl } from './shrines.js';
+import { WATCH_EVENT_KINDS, startWatchEvent, updateWatchEvents } from './events.js';
 import {
   coopPartySize,
   withPlayerContext,
@@ -37,7 +38,7 @@ import {
   buildSquadSummary,
 } from './coop.js';
 
-export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution };
+export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution, WATCH_EVENT_KINDS, startWatchEvent };
 
 /**
  * 创建一局（100% 向后兼容旧版单人参表，并支持自选初始武器、解锁池过滤与 2–4 人协同联机）。
@@ -131,6 +132,8 @@ export function createRun(rawOpts = {}) {
     rerolls: { free: REROLL.free + (metaB.freeRerolls | 0), ad: 0, adGrants: 0, adGrantMax: REROLL.adGrantMax },
     revives: { mainUsed: 0, endlessUsed: 0 },
     boss: null,
+    watchEvent: null,
+    watchEventResult: null,
     stats: {
       kills: 0,
       coins: 0,
@@ -145,6 +148,7 @@ export function createRun(rawOpts = {}) {
       killsByType: {},
       ultsCast: 0,
       coopRevives: 0,
+      eventsCompleted: 0,
     },
     events: [],
     // ↓ 内部状态
@@ -152,6 +156,7 @@ export function createRun(rawOpts = {}) {
     night: nightModifiers(nightLevel),
     mods: null,
     rng: new Rng(seedNum),
+    eventRng: new Rng((seedNum ^ 0x9E3779B9) >>> 0),
     _seedNum: seedNum,
     _initializing: true,
     _activeSlot: 0,
@@ -164,6 +169,8 @@ export function createRun(rawOpts = {}) {
     _pendingChests: 0,
     _bossSpawned: {},
     _warderSpawned: {},
+    _watchEventsDone: {},
+    _watchEventUsedKinds: [],
     _blessingWatches: { 1: true },
     _synergyMaxTier: { zhenhun: 0, daofa: 0, zhizha: 0, yangyan: 0 },
     _allSchoolBonus: 0,
@@ -360,6 +367,7 @@ export function stepRun(run, input = {}, dt = DT) {
   updateProps(run);
   updateShrines(run, dt, null);
   updateSpawner(run, dt);
+  updateWatchEvents(run, dt);
   flushSpawnQueue(run);
   updateEnemies(run, dt);
   if (isCoop) updateCoopRevives(run, dt);
@@ -666,6 +674,7 @@ export function endRun(run, clearedArg) {
       evolvedCount: 0,
       maxSynergyTier: 0,
       bossKills: 0,
+      eventsCompleted: 0,
       score: 0,
       coopSize: 0,
       revivesDone: 0,
@@ -740,6 +749,7 @@ export function endRun(run, clearedArg) {
     }
   }
   const maxCombo = Number.isFinite(st.maxCombo) && st.maxCombo > 0 ? Math.min(1e9, Math.floor(st.maxCombo)) : 0;
+  const eventsCompleted = Number.isFinite(st.eventsCompleted) && st.eventsCompleted > 0 ? Math.min(1e6, Math.floor(st.eventsCompleted)) : 0;
   const squad = buildSquadSummary(run);
   const coopSize = squad.length;
   const revivesDone = squad.reduce((s, m) => s + m.revivesDone, 0);
@@ -773,6 +783,7 @@ export function endRun(run, clearedArg) {
     evolvedCount,
     maxSynergyTier,
     bossKills,
+    eventsCompleted,
     score,
     coopSize,
     revivesDone,

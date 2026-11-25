@@ -148,7 +148,7 @@ export function defaultSave() {
     stats: {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
-      totalEvolutions: 0, totalBossKills: 0, coopRuns: 0, coopRevives: 0,
+      totalEvolutions: 0, totalBossKills: 0, coopRuns: 0, coopRevives: 0, totalEvents: 0,
     },
   };
 }
@@ -450,6 +450,7 @@ export function migrateSave(raw) {
     out.stats.totalBossKills = int(s.totalBossKills, 0, 0, 1e9);
     out.stats.coopRuns = int(s.coopRuns, 0, 0, 1e9);
     out.stats.coopRevives = int(s.coopRevives, 0, 0, 1e9);
+    out.stats.totalEvents = int(s.totalEvents, 0, 0, 1e9);
   }
 
   if (isObj(src.leaderboard)) {
@@ -699,6 +700,7 @@ export function mergeSaves(localRaw, remoteRaw) {
     totalBossKills: Math.max(a.stats.totalBossKills, b.stats.totalBossKills),
     coopRuns: Math.max(a.stats.coopRuns, b.stats.coopRuns),
     coopRevives: Math.max(a.stats.coopRevives, b.stats.coopRevives),
+    totalEvents: Math.max(a.stats.totalEvents, b.stats.totalEvents),
   };
 
   const coachSeen = {};
