@@ -1166,6 +1166,8 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         w.audio.unlock();
         w.audio.resume('all');
         w.audio.setEnabled({ sfx: target.settings?.sfx ?? true, music: target.settings?.music ?? true });
+        w.haptics?.setEnabled?.(target.settings?.haptics ?? true);
+        w.coach?.reset?.();
         w.showHub();
       },
       {
@@ -1218,6 +1220,8 @@ export async function bootToHub(page, baseUrl, opts = {}) {
             ? structuredClone(s.cosmetics.equipped)
             : { lantern: null, outfit: null, attackVfx: null, heroSkins: {} },
         });
+        w.haptics?.setEnabled?.(s.settings?.haptics ?? true);
+        w.coach?.reset?.();
         w.showHub();
       },
       { patch: opts.savePatch || null, patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString(), unlockHub: unlockHubFeatures },

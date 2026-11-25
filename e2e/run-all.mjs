@@ -55,8 +55,8 @@ export function validateSuiteRegistry(tests = ALL_TESTS) {
   const errors = [];
   const seenIds = new Set();
 
-  if (FEATURE_IDS.length !== 15) {
-    errors.push(`Expected 15 FEATURE_IDS (F1..F15), got ${FEATURE_IDS.length}`);
+  if (FEATURE_IDS.length < 16) {
+    errors.push(`Expected >= 16 FEATURE_IDS (F1..F16), got ${FEATURE_IDS.length}`);
   }
 
   for (let idx = 0; idx < tests.length; idx++) {

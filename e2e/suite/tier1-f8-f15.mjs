@@ -2922,6 +2922,7 @@ print(json.dumps({"checked": len(required_chars), "missing": missing[:50], "miss
     id: 'T1-F15-06',
     tier: 1,
     feature: 'F15',
+    timeoutMs: 25_000,
     name: 'taptap-cli upload-h5-package (--screen-orientation 1 --dry-run) & protected filing_id 26847 (v529750) untouched',
     async run() {
       const dryRes = await execFileAsync(

@@ -5,6 +5,7 @@ export const FEATURE_IDS = [
   'F1', 'F2', 'F3', 'F4', 'F5',
   'F6', 'F7', 'F8', 'F9', 'F10',
   'F11', 'F12', 'F13', 'F14', 'F15',
+  'F16',
 ];
 
 export const FEATURE_TITLES = {
@@ -23,6 +24,7 @@ export const FEATURE_TITLES = {
   F13: 'TapTap 好友系统、组队分享拉起与隐私政策更新',
   F14: '2–4 人「同守五更」真实多人联机（房间/多通道同步/倒地救援/MVP）',
   F15: '分模块中文 Git 合入 main、实机预览图、零缺字打包与 TapTap 测试包二维码',
+  F16: 'v4 M1 体验基础（7 分钟节奏、震动、情境旁白与更房渐进开放、Boss 演出配乐、结算页亮点与一键再守）',
 };
 
 export const MAX_WEAPONS = 6;

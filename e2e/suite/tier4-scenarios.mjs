@@ -1033,6 +1033,14 @@ export const TIER4_TESTS = [
       try {
         await fastClick(s.page, '.title-actions .btn--seal');
         await s.page.waitForSelector('.screen--hub');
+        await s.page.evaluate(() => {
+          const sv = window.__wugeng.save;
+          sv.coach = sv.coach || { seen: {}, runsPlayed: 0 };
+          sv.coach.runsPlayed = Math.max(sv.coach.runsPlayed || 0, 2);
+          sv.nightCleared = Math.max(sv.nightCleared ?? -1, 0);
+          window.__wugeng.showHub();
+        });
+        await s.page.waitForSelector('.screen--hub');
 
         for (const action of ['open-market', 'open-achievements', 'open-leaderboard']) {
           await fastClick(s.page, `[data-action="${action}"]`);
