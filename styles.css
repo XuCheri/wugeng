@@ -1732,8 +1732,30 @@ p { margin: 0; }
 .shrine-opt__desc { font-size: 12.5px; line-height: 1.42; color: var(--ink-80); }
 
 /* 结算 */
-.screen--result { display: flex; align-items: center; justify-content: center; background: rgba(28, 26, 23, .24); }
-.scroll--result { width: min(86vw, 400px); margin: auto; }
+.screen--result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 8px) calc(var(--safe-b) + 10px) calc(var(--safe-l) + 8px);
+  box-sizing: border-box;
+  background: rgba(28, 26, 23, .24);
+}
+.scroll--result {
+  width: min(88vw, 400px);
+  max-height: calc(100% - 12px);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.scroll--result .scroll__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
 .result-score {
   display: flex;
   align-items: center;
@@ -1747,16 +1769,197 @@ p { margin: 0; }
 .result-score span { font-size: 13px; color: var(--ink-80); letter-spacing: .1em; }
 .result-score b { font-weight: 400; font-size: 22px; color: var(--verm-dark); }
 .result-score__sig { font-style: normal; font-size: 11px; padding: 1px 5px; background: var(--verm); color: var(--paper); }
-.result-coins { display: flex; align-items: baseline; justify-content: center; gap: 12px; padding: 6px 0 10px; }
-.result-coins span { font-size: 16px; letter-spacing: .2em; color: var(--ink-60); }
-.result-coins__val { font-weight: 400; font-size: 44px; color: var(--verm); letter-spacing: .02em; }
+.result-coins { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 4px 0 6px; }
+.result-coins span { font-size: 15px; letter-spacing: .2em; color: var(--ink-60); }
+.result-coins__val { font-weight: 400; font-size: 38px; color: var(--verm); letter-spacing: .02em; line-height: 1.1; }
 .result-coins.is-doubled .result-coins__val::after { content: "翻倍"; margin-left: 8px; font-size: 14px; color: var(--paper); background: var(--verm); padding: 2px 4px; vertical-align: middle; }
-.result-rows { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.result-row { padding: 8px 6px; text-align: center; box-shadow: inset 0 0 0 1px var(--ink-15); }
-.result-row dt { font-size: 13px; color: var(--ink-60); letter-spacing: .15em; }
-.result-row dd { margin: 2px 0 0; font-size: 22px; }
+.result-rows { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.result-row { padding: 6px 6px; text-align: center; box-shadow: inset 0 0 0 1px var(--ink-15); }
+.result-row dt { font-size: 12px; color: var(--ink-60); letter-spacing: .15em; }
+.result-row dd { margin: 1px 0 0; font-size: 20px; }
+
+/* 结算 · 本局亮点（头功兵刃占比 + 最长连斩） */
+.result-highlight {
+  margin-top: 8px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--lantern-14);
+  box-shadow: inset 0 0 0 1px var(--ink-25);
+}
+.result-highlight__icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+}
+.result-highlight__icon.is-evolved {
+  box-shadow: inset 0 0 0 1.5px var(--verm);
+}
+.result-highlight__info { flex: 1; min-width: 0; }
+.result-highlight__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.result-highlight__tag {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  background: var(--ink);
+  color: var(--paper);
+  letter-spacing: .08em;
+}
+.result-highlight__name {
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result-highlight__combo {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--verm);
+  color: var(--paper);
+  white-space: nowrap;
+}
+.result-highlight__meta {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-60);
+  letter-spacing: .04em;
+}
+.result-bar {
+  margin-top: 5px;
+  height: 6px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-25);
+  overflow: hidden;
+}
+.result-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--verm);
+  transition: width 320ms cubic-bezier(.22, 1, .36, 1);
+}
+
+/* 结算 · 随身行囊（兵刃与法器图标） */
+.result-loadout {
+  margin-top: 8px;
+  padding: 6px 8px 7px;
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+}
+.result-loadout__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--ink-60);
+  letter-spacing: .1em;
+  margin-bottom: 5px;
+}
+.result-loadout__head em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--verm-dark);
+  letter-spacing: .05em;
+}
+.result-loadout__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.result-loadout__item {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-25);
+}
+.result-loadout__item.is-evolved {
+  background: var(--lantern-14);
+  box-shadow: inset 0 0 0 1.5px var(--verm);
+}
+.result-loadout__item.is-relic {
+  background: var(--paper-shade);
+}
+.result-loadout__lv {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  padding: 0 3px;
+  font-style: normal;
+  font-size: 9.5px;
+  line-height: 1.2;
+  background: var(--ink);
+  color: var(--paper);
+}
+.result-loadout__item.is-evolved .result-loadout__lv {
+  background: var(--verm);
+}
+
+/* 结算 · 距下一目标 */
+.result-next-goal-host { margin-top: 8px; }
+.result-next-goal-host[hidden] { display: none; }
+.result-next-goal {
+  padding: 7px 9px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-25);
+}
+.result-next-goal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.result-next-goal__label {
+  font-size: 11px;
+  color: var(--ink-60);
+  letter-spacing: .12em;
+}
+.result-next-goal__rem {
+  font-size: 11px;
+  color: var(--verm-dark);
+  letter-spacing: .04em;
+}
+.result-next-goal__row {
+  margin-top: 2px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.result-next-goal__title {
+  font-weight: 400;
+  font-size: 13.5px;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-next-goal__num {
+  font-size: 11.5px;
+  color: var(--ink-80);
+  flex-shrink: 0;
+}
+.result-next-goal__hint {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--ink-60);
+}
+
 .result-build {
-  margin-top: 10px;
+  margin-top: 8px;
   padding: 6px 8px;
   font-size: 13px;
   color: var(--verm-dark);
@@ -1764,9 +1967,12 @@ p { margin: 0; }
   background: var(--lantern-14);
   box-shadow: inset 0 0 0 1px var(--verm);
 }
-.result-unlocks { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-.result-unlock { display: flex; align-items: center; gap: 10px; font-size: 16px; }
-.result-actions { display: flex; flex-direction: column; gap: 12px; }
+.result-unlocks { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.result-unlock { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+.result-actions { display: flex; flex-direction: column; gap: 8px; }
+.result-actions__main { display: flex; gap: 8px; width: 100%; }
+.result-again-btn { flex: 1.45 1 0; min-height: 46px; font-size: 17px; }
+.result-hub-btn { flex: 1 1 0; min-height: 46px; font-size: 15.5px; }
 
 /* 广告进行中：挡住重复点击 */
 .ad-blocker {

@@ -209,6 +209,10 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
 
   const st = run.stats;
   st.damageDealt = Math.min(Number.MAX_SAFE_INTEGER, st.damageDealt + dmg);
+  if (typeof weaponId === 'string' && weaponId) {
+    if (!st.damageByWeapon || typeof st.damageByWeapon !== 'object') st.damageByWeapon = {};
+    st.damageByWeapon[weaponId] = Math.min(Number.MAX_SAFE_INTEGER, (st.damageByWeapon[weaponId] || 0) + dmg);
+  }
   if (run.player?.stats) {
     run.player.stats.damageDealt = Math.min(Number.MAX_SAFE_INTEGER, (run.player.stats.damageDealt || 0) + dmg);
   }
@@ -305,6 +309,9 @@ export function killEnemy(run, e, opts) {
   const st = run.stats;
   st.kills++;
   st.killsByType[e.type] = (st.killsByType[e.type] || 0) + 1;
+  st.combo = (st.combo || 0) + 1;
+  st.comboT = 2.6;
+  if (st.combo > (st.maxCombo || 0)) st.maxCombo = st.combo;
   run.events.push({ type: 'kill', x: e.x, y: e.y, enemyType: e.type, elite: e.elite, boss: e.boss });
 
   const p = run.player;

@@ -137,7 +137,11 @@ export function createRun(rawOpts = {}) {
       bunsEaten: 0,
       firstBunTime: null,
       damageDealt: 0,
+      damageByWeapon: {},
       maxHit: 0,
+      combo: 0,
+      maxCombo: 0,
+      comboT: 0,
       killsByType: {},
       ultsCast: 0,
       coopRevives: 0,
@@ -331,6 +335,13 @@ export function stepRun(run, input = {}, dt = DT) {
   const inp0 = slotInputs[0];
 
   run.time += dt;
+  if (run.stats.comboT > 0) {
+    run.stats.comboT -= dt;
+    if (run.stats.comboT <= 0) {
+      run.stats.comboT = 0;
+      run.stats.combo = 0;
+    }
+  }
   updateWatch(run, dt);
   if (isCoop) {
     if (run.player.downed || run.player.hp <= 0) {
@@ -646,6 +657,9 @@ export function endRun(run, clearedArg) {
       bunsEaten: 0,
       firstBunTime: null,
       maxHit: 0,
+      maxCombo: 0,
+      damageByWeapon: {},
+      topWeapon: null,
       killsByType: {},
       weapons: [],
       relics: [],
@@ -700,6 +714,32 @@ export function endRun(run, clearedArg) {
       0,
     ),
   );
+  const rawDbw = st.damageByWeapon && typeof st.damageByWeapon === 'object' ? st.damageByWeapon : {};
+  const cleanDbw = {};
+  let totalTrackedDmg = 0;
+  for (const [k, v] of Object.entries(rawDbw)) {
+    if (Number.isFinite(v) && v > 0) {
+      const cv = Math.min(Number.MAX_SAFE_INTEGER, Math.round(v));
+      cleanDbw[k] = cv;
+      totalTrackedDmg += cv;
+    }
+  }
+  const totalDmgDenom = Math.max(
+    Number.isFinite(st.damageDealt) && st.damageDealt > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(st.damageDealt)) : 0,
+    totalTrackedDmg,
+  );
+  let topWeapon = null;
+  for (const [wid, dmgVal] of Object.entries(cleanDbw)) {
+    if (!Object.hasOwn(WEAPONS, wid)) continue;
+    if (!topWeapon || dmgVal > topWeapon.damage) {
+      topWeapon = {
+        id: wid,
+        damage: dmgVal,
+        share: totalDmgDenom > 0 ? Math.min(100, Math.max(1, Math.round((dmgVal / totalDmgDenom) * 100))) : 0,
+      };
+    }
+  }
+  const maxCombo = Number.isFinite(st.maxCombo) && st.maxCombo > 0 ? Math.min(1e9, Math.floor(st.maxCombo)) : 0;
   const squad = buildSquadSummary(run);
   const coopSize = squad.length;
   const revivesDone = squad.reduce((s, m) => s + m.revivesDone, 0);
@@ -724,6 +764,9 @@ export function endRun(run, clearedArg) {
     bunsEaten: Number.isFinite(st.bunsEaten) && st.bunsEaten > 0 ? Math.min(1e9, Math.floor(st.bunsEaten)) : 0,
     firstBunTime: Number.isFinite(st.firstBunTime) && st.firstBunTime >= 0 ? st.firstBunTime : null,
     maxHit: Number.isFinite(st.maxHit) && st.maxHit > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(st.maxHit)) : 0,
+    maxCombo,
+    damageByWeapon: cleanDbw,
+    topWeapon,
     killsByType: cleanKbt,
     weapons: safeWeapons.map((w) => ({ id: w.id, level: w.level, evolved: !!w.evolved })),
     relics: safeRelics.map((r) => ({ id: r.id, level: r.level })),

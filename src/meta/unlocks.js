@@ -11,7 +11,8 @@ import {
   isPlainObj, canMutateObj, canWriteProp, canMutateArray,
 } from './save.js';
 import { recordCodexSummary, canMutateCodex } from './codex.js';
-import { ACHIEVEMENT_IDS, reconcileAchievements } from './achievements.js';
+import { ACHIEVEMENT_IDS, getAchievementStates, reconcileAchievements } from './achievements.js';
+import { HERO_SKINS, ATTACK_VFX_LIST, isCosmeticOwned } from './cosmetics.js';
 import { WEAPONS, RELICS, SCHOOL_TAG_IDS, MAIN_DURATION, WATCH5_TIME } from '../sim/balance.js';
 
 export const MIAN_KILLS = 800;
@@ -224,6 +225,110 @@ export function heroUnlockProgress(save, heroId) {
   if (heroId === 'mian') return { have: Math.min(MIAN_KILLS, safeInt(s.bestKills, MIAN_KILLS)), need: MIAN_KILLS };
   if (heroId === 'tiejiang') return { have: Math.min(TIEJIANG_TOTAL_KILLS, safeInt(s.totalKills, TIEJIANG_TOTAL_KILLS)), need: TIEJIANG_TOTAL_KILLS };
   return null;
+}
+
+/**
+ * 结算页「距下一目标」：从尚未解锁的打更人、守夜功绩与鬼市器物中，
+ * 挑出进度最接近完成（have < need）的一项，供结算进度条展示。
+ */
+export function findNextUnlockGoal(save) {
+  if (!isPlainObj(save)) return null;
+  const st = isPlainObj(save.stats) ? save.stats : {};
+  const unlockedHeroes = Array.isArray(save.unlockedHeroes) ? save.unlockedHeroes : ['zhou'];
+  const coins = safeInt(save.coins, 1e12);
+  const candidates = [];
+
+  if (!unlockedHeroes.includes('mian')) {
+    const have = Math.min(MIAN_KILLS, safeInt(st.bestKills, MIAN_KILLS));
+    if (have < MIAN_KILLS) {
+      candidates.push({
+        kind: 'hero',
+        id: 'mian',
+        title: '解锁打更人 · 阿绵',
+        hint: `单局打散 ${MIAN_KILLS} 只`,
+        unit: '只',
+        have,
+        need: MIAN_KILLS,
+        scoreRatio: have / MIAN_KILLS,
+        priority: 3,
+      });
+    }
+  }
+  if (!unlockedHeroes.includes('tiejiang')) {
+    const have = Math.min(TIEJIANG_TOTAL_KILLS, safeInt(st.totalKills, TIEJIANG_TOTAL_KILLS));
+    if (have < TIEJIANG_TOTAL_KILLS) {
+      candidates.push({
+        kind: 'hero',
+        id: 'tiejiang',
+        title: '解锁打更人 · 石敢当',
+        hint: `累计打散 ${TIEJIANG_TOTAL_KILLS} 只`,
+        unit: '只',
+        have,
+        need: TIEJIANG_TOTAL_KILLS,
+        scoreRatio: have / TIEJIANG_TOTAL_KILLS,
+        priority: 3,
+      });
+    }
+  }
+
+  const achStates = getAchievementStates(save, 'all');
+  for (const a of achStates) {
+    if (a.unlocked || !(a.target > 0) || a.current >= a.target) continue;
+    const base = a.id === 'heroes4' ? 1 : a.id === 'codex30' ? 2 : 0;
+    const scoreRatio = Math.max(0, (a.current - base) / Math.max(1, a.target - base));
+    if (scoreRatio >= 1) continue;
+    const def = a.def || {};
+    candidates.push({
+      kind: 'achievement',
+      id: a.id,
+      title: `功绩 · ${def.name || a.id}`,
+      hint: def.reward?.label || def.desc || '',
+      unit: '',
+      have: a.current,
+      need: a.target,
+      scoreRatio,
+      priority: 2,
+    });
+  }
+
+  for (const item of [...HERO_SKINS, ...ATTACK_VFX_LIST]) {
+    if (item.unlock !== 'shop' || !(item.price > 0) || isCosmeticOwned(save, item.id)) continue;
+    if (item.heroId && !unlockedHeroes.includes(item.heroId)) continue;
+    if (coins >= item.price) continue;
+    candidates.push({
+      kind: 'cosmetic',
+      id: item.id,
+      title: `鬼市 · ${item.name}`,
+      hint: '铜钱可换',
+      unit: '铜钱',
+      have: coins,
+      need: item.price,
+      scoreRatio: coins / item.price,
+      priority: 1,
+    });
+  }
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const aProg = a.scoreRatio > 0 ? 1 : 0;
+    const bProg = b.scoreRatio > 0 ? 1 : 0;
+    if (aProg !== bProg) return bProg - aProg;
+    if (Math.abs(b.scoreRatio - a.scoreRatio) > 0.03) return b.scoreRatio - a.scoreRatio;
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return b.scoreRatio - a.scoreRatio;
+  });
+
+  const best = candidates[0];
+  return {
+    kind: best.kind,
+    id: best.id,
+    title: best.title,
+    hint: best.hint,
+    unit: best.unit,
+    have: best.have,
+    need: best.need,
+    pct: Math.min(99, Math.max(0, Math.round((best.have / best.need) * 100))),
+  };
 }
 
 function recordLeaderboardEntry(save, sum, now) {

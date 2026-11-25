@@ -6,7 +6,7 @@ import { loadSave, saveSave } from './meta/save.js';
 import { createCloudSave } from './meta/cloud-save.js';
 import { syncCodexFromRun } from './meta/codex.js';
 import { getMetaBonuses } from './meta/shop.js';
-import { recordRun, grantDoubleCoins } from './meta/unlocks.js';
+import { recordRun, grantDoubleCoins, findNextUnlockGoal } from './meta/unlocks.js';
 import {
   ACHIEVEMENTS,
   ACHIEVEMENTS_BY_ID,
@@ -440,6 +440,8 @@ export async function startApp(bootOpts = {}) {
     const el = renderResult(root, {
       summary,
       recorded,
+      nextGoal: findNextUnlockGoal(save),
+      getNextGoal: () => findNextUnlockGoal(save),
       adsOn: () => adsEnabled(),
       runAd,
       onDouble: (amount) => { const add = grantDoubleCoins(save, amount); persist(true); return add; },
