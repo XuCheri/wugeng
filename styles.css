@@ -2437,16 +2437,18 @@ p { margin: 0; }
 }
 .boot-intro__skip {
   position: absolute;
-  top: calc(var(--safe-t) + 14px);
-  right: calc(var(--safe-r) + 14px);
+  /* 置于右下角：避开 TapTap 小游戏右上角胶囊菜单 */
+  bottom: calc(var(--safe-b) + 22px);
+  right: calc(var(--safe-r) + 18px);
   min-height: 36px;
   min-width: 64px;
-  padding: 0 12px;
+  padding: 0 14px;
+  border-radius: 999px;
   font-size: 14px;
   letter-spacing: .12em;
   color: var(--paper);
   background: rgba(28, 26, 23, .72);
-  box-shadow: inset 0 0 0 1.5px rgba(239, 230, 210, .85);
+  box-shadow: inset 0 0 0 1px rgba(239, 230, 210, .55);
 }
 .boot-intro__skip:active:not(:disabled) {
   background: var(--verm);
