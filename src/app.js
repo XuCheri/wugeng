@@ -167,6 +167,11 @@ export async function startApp(bootOpts = {}) {
       audio.onEvents(events);
       haptics.onEvents(events);
       coach.onEvents(events, run);
+      if (Array.isArray(events)) {
+        for (let i = 0; i < events.length; i++) {
+          if (events[i]?.type === 'bossSpawn') runUI?.showBossCard?.(events[i].bossType);
+        }
+      }
       if (run && events && events.length) checkMidRunAchievements(run);
     },
     onAutoPause: () => runUI?.showPause(),

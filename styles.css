@@ -2801,6 +2801,65 @@ p { margin: 0; }
 .hub-dock-btn.is-coach-locked { opacity: .52; }
 .hub-dock-btn.is-coach-locked small { color: var(--lantern); }
 
+/* Boss 登场水墨名帖（1.2 秒非阻塞，6 色版画锁色） */
+.boss-card {
+  position: fixed;
+  left: 50%;
+  top: 28%;
+  transform: translate(-50%, -50%);
+  width: min(84vw, 336px);
+  padding: 14px 18px 13px;
+  background: rgba(28, 26, 23, .92);
+  color: var(--paper);
+  border-top: 3px solid var(--verm);
+  border-bottom: 3px solid var(--verm);
+  box-shadow: 0 0 0 1px var(--lantern), 0 14px 32px rgba(28, 26, 23, .62);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  z-index: 38;
+  pointer-events: none;
+  animation: boss-card-in 320ms cubic-bezier(.18, .9, .24, 1) both;
+}
+.boss-card.is-out {
+  opacity: 0;
+  transform: translate(-50%, -56%) scale(.96);
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+.boss-card__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: .24em;
+  color: var(--lantern);
+}
+.boss-card__name {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: .22em;
+  color: var(--paper);
+}
+.boss-card__rule {
+  width: 68%;
+  height: 1.5px;
+  background: var(--verm);
+  margin: 2px 0;
+}
+.boss-card__epithet {
+  margin: 0;
+  font-size: 13.5px;
+  letter-spacing: .16em;
+  color: var(--paper-shade);
+}
+@keyframes boss-card-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scaleX(.18); }
+  to { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
+}
+
 @media (max-width: 370px) {
   .coop-party-grid { grid-template-columns: 1fr; }
 }
@@ -2808,4 +2867,5 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
 

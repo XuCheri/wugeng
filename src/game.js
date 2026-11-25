@@ -106,7 +106,9 @@ export function createGame({
 
     if (!paused && run.status === 'playing') {
       const hit = renderer.hitstop || 0;
-      if (hit <= 0) acc += realDt;
+      const isCoop = Array.isArray(run.players) && run.players.length > 1;
+      const ts = isCoop ? 1 : (renderer.timeScale ?? 1);
+      if (hit <= 0) acc += realDt * ts;
       let steps = 0;
       while (acc >= DT && steps < MAX_STEPS_PER_FRAME) {
         const sampled = input.sample();
@@ -151,6 +153,7 @@ export function createGame({
 
   const game = {
     get run() { return run; },
+    get timeScale() { return renderer.timeScale ?? 1; },
     settings,
     start({
       heroId = 'zhou',

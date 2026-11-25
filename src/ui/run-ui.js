@@ -13,6 +13,7 @@ import { settingsBody } from './settings.js';
 import { confirmDialog } from './dialogs.js';
 import { canShowRerollAd, canShowReviveAd } from '../ads/ad-policy.js';
 import { MAX_WEAPONS, MAX_RELICS, MAX_WEAPON_LEVEL, PLAYER_BASE } from '../sim/balance.js';
+import { BOSS_NAMES, BOSS_EPITHETS } from '../render/fx.js';
 
 const KIND_GLYPH = { coin: '钱', bun: '包', overflow: '溢' };
 const SHRINE_GLYPH = { altar: '坛', trial: '碑', peddler: '货' };
@@ -1062,10 +1063,46 @@ export function createRunUI(root, deps) {
     setTimeout(() => { hintEl?.remove(); hintEl = null; }, 6200);
   }
 
+  let bossCardEl = null;
+  let bossCardOutT = 0;
+  let bossCardRmT = 0;
+
+  // ───────── Boss 登场水墨名帖（1.2 秒非阻塞） ─────────
+  function clearBossCard() {
+    clearTimeout(bossCardOutT);
+    clearTimeout(bossCardRmT);
+    bossCardOutT = 0;
+    bossCardRmT = 0;
+    bossCardEl?.remove();
+    bossCardEl = null;
+  }
+
+  function showBossCard(bossType) {
+    clearBossCard();
+    const name = BOSS_NAMES[bossType] || '夜主';
+    const epithet = BOSS_EPITHETS[bossType] || '夜主现身';
+    bossCardEl = h('div', {
+      class: 'boss-card',
+      role: 'status',
+      'aria-live': 'assertive',
+      dataset: { bossType: String(bossType || '') },
+    },
+    h('span', { class: 'boss-card__kicker' },
+      h('i', { class: 'stamp stamp--xs' }, '祟'),
+      h('span', {}, '夜主现身')),
+    h('h2', { class: 'boss-card__name' }, name),
+    h('div', { class: 'boss-card__rule', 'aria-hidden': 'true' }),
+    h('p', { class: 'boss-card__epithet' }, epithet));
+    root.appendChild(bossCardEl);
+    bossCardOutT = setTimeout(() => bossCardEl?.classList.add('is-out'), 1200);
+    bossCardRmT = setTimeout(() => { bossCardEl?.remove(); bossCardEl = null; }, 1520);
+  }
+
   function teardown() {
     closeInspector();
     closeCurrent();
     unmountHud();
+    clearBossCard();
     hintEl?.remove();
     hintEl = null;
   }
@@ -1077,6 +1114,7 @@ export function createRunUI(root, deps) {
     handleStatus,
     showPause,
     showFirstRunHint,
+    showBossCard,
     openInspector,
     closeInspector,
     teardown,

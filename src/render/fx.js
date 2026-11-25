@@ -9,6 +9,11 @@ const TAU = Math.PI * 2;
 const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'paperbride', 'suona', 'horse', 'umbrella']);
 const CN_NUM = ['', '一', '二', '三', '四', '五'];
 export const BOSS_NAMES = { horse: '纸马将军', umbrella: '无面伞女', youshen: '夜游神' };
+export const BOSS_EPITHETS = {
+  horse: '铁蹄踏纸，三冲夺命',
+  umbrella: '撑伞隐月，纸钱满街',
+  youshen: '执戟巡夜，五更决断',
+};
 export const EVOLVED_NAMES = {
   gong: '五更鸣锣',
   lantern: '长明灯',
@@ -45,6 +50,8 @@ export function createFx(opts = {}) {
   let kickY = 0;
   let hitstop = 0;
   let sinceHitstop = 1;
+  let slowMoT = 0;
+  let slowMoScale = 1;
   let time = 0;
   let vw = 390;
   let vh = 844;
@@ -188,6 +195,15 @@ export function createFx(opts = {}) {
     get hitstop() {
       return hitstop;
     },
+    get timeScale() {
+      return slowMoT > 0 ? slowMoScale : 1;
+    },
+    setSlowMo(dur, scaleVal = 0.35) {
+      if (!(dur > 0) || !Number.isFinite(dur)) return;
+      const clampedScale = Math.max(0.15, Math.min(1, Number.isFinite(scaleVal) ? scaleVal : 0.35));
+      if (slowMoT <= 0 || clampedScale < slowMoScale) slowMoScale = clampedScale;
+      slowMoT = Math.max(slowMoT, Math.min(2.0, dur));
+    },
     addShake(a, dx = 0, dy = 0) {
       trauma = Math.min(1, trauma + a);
       if (dx || dy) {
@@ -325,14 +341,18 @@ export function createFx(opts = {}) {
           }
           break;
         case 'bossSpawn':
+          this.setSlowMo(1.2, 0.35);
           this.addShake(0.45);
-          banner(BOSS_NAMES[e.bossType] || '夜主', '夜主现身', VERM, 2.4);
+          screen.push({ k: 'bossVeil', t: 0, life: 1.25 });
+          screen.push({ k: 'bloom', t: 0, life: 0.85, color: 'verm', strength: 0.34 });
           break;
         case 'bossKill':
         case 'bossDefeated':
+          this.setSlowMo(0.8, 0.28);
           this.addHitstop(0.06);
-          this.addShake(0.65);
-          banner('破', BOSS_NAMES[e.bossType] || '', INK, 1.6);
+          this.addShake(0.75);
+          screen.push({ k: 'bloom', t: 0, life: 0.95, color: 'ink', strength: 0.52 });
+          banner('破', BOSS_NAMES[e.bossType] || '', VERM, 1.8);
           break;
         case 'evolve':
           this.addHitstop(0.05);
@@ -372,6 +392,10 @@ export function createFx(opts = {}) {
       time += dt;
       sinceHitstop += dt;
       hitstop = Math.max(0, hitstop - dt);
+      if (slowMoT > 0) {
+        slowMoT = Math.max(0, slowMoT - dt);
+        if (slowMoT === 0) slowMoScale = 1;
+      }
       trauma = Math.max(0, trauma - dt * 2.1);
       const kd = Math.exp(-dt * 18);
       kickX *= kd;
@@ -544,6 +568,12 @@ export function createFx(opts = {}) {
           grd.addColorStop(1, vermA(a));
           ctx.fillStyle = grd;
           ctx.fillRect(0, 0, W, H);
+        } else if (q.k === 'bossVeil') {
+          const fin = Math.min(1, q.t / 0.18);
+          const fout = q.t > q.life - 0.35 ? (q.life - q.t) / 0.35 : 1;
+          const a = 0.42 * Math.max(0, Math.min(fin, fout));
+          ctx.fillStyle = `rgba(${RGB.ink},${a})`;
+          ctx.fillRect(0, 0, W, H);
         } else if (q.k === 'dawn') {
           ctx.fillStyle = paperA(0.85 * (1 - k) * (1 - k));
           ctx.fillRect(0, 0, W, H);
@@ -569,6 +599,8 @@ export function createFx(opts = {}) {
       screen.length = 0;
       trauma = 0;
       hitstop = 0;
+      slowMoT = 0;
+      slowMoScale = 1;
     },
 
     get counts() {

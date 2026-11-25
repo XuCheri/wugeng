@@ -475,9 +475,16 @@ export function createAudio() {
     return true;
   }
 
-  // ───────── 局内事件 → 音效 ─────────
+  // ───────── 局内事件 → 音效与 Boss 配乐切换 ─────────
   function onEvents(events) {
-    if (!events || !events.length || !enabled.sfx || !canPlay()) return;
+    if (!events || !events.length) return;
+    for (const e of events) {
+      if (!e || typeof e !== 'object') continue;
+      if (e.type === 'bossSpawn') bossActive = true;
+      else if (e.type === 'bossKill' || e.type === 'bossDefeated' || e.type === 'dawn') bossActive = false;
+      else if ((e.type === 'watch' || e.type === 'watchChange') && Number.isFinite(e.watch)) setWatch(e.watch);
+    }
+    if (!enabled.sfx || !canPlay()) return;
     let hits = 0, crits = 0, kills = 0, xp = 0;
     for (const e of events) {
       if (!e || typeof e !== 'object') continue;
@@ -527,9 +534,8 @@ export function createAudio() {
         case 'levelup': play('levelup'); break;
         case 'watch':
         case 'watchChange':
-          if (Number.isFinite(e.watch)) {
-            setWatch(e.watch);
-            if (e.watch >= 2 && e.watch <= 5) play('watch', { arg: e.watch });
+          if (Number.isFinite(e.watch) && e.watch >= 2 && e.watch <= 5) {
+            play('watch', { arg: e.watch });
           }
           break;
         case 'bossSpawn': play('boss'); break;
@@ -590,15 +596,39 @@ export function createAudio() {
     if (Math.random() < 0.18) s.playbackRate.setTargetAtTime(1.012, t + 0.25, 0.3);
   }
 
+  function bossDrum(t, accent = false) {
+    const startHz = accent ? 104 : 84;
+    const endHz = accent ? 42 : 46;
+    const dur = accent ? 0.24 : 0.16;
+    const vol = accent ? 0.58 : 0.36;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(startHz, t);
+    o.frequency.exponentialRampToValueAtTime(endHz, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t + dur + 0.02);
+    noise(t, accent ? 0.055 : 0.035, accent ? 0.18 : 0.10, musicBus, { type: 'lowpass', freq: accent ? 420 : 320 });
+  }
+
+  let bossActive = false;
+
   function musicParams() {
-    if (musicMode === 'menu') return { beat: 0.62, density: 0.32, drone: false, bright: false };
+    if (musicMode === 'menu') return { beat: 0.62, density: 0.32, drone: false, bright: false, boss: false };
     const w = Math.max(1, Math.min(6, watch || 1));
-    if (w === 6) return { beat: 0.3, density: 0.75, drone: false, bright: true };
+    if (w === 6) return { beat: 0.3, density: 0.75, drone: false, bright: true, boss: false };
+    if (bossActive) {
+      return { beat: 0.26, density: 0.72, drone: true, bright: false, boss: true };
+    }
     return {
       beat: [0, 0.6, 0.52, 0.45, 0.38, 0.32][w],
       density: [0, 0.3, 0.42, 0.55, 0.66, 0.78][w],
       drone: w >= 3,
       bright: false,
+      boss: false,
     };
   }
 
@@ -610,6 +640,9 @@ export function createAudio() {
       const p = musicParams();
       const t = nextNoteT;
       const bar = step % 8;
+      if (p.boss && (bar === 0 || bar === 3 || bar === 6)) {
+        bossDrum(t, bar === 0);
+      }
       if (bar === 0) pluck(t, p.bright ? 7 - 12 : -12, 0.55);
       if (p.drone && bar === 4) pluck(t, -5, 0.35);
       if (Math.random() < p.density) {
@@ -657,11 +690,18 @@ export function createAudio() {
     applyGains();
   }
 
-  function setWatch(n) { watch = Math.max(0, Math.min(6, n | 0)); }
+  function setWatch(n) {
+    watch = Math.max(0, Math.min(6, n | 0));
+    if (watch <= 1 || watch >= 6) bossActive = false;
+  }
+  function setBossMusic(active) { bossActive = Boolean(active); }
   function setMusicMode(mode) {
     musicMode = mode;
     if (mode === 'run' && !watch) watch = 1;
-    if (mode === 'menu') watch = 0;
+    if (mode !== 'run') {
+      bossActive = false;
+      if (mode === 'menu') watch = 0;
+    }
   }
 
   function suspend(reason = 'user') {
@@ -689,7 +729,8 @@ export function createAudio() {
   }
 
   return {
-    unlock, play, onEvents, setWatch, setEnabled, suspend, resume, setMusicMode,
+    unlock, play, onEvents, setWatch, setBossMusic, setEnabled, suspend, resume, setMusicMode,
+    get bossMusic() { return bossActive; },
     get state() { return ctx ? ctx.state : 'none'; },
   };
 }

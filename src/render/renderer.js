@@ -2025,6 +2025,9 @@ export function createRenderer(canvas, opts = {}) {
     get hitstop() {
       return fx.hitstop;
     },
+    get timeScale() {
+      return fx.timeScale;
+    },
     getUltButtonRect() {
       return hud.getUltButtonRect();
     },

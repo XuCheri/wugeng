@@ -1125,7 +1125,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         }
         w.game.clear();
         document
-          .querySelectorAll('#ui .veil, #ui .veil--inspector, #ui .toast, #ui .run-hint, #ui .coach-whisper, .boot-intro, body > .mock-ad')
+          .querySelectorAll('#ui .veil, #ui .veil--inspector, #ui .toast, #ui .run-hint, #ui .coach-whisper, #ui .boss-card, .boot-intro, body > .mock-ad')
           .forEach((el) => el.remove());
         localStorage.clear();
         sessionStorage.clear();
