@@ -24,6 +24,7 @@ import { adResultMessage } from './ads/ad-policy.js';
 import { createAudio } from './audio/synth.js';
 import { createMenuScene } from './render/menu-scene.js';
 import { h, toast, setClickSound } from './ui/dom.js';
+import { playScreenTransition } from './ui/motion.js';
 import { preloadIcons } from './ui/icons.js';
 import { renderTitle } from './ui/title.js';
 import { renderHub } from './ui/hub.js';
@@ -295,14 +296,18 @@ export async function startApp(bootOpts = {}) {
     audio,
   });
 
-  function setScreen(el) {
+  function setScreen(el, transition = 'ink') {
+    const hadPrev = Boolean(screen);
     if (hub && screen === hub.el && el !== hub.el) {
       hub.teardown?.();
     }
     screen?.remove();
     activeCoopModal = null;
-    root.querySelectorAll('.veil').forEach((v) => v.remove());
+    root.querySelectorAll('.veil, .ui-exit-ghost').forEach((v) => v.remove());
     screen = el;
+    if (hadPrev && transition) {
+      playScreenTransition(root, transition);
+    }
   }
 
   function showTitle() {
@@ -314,8 +319,9 @@ export async function startApp(bootOpts = {}) {
         audio.setMusicMode('menu');
         showHub();
       },
+      onReplayIntro: () => replayIntro(),
     });
-    setScreen(el);
+    setScreen(el, 'ink');
     menuScene.start();
   }
 
@@ -346,7 +352,7 @@ export async function startApp(bootOpts = {}) {
       onOpenLeaderboard: () => openLeaderboard('public'),
       onOpenCoop: () => openCoop(),
     });
-    setScreen(hub.el);
+    setScreen(hub.el, 'ink');
     menuScene.start();
   }
 
@@ -373,7 +379,7 @@ export async function startApp(bootOpts = {}) {
     const chosenPool = unlockedWeapons
       ?? (Array.isArray(save.unlockedWeapons) ? save.unlockedWeapons : null);
     lastStart = { heroId, startWeapon: chosenStart, nightLevel };
-    setScreen(null);
+    setScreen(null, 'battle');
     finished = false;
     applySettings(save.settings);
     const p0Skin = coopParty?.party?.[0]?.skinId || getEquippedHeroSkin(save, heroId);
@@ -423,7 +429,7 @@ export async function startApp(bootOpts = {}) {
       onHub: () => showHub(),
       onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
-    setScreen(el);
+    setScreen(el, summary.cleared ? 'dawn' : 'ink');
     menuScene.start();
   }
 

@@ -72,7 +72,7 @@ p { margin: 0; }
   cursor: pointer;
   touch-action: manipulation;
   box-sizing: border-box;
-  transition: transform 60ms linear, background-color 60ms linear;
+  transition: transform 140ms cubic-bezier(.22, 1.35, .36, 1), background-color 120ms ease-out, box-shadow 120ms ease-out;
   -webkit-tap-highlight-color: transparent;
 }
 .btn__text { display: inline-flex; align-items: center; gap: 6px; padding-left: .2em; }
@@ -80,10 +80,10 @@ p { margin: 0; }
   background: var(--verm);
   color: var(--paper);
   /* 内一道细白边 = 印面边框；底下一道深朱 = 印泥厚度 */
-  box-shadow: inset 0 0 0 3px var(--verm), inset 0 0 0 4.5px rgba(239, 230, 210, .85), 0 2px 0 var(--verm-dark);
+  box-shadow: inset 0 0 0 3px var(--verm), inset 0 0 0 4.5px rgba(239, 230, 210, .85), 0 3px 0 var(--verm-dark);
 }
 .btn--seal:active:not(:disabled), .btn--square:active:not(:disabled), .btn--small:active:not(:disabled) {
-  transform: translateY(2px);
+  transform: translateY(2px) scale(.97);
   background: var(--verm-dark);
   box-shadow: inset 0 0 0 3px var(--verm-dark), inset 0 0 0 4.5px rgba(239, 230, 210, .85), 0 0 0 var(--verm-dark);
 }
@@ -92,11 +92,11 @@ p { margin: 0; }
   color: var(--ink);
   box-shadow: inset 0 0 0 1.5px var(--ink), 0 2px 0 var(--ink-35);
 }
-.btn--ghost:active:not(:disabled) { transform: translateY(2px); background: var(--paper-shade); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn--ghost:active:not(:disabled) { transform: translateY(2px) scale(.97); background: var(--paper-shade); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .btn:disabled { cursor: default; opacity: .42; filter: grayscale(1); }
 .btn--wide { width: 100%; }
-.btn--big { min-height: 56px; font-size: 22px; letter-spacing: .35em; }
-.btn--small { min-height: 46px; min-width: 52px; padding: 0 10px; font-size: 15px; letter-spacing: .05em; }
+.btn--big { min-height: 54px; font-size: 21px; letter-spacing: .34em; }
+.btn--small { min-height: 44px; min-width: 52px; padding: 0 10px; font-size: 15px; letter-spacing: .05em; }
 .btn--square { min-width: 0; padding: 8px 0; }
 .btn__badge {
   position: absolute;
@@ -234,7 +234,7 @@ p { margin: 0; }
 .scroll--tall { height: calc(100% - 44px); }
 .scroll--tall .scroll__body { flex: 1; }
 
-/* ───────── 遮罩 ───────── */
+/* ───────── 遮罩与丝滑入场/离场动效 ───────── */
 .veil {
   position: fixed;
   inset: 0;
@@ -246,16 +246,116 @@ p { margin: 0; }
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
-  background: rgba(28, 26, 23, .52);
-  animation: veil-in 160ms ease-out;
+  background: rgba(28, 26, 23, .62);
+  animation: veil-in 210ms cubic-bezier(.22, 1, .36, 1) both;
 }
 .veil--top { z-index: 40; }
-.veil--run { background: rgba(28, 26, 23, .46); }
-.veil--run.is-blessing-mode { background: rgba(28, 26, 23, .62); }
-.veil--dawn { background: rgba(239, 230, 210, .55); }
-.veil > .scroll { animation: unroll 140ms ease-out; }
-@keyframes veil-in { from { opacity: 0; } }
-@keyframes unroll { from { opacity: .88; } to { opacity: 1; } }
+.veil--run { background: rgba(28, 26, 23, .54); }
+.veil--run.is-blessing-mode { background: rgba(28, 26, 23, .68); }
+.veil--dawn { background: rgba(239, 230, 210, .62); }
+.veil > .scroll {
+  transform-origin: 50% 48%;
+  animation: unroll 280ms cubic-bezier(.2, 1.12, .32, 1) both;
+}
+.veil > .scroll .scroll__rod {
+  transform-origin: 50% 50%;
+  animation: rod-spread 300ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes veil-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes unroll {
+  0% { opacity: 0; transform: translateY(24px) scale(.93); }
+  70% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes rod-spread {
+  from { transform: scaleX(.82); opacity: .6; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* 弹窗关闭时的纯视觉离场残影（pointer-events: none，不阻塞交互与测试） */
+.ui-exit-ghost {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-t) + 12px) calc(var(--safe-r) + 8px) calc(var(--safe-b) + 12px) calc(var(--safe-l) + 8px);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: rgba(28, 26, 23, .52);
+  pointer-events: none !important;
+  animation: veil-out 190ms cubic-bezier(.4, 0, 1, 1) forwards;
+}
+.ui-exit-ghost__panel {
+  transform-origin: 50% 50%;
+  animation: rollup 190ms cubic-bezier(.4, 0, 1, 1) forwards;
+}
+@keyframes veil-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes rollup {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(18px) scale(.93); }
+}
+
+/* 屏幕切换水墨灯影过渡帷幕 */
+.screen-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none !important;
+  background: var(--ink);
+  animation: screen-veil-fade 300ms cubic-bezier(.25, .8, .25, 1) forwards;
+}
+.screen-veil--battle {
+  background: var(--ink);
+  box-shadow: inset 0 0 0 3px var(--verm);
+  animation: screen-veil-battle 320ms cubic-bezier(.22, 1, .36, 1) forwards;
+}
+.screen-veil--dawn {
+  background: var(--paper);
+  animation: screen-veil-fade 320ms cubic-bezier(.25, .8, .25, 1) forwards;
+}
+@keyframes screen-veil-fade {
+  0% { opacity: .72; }
+  100% { opacity: 0; }
+}
+@keyframes screen-veil-battle {
+  0% { opacity: .88; transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* 列表/卡片交错入场与轻弹微反馈 */
+.anim-stagger {
+  animation: item-rise 260ms cubic-bezier(.22, 1.08, .36, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 32ms);
+}
+@keyframes item-rise {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.is-popping {
+  animation: tactile-pop 240ms cubic-bezier(.22, 1.35, .36, 1);
+}
+@keyframes tactile-pop {
+  0% { transform: scale(.94); }
+  55% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes seal-stamp-in {
+  0% { opacity: 0; transform: rotate(-16deg) scale(1.6); }
+  70% { opacity: 1; transform: rotate(-5deg) scale(.95); }
+  100% { opacity: 1; transform: rotate(-6deg) scale(1); }
+}
+@keyframes screen-enter {
+  from { opacity: .92; transform: translateY(8px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 .dialog-text { font-size: 17px; line-height: 1.75; text-align: center; padding: 6px 4px; }
 
@@ -271,15 +371,16 @@ p { margin: 0; }
   padding: 10px 18px;
   background: var(--ink);
   color: var(--paper);
-  font-size: 16px;
+  box-shadow: inset 0 0 0 1px var(--lantern-28), 0 4px 0 rgba(28, 26, 23, .45);
+  font-size: 15px;
   letter-spacing: .08em;
   text-align: center;
-  transform: translate(-50%, 8px);
+  transform: translate(-50%, 14px) scale(.96);
   opacity: 0;
   pointer-events: none !important;
-  transition: opacity 160ms, transform 160ms;
+  transition: opacity 200ms cubic-bezier(.22, 1, .36, 1), transform 220ms cubic-bezier(.22, 1.15, .36, 1);
 }
-.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
 /* ───────── 全屏界面 ───────── */
 .screen {
@@ -294,6 +395,7 @@ p { margin: 0; }
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  animation: screen-enter 240ms cubic-bezier(.22, 1, .36, 1) both;
 }
 
 /* 标题页（暗夜灯火街景衬底 + 宣纸木刻牌匾） */
@@ -893,24 +995,31 @@ p { margin: 0; }
   border: 0;
   box-sizing: border-box;
   background: var(--paper-shade) var(--grain);
-  box-shadow: inset 0 0 0 1.5px var(--ink), inset 0 0 0 4.5px var(--paper-shade), inset 0 0 0 5.5px var(--ink-35), 0 3px 0 var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink), inset 0 0 0 4.5px var(--paper-shade), inset 0 0 0 5.5px var(--ink-35), 0 4px 0 var(--ink);
   cursor: pointer;
   user-select: none;
-  animation: qian-in 140ms ease-out;
+  transform-origin: 50% 85%;
+  animation: qian-deal 300ms cubic-bezier(.2, 1.15, .32, 1) both;
+  animation-delay: calc(var(--qian-i, 0) * 55ms);
+  transition: transform 140ms cubic-bezier(.22, 1.35, .36, 1), box-shadow 140ms ease-out;
   overflow: hidden;
 }
+.qian.is-redealt {
+  animation: qian-redeal 260ms cubic-bezier(.22, 1.18, .36, 1) both;
+  animation-delay: calc(var(--qian-i, 0) * 45ms);
+}
 .qian:active {
-  transform: translateY(2px);
+  transform: translateY(3px) scale(.965);
   box-shadow: inset 0 0 0 1.5px var(--ink), inset 0 0 0 4.5px var(--paper-shade), inset 0 0 0 5.5px var(--ink-35), 0 1px 0 var(--ink);
 }
 .qian.is-locked {
   background-color: var(--paper);
-  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 5px var(--paper), inset 0 0 0 6px var(--verm-dark), 0 3px 0 var(--ink);
+  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 5px var(--paper), inset 0 0 0 6px var(--verm-dark), 0 4px 0 var(--ink);
 }
 /* 守夜命签：吉签（朱砂泥金）与凶签（浓墨深朱） */
 .qian--auspicious {
   background-color: var(--paper);
-  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 4.5px var(--lantern-28), inset 0 0 0 6px var(--verm-dark), 0 3px 0 var(--ink);
+  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 4.5px var(--lantern-28), inset 0 0 0 6px var(--verm-dark), 0 4px 0 var(--ink);
 }
 .qian--auspicious .qian__cap {
   background: var(--verm);
@@ -918,13 +1027,22 @@ p { margin: 0; }
 }
 .qian--cursed {
   background-color: var(--paper-shade);
-  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4.5px var(--verm-20), inset 0 0 0 6px var(--verm-dark), 0 3px 0 var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4.5px var(--verm-20), inset 0 0 0 6px var(--verm-dark), 0 4px 0 var(--ink);
 }
 .qian--cursed .qian__cap {
   background: var(--ink);
   box-shadow: 0 2px 0 var(--verm-dark);
 }
-@keyframes qian-in { from { opacity: .88; } to { opacity: 1; } }
+@keyframes qian-deal {
+  0% { opacity: 0; transform: translateY(34px) rotate(var(--qian-tilt, 0deg)) scale(.9); }
+  68% { opacity: 1; transform: translateY(-3px) rotate(0deg) scale(1.015); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+}
+@keyframes qian-redeal {
+  0% { opacity: 0; transform: translateY(-16px) scaleX(.76) scaleY(.94); }
+  70% { opacity: 1; transform: translateY(2px) scaleX(1.02) scaleY(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
 .qian__cap {
   align-self: stretch;
   height: 12px;
@@ -1781,7 +1899,7 @@ p { margin: 0; }
   overflow: hidden;
   pointer-events: auto;
   opacity: 1;
-  transition: opacity 80ms linear;
+  transition: opacity 160ms ease-out;
 }
 .boot-intro.is-fading {
   opacity: 0;

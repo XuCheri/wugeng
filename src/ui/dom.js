@@ -1,5 +1,6 @@
 // DOM 小工具：不引框架，几行 h() 拼界面。
 // 所有面板 = 宣纸装裱（上下天地杆）；所有主按钮 = 朱红印章（按下沉 2px）。
+import { spawnVeilExitGhost, purgeExitGhosts } from './motion.js';
 
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -87,14 +88,26 @@ export function scroll({ title, sub, body = [], footer = [], cls = '', attrs = {
     h('i', { class: 'scroll__rod scroll__rod--bottom', 'aria-hidden': 'true' }));
 }
 
-/** 遮罩层（淡墨）。返回 { el, close }。 */
+/** 遮罩层（淡墨）。返回 { el, close }；关闭时自动触发无竞态离场动画。 */
 export function veil(root, content, { cls = '', attrs = {}, onBackdrop } = {}) {
+  purgeExitGhosts(root);
   const el = h('div', { ...attrs, class: `veil ${cls}`.trim(), role: 'dialog', 'aria-modal': 'true' }, content);
   if (onBackdrop) {
     el.addEventListener('click', (e) => { if (e.target === el) onBackdrop(); });
   }
   root.appendChild(el);
-  return { el, close: () => el.remove() };
+  let closed = false;
+  return {
+    el,
+    close: (opts) => {
+      if (closed) return;
+      closed = true;
+      if (!opts?.instant && el.isConnected) {
+        spawnVeilExitGhost(el);
+      }
+      el.remove();
+    },
+  };
 }
 
 let toastTimer = 0;

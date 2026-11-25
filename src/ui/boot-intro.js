@@ -1,15 +1,30 @@
 // 开屏动画（F1）：分阶段水墨飞白加载进度（0→100%）+ 「剑清酱工作室」剑气破墨·朱印落款原创 Canvas 动画
-// 严禁将 rAF 回调命名为 frame（保持游戏主循环确定性步进器零干扰）。
+// 关键修复：
+//   1. 使用限幅帧间隔 dt（<= 40ms）推进时序，而非原始挂钟 now - startTs，避免手机端 TapTap 启动页/模块解析/字体加载耗时吞掉整个开屏动画；
+//   2. 等待 WebView 首帧可见（!document.hidden && innerWidth > 0）后再计时，确保真机玩家完整看到加载与「剑清酱工作室」Logo；
+//   3. 严禁将 rAF 回调命名为 frame（保持游戏主循环确定性步进器零干扰）。
 import { INK, PAPER, PAPER_SHADE, VERM, VERM_DARK, LANTERN, FONT_CN, paperA, vermA, lanternA, inkA } from '../render/palette.js';
 import { brushStroke, makeRng, splatter } from '../render/ink.js';
 
 const TAU = Math.PI * 2;
-const LOADING_DUR = 0.34;
-const LOGO_DUR = 0.56;
-const FADEOUT_DUR = 0.04;
+const LOADING_DUR = 0.44;
+const LOGO_DUR = 0.88;
+const FADEOUT_DUR = 0.12;
 const WATCH_LABELS = ['一更', '二更', '三更', '四更', '五更'];
 
 let activeIntro = null;
+
+function easeOutCubic(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return 1 - (1 - x) ** 3;
+}
+
+function easeOutBack(t) {
+  const x = Math.max(0, Math.min(1, t));
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2;
+}
 
 export function parseBootIntroQuery(search) {
   const raw = typeof search === 'string'
@@ -35,18 +50,19 @@ function recordIntroTrace(phase, progress) {
   }
 }
 
-function drawWoodblockFrame(ctx, W, H) {
-  const pad = Math.max(10, Math.min(18, Math.floor(Math.min(W, H) * 0.035)));
+function drawWoodblockFrame(ctx, W, H, alpha = 1) {
+  const pad = Math.max(12, Math.min(20, Math.floor(Math.min(W, H) * 0.038)));
   ctx.save();
-  ctx.strokeStyle = paperA(0.26);
-  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = paperA(0.22);
+  ctx.lineWidth = 1.2;
   ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
-  ctx.strokeStyle = lanternA(0.18);
+  ctx.strokeStyle = lanternA(0.16);
   ctx.lineWidth = 1;
-  ctx.strokeRect(pad + 4, pad + 4, W - (pad + 4) * 2, H - (pad + 4) * 2);
+  ctx.strokeRect(pad + 5, pad + 5, W - (pad + 5) * 2, H - (pad + 5) * 2);
 
-  // 四角回纹折线
-  const cLen = 14;
+  // 四角朱砂回纹折角
+  const cLen = 16;
   ctx.strokeStyle = VERM;
   ctx.lineWidth = 2;
   const corners = [
@@ -68,34 +84,48 @@ function drawWoodblockFrame(ctx, W, H) {
 function drawLoadingScene(ctx, W, H, progress01, clock) {
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, W, H);
-  drawWoodblockFrame(ctx, W, H);
+  drawWoodblockFrame(ctx, W, H, 0.92);
 
   const cx = W * 0.5;
-  const cy = H * 0.40;
+  const cy = H * 0.39;
   const p = Math.max(0.02, Math.min(1, progress01));
+  const ignite = easeOutCubic(p);
 
   // 灯笼暖晕随加载进度渐燃
-  const glowR = Math.min(W, H) * (0.20 + 0.16 * p);
+  const glowR = Math.min(W, H) * (0.20 + 0.22 * ignite);
   const grd = ctx.createRadialGradient(cx, cy, 4, cx, cy, glowR);
-  grd.addColorStop(0, lanternA(0.32 * p + 0.08));
-  grd.addColorStop(0.55, vermA(0.14 * p + 0.04));
+  grd.addColorStop(0, lanternA(0.36 * ignite + 0.08));
+  grd.addColorStop(0.5, vermA(0.16 * ignite + 0.04));
   grd.addColorStop(1, inkA(0));
   ctx.fillStyle = grd;
   ctx.beginPath();
   ctx.arc(cx, cy, glowR, 0, TAU);
   ctx.fill();
 
-  // 悬垂打更竹提灯
-  const sway = Math.sin(clock * 4.2) * 0.06;
+  // 淡墨光轮阵
   ctx.save();
-  ctx.translate(cx, cy - 52);
+  ctx.translate(cx, cy);
+  ctx.rotate(clock * 0.45);
+  ctx.strokeStyle = lanternA(0.18 + 0.18 * ignite);
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([8, 7]);
+  ctx.beginPath();
+  ctx.arc(0, 0, 56 + 10 * ignite, 0, TAU);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // 悬垂打更竹提灯
+  const sway = Math.sin(clock * 3.8) * 0.07;
+  ctx.save();
+  ctx.translate(cx, cy - 54);
   ctx.rotate(sway);
   // 提竿与挂线
   ctx.strokeStyle = PAPER_SHADE;
   ctx.lineWidth = 2.2;
   ctx.beginPath();
-  ctx.moveTo(-26, -6);
-  ctx.lineTo(18, 2);
+  ctx.moveTo(-28, -6);
+  ctx.lineTo(20, 2);
   ctx.moveTo(0, 0);
   ctx.lineTo(0, 18);
   ctx.stroke();
@@ -110,17 +140,17 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
   ctx.stroke();
 
   // 灯芯阳炎（随进度壮大）
-  const flameH = 8 + 14 * p;
+  const flameH = 9 + 15 * ignite;
   ctx.fillStyle = VERM;
   ctx.beginPath();
   ctx.moveTo(0, 52 - flameH);
-  ctx.quadraticCurveTo(9, 46, 5, 55);
+  ctx.quadraticCurveTo(9.5, 46, 5, 55);
   ctx.quadraticCurveTo(0, 59, -5, 55);
-  ctx.quadraticCurveTo(-9, 46, 0, 52 - flameH);
+  ctx.quadraticCurveTo(-9.5, 46, 0, 52 - flameH);
   ctx.fill();
   ctx.fillStyle = LANTERN;
   ctx.beginPath();
-  ctx.arc(0, 51, 4.5 + 2.5 * p, 0, TAU);
+  ctx.arc(0, 51, 4.5 + 2.8 * ignite, 0, TAU);
   ctx.fill();
 
   // 竹骨与上下灯箍
@@ -134,19 +164,21 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
   ctx.fillRect(-12, 69, 24, 5);
   // 朱砂灯穗
   ctx.fillStyle = VERM;
-  ctx.fillRect(-2, 74, 4, 16);
+  ctx.fillRect(-2, 74, 4, 17);
   ctx.restore();
 
   // 飘升火星微粒
-  for (let i = 0; i < 8; i++) {
-    const ph = (clock * 0.9 + i * 0.17) % 1;
-    const ex = cx + Math.sin(i * 2.3 + clock * 3) * (24 + i * 7);
-    const ey = cy + 30 - ph * 95;
+  for (let i = 0; i < 12; i++) {
+    const ph = (clock * 0.85 + i * 0.13) % 1;
+    const ex = cx + Math.sin(i * 2.1 + clock * 2.8) * (22 + i * 8);
+    const ey = cy + 38 - ph * 115;
     ctx.fillStyle = i % 2 === 0 ? LANTERN : VERM;
+    ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.9;
     ctx.beginPath();
-    ctx.arc(ex, ey, 1.5 + (1 - ph) * 1.4, 0, TAU);
+    ctx.arc(ex, ey, 1.4 + (1 - ph) * 1.5, 0, TAU);
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
 
   // 标题与副题
   ctx.fillStyle = PAPER;
@@ -155,25 +187,26 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
   ctx.textBaseline = 'middle';
   ctx.fillText('五更天 · 掌灯候更', cx, H * 0.56);
 
-  const stageLabel = p < 0.45 ? '研墨铺纸 · 唤起百器图谱' : p < 0.85 ? '校定更筹 · 点亮街巷灯火' : '更鼓已备 · 静候剑鸣破晓';
+  const stageLabel = p < 0.42
+    ? '研墨铺纸 · 唤起百器图谱'
+    : p < 0.82
+      ? '校定更筹 · 点亮街巷灯火'
+      : '更鼓已备 · 静候剑鸣破晓';
   ctx.fillStyle = PAPER_SHADE;
   ctx.font = `13px ${FONT_CN}`;
   ctx.fillText(stageLabel, cx, H * 0.605);
 
-  // 水墨飞白进度槽（宣纸底匣 + 朱砂毛笔横扫 + 金焰锋头）
-  const barW = Math.min(W * 0.74, 300);
-  const barH = 14;
+  // 水墨飞白进度槽（暗墨底槽 + 朱砂毛笔横扫 + 鎏金笔锋）
+  const barW = Math.min(W * 0.72, 290);
+  const barH = 10;
   const bx = cx - barW / 2;
   const by = H * 0.66;
 
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(bx - 4, by - 4, barW + 8, barH + 8);
-  ctx.strokeStyle = PAPER_SHADE;
+  ctx.fillStyle = paperA(0.14);
+  ctx.fillRect(bx - 3, by - 3, barW + 6, barH + 6);
+  ctx.strokeStyle = paperA(0.45);
   ctx.lineWidth = 1.2;
-  ctx.strokeRect(bx - 6, by - 6, barW + 12, barH + 12);
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 1.6;
-  ctx.strokeRect(bx - 2, by - 2, barW + 4, barH + 4);
+  ctx.strokeRect(bx - 3, by - 3, barW + 6, barH + 6);
 
   const fillW = Math.max(8, barW * p);
   brushStroke(
@@ -183,13 +216,13 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
       [bx + fillW * 0.5, by + barH * 0.46],
       [bx + fillW, by + barH * 0.52],
     ],
-    barH * 0.92,
-    { color: VERM, seed: 17, dry: 0.32, taperIn: 0.06, taperOut: 0.22, startWidth: 0.85 },
+    barH * 1.02,
+    { color: VERM, seed: 17, dry: 0.28, taperIn: 0.05, taperOut: 0.2, startWidth: 0.88 },
   );
   // 进度笔锋金芒点
   ctx.fillStyle = LANTERN;
   ctx.beginPath();
-  ctx.arc(bx + fillW, by + barH * 0.5, 4.2, 0, TAU);
+  ctx.arc(bx + fillW, by + barH * 0.5, 4.4, 0, TAU);
   ctx.fill();
 
   // 五更刻度点与百分比数字
@@ -199,7 +232,7 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
     const wx = bx + (barW * (i + 0.5)) / 5;
     const wy = by + barH + 22;
     const on = i < activeWatches;
-    ctx.fillStyle = on ? LANTERN : paperA(0.38);
+    ctx.fillStyle = on ? LANTERN : paperA(0.36);
     ctx.fillText(WATCH_LABELS[i], wx, wy);
   }
 
@@ -208,133 +241,140 @@ function drawLoadingScene(ctx, W, H, progress01, clock) {
   ctx.fillText(`${Math.round(p * 100)}%`, cx, by + barH + 46);
 
   // 底部工作室预热暗印
-  ctx.fillStyle = paperA(0.45);
+  ctx.fillStyle = paperA(0.5);
   ctx.font = `12px ${FONT_CN}`;
   ctx.fillText('剑清酱工作室 · 出品', cx, H * 0.88);
 }
 
 function drawStudioLogoScene(ctx, W, H, u01, clock) {
   const u = Math.max(0, Math.min(1, u01));
-  // 落印瞬间微震（u ∈ [0.46, 0.62]）
+  // 落印瞬间微震（u ∈ [0.48, 0.65]）
   let shakeX = 0;
   let shakeY = 0;
-  if (u >= 0.46 && u <= 0.64) {
-    const k = 1 - (u - 0.46) / 0.18;
-    shakeX = Math.sin(u * 260) * 3.2 * k;
-    shakeY = Math.cos(u * 210) * 2.4 * k;
+  if (u >= 0.48 && u <= 0.65) {
+    const k = 1 - (u - 0.48) / 0.17;
+    shakeX = Math.sin(u * 300) * 3.6 * k;
+    shakeY = Math.cos(u * 230) * 2.6 * k;
   }
 
   ctx.save();
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, W, H);
   ctx.translate(shakeX, shakeY);
-  drawWoodblockFrame(ctx, W, H);
+  drawWoodblockFrame(ctx, W, H, 0.86);
 
   const cx = W * 0.5;
   const cy = H * 0.46;
   const rng = makeRng(202605);
 
   // 1. 浓墨涟漪与金朱破墨晕染底衬
-  const rippleK = Math.min(1, u / 0.55);
-  const haloR = Math.min(W, H) * (0.18 + 0.24 * rippleK);
-  const grd = ctx.createRadialGradient(cx, cy - 18, 6, cx, cy - 18, haloR);
-  grd.addColorStop(0, lanternA(0.24 * rippleK));
-  grd.addColorStop(0.52, vermA(0.16 * rippleK));
+  const rippleK = easeOutCubic(u / 0.52);
+  const haloR = Math.min(W, H) * (0.20 + 0.28 * rippleK);
+  const grd = ctx.createRadialGradient(cx, cy - 26, 8, cx, cy - 26, haloR);
+  grd.addColorStop(0, lanternA(0.28 * rippleK));
+  grd.addColorStop(0.48, vermA(0.18 * rippleK));
   grd.addColorStop(1, inkA(0));
   ctx.fillStyle = grd;
   ctx.beginPath();
-  ctx.arc(cx, cy - 18, haloR, 0, TAU);
+  ctx.arc(cx, cy - 26, haloR, 0, TAU);
   ctx.fill();
 
-  // 水墨飞白圆环阵（破墨涟漪）
-  const ringR = Math.min(W * 0.34, 128) * (0.72 + 0.28 * rippleK);
+  // 水墨飞白破墨圆环阵
+  const ringR = Math.min(W * 0.36, 134) * (0.68 + 0.32 * rippleK);
   brushStroke(
     ctx,
     [
-      [cx - ringR, cy - 26],
-      [cx - ringR * 0.4, cy - 26 - ringR * 0.85],
-      [cx + ringR * 0.6, cy - 26 - ringR * 0.65],
+      [cx - ringR, cy - 30],
+      [cx - ringR * 0.42, cy - 30 - ringR * 0.88],
+      [cx + ringR * 0.62, cy - 30 - ringR * 0.66],
       [cx + ringR, cy - 18],
     ],
     10,
-    { color: PAPER_SHADE, seed: 41, dry: 0.55, alpha: 0.32 * rippleK },
+    { color: PAPER_SHADE, seed: 41, dry: 0.52, alpha: 0.34 * rippleK },
   );
-  splatter(ctx, cx - ringR * 0.55, cy - 48, 14 * rippleK, rng, { color: VERM, count: 10, mainScale: 0.45 });
-  splatter(ctx, cx + ringR * 0.62, cy + 12, 12 * rippleK, rng, { color: LANTERN, count: 9, mainScale: 0.35 });
+  splatter(ctx, cx - ringR * 0.56, cy - 54, 15 * rippleK, rng, { color: VERM, count: 10, mainScale: 0.45 });
+  splatter(ctx, cx + ringR * 0.64, cy + 16, 13 * rippleK, rng, { color: LANTERN, count: 9, mainScale: 0.35 });
 
-  // 2. 斜贯长空的破墨寒光剑气（左上→右下斜劈，随后凝为剑纹天罡弧）
-  const slashK = Math.min(1, u / 0.26);
-  const sx0 = cx - W * 0.38;
-  const sy0 = cy - 118;
-  const sx1 = sx0 + W * 0.76 * slashK;
-  const sy1 = sy0 + 168 * slashK;
+  // 2. 斜贯长空的破墨寒光剑气（左上→右下斜劈，带余晖淡出）
+  const slashK = easeOutCubic(u / 0.24);
+  const slashFade = u > 0.35 ? Math.max(0.28, 1 - (u - 0.35) * 1.1) : 1;
+  const sx0 = cx - W * 0.40;
+  const sy0 = cy - 128;
+  const sx1 = sx0 + W * 0.80 * slashK;
+  const sy1 = sy0 + 184 * slashK;
   brushStroke(
     ctx,
     [
       [sx0, sy0],
-      [(sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5 - 10],
+      [(sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5 - 12],
       [sx1, sy1],
     ],
-    13,
-    { color: PAPER, seed: 88, dry: 0.38, taperIn: 0.18, taperOut: 0.35, alpha: 0.88 },
+    14,
+    { color: PAPER, seed: 88, dry: 0.36, taperIn: 0.16, taperOut: 0.34, alpha: 0.9 * slashFade },
   );
   brushStroke(
     ctx,
     [
-      [sx0 + 12, sy0 + 8],
-      [(sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5 - 4],
+      [sx0 + 14, sy0 + 9],
+      [(sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5 - 5],
       [sx1 - 6, sy1 + 4],
     ],
-    4.5,
-    { color: LANTERN, seed: 93, dry: 0.2, taperIn: 0.2, taperOut: 0.3, alpha: 0.92 },
+    4.6,
+    { color: LANTERN, seed: 93, dry: 0.2, taperIn: 0.18, taperOut: 0.28, alpha: 0.95 * slashFade },
   );
 
-  // 3. 原创「剑清酱」八角剑魄徽记（竖立古剑贯宣纸圆月 + 赤金八角法轮）
-  if (u > 0.14) {
-    const crestA = Math.min(1, (u - 0.14) / 0.24);
+  // 3. 原创「剑清酱」八角剑魄徽记（弹性绽放入场）
+  if (u > 0.12) {
+    const rawC = Math.min(1, (u - 0.12) / 0.26);
+    const crestA = easeOutCubic(rawC);
+    const crestScale = 0.72 + 0.28 * easeOutBack(rawC);
     const crestY = cy - 86;
     ctx.save();
     ctx.globalAlpha = crestA;
     ctx.translate(cx, crestY);
+    ctx.scale(crestScale, crestScale);
 
-    // 外八角金框
+    // 外八角鎏金星轨（缓慢旋动）
+    ctx.save();
+    ctx.rotate(clock * 0.25);
     ctx.strokeStyle = LANTERN;
     ctx.lineWidth = 2.2;
     ctx.beginPath();
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU + Math.PI / 8;
-      const rx = Math.cos(a) * 38;
-      const ry = Math.sin(a) * 38;
+      const rx = Math.cos(a) * 40;
+      const ry = Math.sin(a) * 40;
       if (i === 0) ctx.moveTo(rx, ry);
       else ctx.lineTo(rx, ry);
     }
     ctx.closePath();
     ctx.stroke();
+    ctx.restore();
 
     // 宣纸满月衬底
     ctx.fillStyle = PAPER;
     ctx.beginPath();
-    ctx.arc(0, 0, 26, 0, TAU);
+    ctx.arc(0, 0, 27, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = VERM;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
 
     // 徽记中央立剑（浓墨剑身 + 宣纸脊线 + 鎏金剑格 + 朱砂剑穗）
     ctx.fillStyle = INK;
     ctx.beginPath();
-    ctx.moveTo(0, -44);
-    ctx.lineTo(6.5, -26);
-    ctx.lineTo(4.5, 16);
-    ctx.lineTo(-4.5, 16);
-    ctx.lineTo(-6.5, -26);
+    ctx.moveTo(0, -46);
+    ctx.lineTo(6.8, -27);
+    ctx.lineTo(4.6, 16);
+    ctx.lineTo(-4.6, 16);
+    ctx.lineTo(-6.8, -27);
     ctx.closePath();
     ctx.fill();
 
     ctx.strokeStyle = PAPER;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(0, -39);
+    ctx.moveTo(0, -40);
     ctx.lineTo(0, 14);
     ctx.stroke();
 
@@ -343,9 +383,9 @@ function drawStudioLogoScene(ctx, W, H, u01, clock) {
     ctx.strokeStyle = INK;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(-15, 14);
+    ctx.moveTo(-16, 14);
     ctx.lineTo(0, 9);
-    ctx.lineTo(15, 14);
+    ctx.lineTo(16, 14);
     ctx.lineTo(10, 19);
     ctx.lineTo(-10, 19);
     ctx.closePath();
@@ -353,36 +393,43 @@ function drawStudioLogoScene(ctx, W, H, u01, clock) {
     ctx.stroke();
 
     ctx.fillStyle = VERM;
-    ctx.fillRect(-2.6, 19, 5.2, 13);
+    ctx.fillRect(-2.6, 19, 5.2, 14);
     ctx.fillStyle = LANTERN;
     ctx.beginPath();
-    ctx.arc(0, 34, 4.2, 0, TAU);
+    ctx.arc(0, 35, 4.4, 0, TAU);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
 
-  // 4. 宣纸横卷书法牌匾：「剑清酱工作室」
+  // 4. 宣纸卷轴金线装裱 + 浓墨大字书法「剑清酱工作室」（从中心横向展卷，而非生硬弹框）
   if (u > 0.20) {
-    const textA = Math.min(1, (u - 0.20) / 0.24);
+    const rawT = Math.min(1, (u - 0.20) / 0.24);
+    const textE = easeOutCubic(rawT);
     const plaqueW = Math.min(W * 0.84, 326);
     const plaqueH = 68;
     const px = cx - plaqueW / 2;
-    const py = cy - 12;
+    const py = cy - 6;
 
     ctx.save();
-    ctx.globalAlpha = textA;
+    ctx.globalAlpha = textE;
 
-    // 宣纸牌匾底 + 朱砂金线装裱
+    // 展卷裁剪：从中央向两侧舒展
+    const revealW = plaqueW * (0.2 + 0.8 * textE);
+    ctx.beginPath();
+    ctx.rect(cx - revealW / 2 - 4, py - 4, revealW + 8, plaqueH + 8);
+    ctx.clip();
+
+    // 宣纸横幅与双线装裱
     ctx.fillStyle = PAPER;
     ctx.fillRect(px, py, plaqueW, plaqueH);
     ctx.fillStyle = PAPER_SHADE;
-    ctx.fillRect(px, py + plaqueH - 7, plaqueW, 7);
+    ctx.fillRect(px, py + plaqueH - 6, plaqueW, 6);
     ctx.strokeStyle = VERM;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.2;
     ctx.strokeRect(px + 3, py + 3, plaqueW - 6, plaqueH - 6);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.4;
+    ctx.lineWidth = 1.3;
     ctx.strokeRect(px + 7, py + 7, plaqueW - 14, plaqueH - 14);
 
     // 套色错位朱砂影 + 浓墨大字书法「剑清酱工作室」
@@ -390,28 +437,48 @@ function drawStudioLogoScene(ctx, W, H, u01, clock) {
     ctx.font = `${titleFontPx}px ${FONT_CN}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = vermA(0.36);
+    ctx.fillStyle = vermA(0.38);
     ctx.fillText('剑清酱工作室', cx + 1.5, py + plaqueH * 0.5 + 1.5);
     ctx.fillStyle = INK;
     ctx.fillText('剑清酱工作室', cx, py + plaqueH * 0.5);
-
-    // 牌匾下方鎏金副题
-    ctx.fillStyle = LANTERN;
-    ctx.font = `13px ${FONT_CN}`;
-    ctx.fillText('剑气破墨 · 秉烛守五更', cx, py + plaqueH + 24);
-    ctx.fillStyle = paperA(0.68);
-    ctx.font = `11px ${FONT_CN}`;
-    ctx.fillText('JIANQINGJIANG STUDIO PRESENTS', cx, py + plaqueH + 44);
     ctx.restore();
+
+    // 卷轴下方鎏金副题渐入
+    const subA = easeOutCubic((u - 0.30) / 0.22);
+    if (subA > 0) {
+      ctx.save();
+      ctx.globalAlpha = subA;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = LANTERN;
+      ctx.font = `13.5px ${FONT_CN}`;
+      ctx.fillText('剑气破墨 · 秉烛守五更', cx, py + plaqueH + 26);
+      ctx.fillStyle = paperA(0.68);
+      ctx.font = `11px ${FONT_CN}`;
+      ctx.fillText('JIANQINGJIANG STUDIO PRESENTS', cx, py + plaqueH + 46);
+      ctx.restore();
+    }
   }
 
-  // 5. 朱砂方印重重盖落（「剑清·出品」）+ 金石火星迸散
-  if (u > 0.44) {
-    const rawS = Math.min(1, (u - 0.44) / 0.16);
-    const scale = rawS < 1 ? 1.55 - 0.55 * rawS : 1;
+  // 5. 朱砂方印重重盖落（「剑清·出品」）+ 冲击波金环与火星迸散
+  if (u > 0.45) {
+    const rawS = Math.min(1, (u - 0.45) / 0.14);
+    const scale = rawS < 1 ? 1.65 - 0.65 * easeOutCubic(rawS) : 1;
     const sealSize = 52;
     const sealX = Math.min(W - 48, cx + Math.min(W * 0.32, 122));
-    const sealY = cy + 62;
+    const sealY = cy + 68;
+
+    // 落印冲击波金环
+    if (u > 0.50) {
+      const waveT = Math.min(1, (u - 0.50) / 0.30);
+      ctx.save();
+      ctx.strokeStyle = lanternA((1 - waveT) * 0.72);
+      ctx.lineWidth = 2.4 * (1 - waveT * 0.6);
+      ctx.beginPath();
+      ctx.arc(sealX, sealY, 24 + waveT * 42, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.translate(sealX, sealY);
@@ -436,9 +503,10 @@ function drawStudioLogoScene(ctx, W, H, u01, clock) {
     ctx.restore();
 
     // 印泥与金星飞沫
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * TAU + 0.3;
-      const dist = 34 + (i % 3) * 9 + Math.sin(clock * 4 + i) * 2;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU + 0.25;
+      const burst = easeOutCubic((u - 0.48) / 0.24);
+      const dist = 28 + burst * (14 + (i % 3) * 10) + Math.sin(clock * 4 + i) * 2;
       ctx.fillStyle = i % 2 === 0 ? LANTERN : VERM;
       ctx.beginPath();
       ctx.arc(sealX + Math.cos(a) * dist, sealY + Math.sin(a) * dist, i % 2 === 0 ? 2.4 : 2.0, 0, TAU);
@@ -495,6 +563,7 @@ export function runBootIntro(opts = {}) {
   let progress = hold === 'logo' ? 100 : hold === 'loading' ? 72 : 6;
   let elapsed = 0;
   let lastTs = 0;
+  let warmupTicks = 0;
   let rafId = 0;
   let finished = false;
   let fadingOut = false;
@@ -515,7 +584,7 @@ export function runBootIntro(opts = {}) {
   function resizeAndRedraw() {
     cssW = Math.max(1, window.innerWidth || el.clientWidth || 390);
     cssH = Math.max(1, window.innerHeight || el.clientHeight || 844);
-    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    dpr = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1));
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     renderCurrentFrame();
@@ -583,13 +652,23 @@ export function runBootIntro(opts = {}) {
 
   activeIntro = { el, promise, skip: () => cleanupAndResolve(true) };
 
+  // 主动唤醒 WenKai 字体加载，就绪后立即重绘确保「剑清酱工作室」不以系统字体闪现
+  try {
+    document.fonts?.load?.('28px "WenKai"', '剑清酱工作室五更天掌灯候更');
+  } catch {}
+  const fontsReady = (document.fonts && document.fonts.ready)
+    ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 900))])
+    : Promise.resolve();
+
   // 初次同步尺寸与首帧绘制
   syncIntroGlobal(false);
   resizeAndRedraw();
 
-  const fontsReady = (document.fonts && document.fonts.ready)
-    ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))])
-    : Promise.resolve();
+  fontsReady.then(() => {
+    if (!finished) {
+      renderCurrentFrame();
+    }
+  });
 
   if (hold === 'loading' || hold === 'logo') {
     fontsReady.then(() => {
@@ -603,17 +682,39 @@ export function runBootIntro(opts = {}) {
     return promise;
   }
 
-  const startTs = performance.now();
-
   function introTick(now) {
     if (finished) return;
+
+    // 若真机 WebView 尚在后台或尺寸未完成布局，先等待可见，不消耗动画时长
+    if (document.hidden || (window.innerWidth || 0) <= 0) {
+      lastTs = 0;
+      rafId = requestAnimationFrame(introTick);
+      return;
+    }
+
+    // 首帧热身：跳过启动期的巨额首帧抖动（TapTap 原生闪屏/模块解析耗时），从可见首帧平滑起步
+    if (warmupTicks < 1) {
+      warmupTicks++;
+      lastTs = now;
+      phase = 'loading';
+      progress = 10;
+      sawLoadingFrame = true;
+      renderCurrentFrame();
+      syncIntroGlobal(false);
+      rafId = requestAnimationFrame(introTick);
+      return;
+    }
+
+    const rawDt = lastTs > 0 ? (now - lastTs) / 1000 : 1 / 60;
     lastTs = now;
-    elapsed = Math.max(1 / 60, (now - startTs) / 1000);
+    // 限幅帧步长（<= 120ms）：既防手机端首帧卡顿直接跳过 Logo，又不拖慢低帧率环境播放节奏
+    const dt = Math.min(0.12, Math.max(1 / 120, rawDt));
+    elapsed += dt;
 
     if (!sawLoadingFrame || elapsed < LOADING_DUR) {
       phase = 'loading';
       const rawP = Math.min(1, elapsed / LOADING_DUR);
-      progress = Math.max(12, Math.min(100, Math.round(rawP * 100)));
+      progress = Math.max(10, Math.min(100, Math.round(easeOutCubic(rawP) * 100)));
       if (el.getAttribute('data-intro-phase') !== 'loading') {
         el.setAttribute('data-intro-phase', 'loading');
       }
@@ -630,18 +731,18 @@ export function runBootIntro(opts = {}) {
         progress = 100;
         el.setAttribute('data-intro-phase', 'logo');
       }
-      const logoU = !sawLogoFrame ? Math.max(0.52, Math.min(1, (elapsed - LOADING_DUR) / LOGO_DUR)) : Math.max(0.22, Math.min(1, (elapsed - LOADING_DUR) / LOGO_DUR));
-      if (!playedSlashSfx && logoU >= 0.12) {
+      const logoU = Math.max(0.06, Math.min(1, (elapsed - LOADING_DUR) / LOGO_DUR));
+      if (!playedSlashSfx && logoU >= 0.08) {
         playedSlashSfx = true;
         try { resolveAudio()?.play?.('fire_coinsword'); } catch {}
       }
-      if (!playedSealSfx && logoU >= 0.46) {
+      if (!playedSealSfx && logoU >= 0.45) {
         playedSealSfx = true;
         try { resolveAudio()?.play?.('woodblock'); } catch {}
       }
       sawLogoFrame = true;
       renderCurrentFrame();
-      syncIntroGlobal(logoU >= 0.5);
+      syncIntroGlobal(logoU >= 0.45);
       rafId = requestAnimationFrame(introTick);
       return;
     }

@@ -416,7 +416,7 @@ export function createRunUI(root, deps) {
       proceed();
     };
 
-    function render() {
+    function render(isReroll = false) {
       const rr = run();
       if (!rr) return;
       const mode = rr.choiceMode === 'blessing' ? 'blessing' : 'normal';
@@ -524,7 +524,8 @@ export function createRunUI(root, deps) {
         const card = h('div', {
           role: 'button',
           tabindex: '0',
-          class: cardCls,
+          class: `${cardCls}${isReroll ? ' is-redealt' : ''}`,
+          style: { '--qian-i': String(i), '--qian-tilt': `${(i - 1) * 2.2}deg` },
           dataset: cardDataset,
           'aria-label': `${d.name}${d.level ? ' ' + d.level + '级' : ''}：${d.desc}`,
           onClick: () => pick(i),
@@ -553,7 +554,7 @@ export function createRunUI(root, deps) {
       actions.appendChild(sealButton(mode === 'blessing' ? '改命换签' : '换签', () => {
         if (!sim.rerollChoices(run())) { toast('签换完了'); return; }
         deps.audio?.play('paper');
-        render();
+        render(true);
       }, {
         kind: 'ghost',
         badge: left,
