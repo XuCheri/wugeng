@@ -1,5 +1,7 @@
-// 更房大厅（F2 六角色 + 自选初始兵刃「本命专精」+ F7 暗夜牌匾与实时演武预览台 + F8 鬼市 + F9 功绩 + F11 云端一键同步）。
+// 更房大厅（独立游戏视觉层次重构：顶部极简状态条 + 居中沉浸动态演武舞台 + 右侧纵排功能浮栏 + 底部单屏备战台 + 暗漆四项底栏）。
+// 切换角色/兵刃/夜色时原地局部刷新并触发舞台破墨金芒涟漪，零整页重建闪烁。
 import { h, clear, scroll, sealButton, adButton, veil, toast, cnNum, formatCoins, formatTime } from './dom.js';
+import { applyStagger, pulseClass } from './motion.js';
 import { heroInfo, weaponName, nightLabel, nightDesc, SHOP_COPY, CHARM_LABEL, relicName } from './copy.js';
 import { icon } from './icons.js';
 import { settingsBody } from './settings.js';
@@ -44,6 +46,8 @@ export function renderHub(root, ctx) {
   let charmPick = null;
   let stageCtl = null;
 
+  // ── 1. 顶部极简状态栏 ──
+  const daoEl = h('span', { class: 'hub-dao' }, save.daoName || '守夜打更人');
   const subLineEl = h('p', { class: 'hub-sub' }, statLine(save));
   const cloudBtn = h('button', {
     type: 'button',
@@ -59,37 +63,91 @@ export function renderHub(root, ctx) {
     },
   });
   const coinBox = h('div', { class: 'hub-coins' });
+
+  // ── 2. 居中沉浸动态演武舞台 + 浮层人物铭牌 + 右侧功能纵栏 ──
+  const stageCanvas = h('canvas', {
+    class: 'hero-stage__canvas',
+    width: 680,
+    height: 360,
+    'aria-label': '当前角色衣冠与本命兵刃演武台',
+    onClick: () => openMarket(getActiveHero()),
+  });
+  const heroSpotlightEl = h('div', { class: 'hero-spotlight' });
   const ribbonBox = h('div', { class: 'hub-ribbon', role: 'toolbar', 'aria-label': '更房要务' });
-  const startBox = h('div', { class: 'hub-start' });
-  const navBox = h('nav', { class: 'hub-nav' });
+  const stageSection = h('section', { class: 'hub-stage-panel', 'aria-label': '守夜演武台' },
+    h('div', { class: 'hero-stage' },
+      stageCanvas,
+      heroSpotlightEl,
+      ribbonBox));
+
+  // ── 3. 底部备战台（6人一排头像条 + 横滑兵刃架 + 夜色/护身符行 + 唯一主按钮）──
+  const heroRowEl = h('div', { class: 'hero-row', role: 'radiogroup', 'aria-label': '选打更人' });
+  const starterHeadSubEl = h('span', { class: 'starter-sec__sub' });
+  const starterGridEl = h('div', { class: 'starter-grid', role: 'radiogroup', 'aria-label': '自选起手兵刃' });
+  const runBarEl = h('div', { class: 'hub-run-bar' });
+  const footWrap = h('div', { class: 'hub-foot' },
+    sealButton('出门打更', () => {
+      const n = Math.min(save.selectedNight, save.nightUnlocked);
+      const charm = charmPick ? { relicId: charmPick } : null;
+      const chosenStarter = getHeroStarterWeapon(save, getActiveHero());
+      ctx.onStart({
+        heroId: getActiveHero(),
+        startWeapon: chosenStarter,
+        unlockedWeapons: getUnlockedWeaponList(),
+        nightLevel: n,
+        charm,
+      });
+    }, { cls: 'btn--wide btn--big hub-cta' }));
+
+  const startBox = h('section', { class: 'hub-start', 'aria-label': '起更备战' },
+    h('div', { class: 'hub-deck' },
+      heroRowEl,
+      h('div', { class: 'starter-sec' },
+        h('div', { class: 'starter-sec__head' },
+          h('span', { class: 'starter-sec__title' }, '起手兵刃'),
+          starterHeadSubEl),
+        starterGridEl),
+      runBarEl,
+      footWrap));
+
+  // ── 4. 底部暗漆四项导航栏（退居次级，衬托「出门打更」唯一主焦点）──
+  const navBox = h('nav', { class: 'hub-nav', 'aria-label': '更房常设' });
 
   const el = h('div', { class: 'screen screen--hub' },
     h('header', { class: 'hub-head' },
       h('div', { class: 'hub-brand' },
         h('div', { class: 'hub-title-row' },
           h('h1', { class: 'hub-title' }, '更房'),
-          h('span', { class: 'hub-dao' }, save.daoName || '守夜打更人')),
+          daoEl),
         subLineEl),
       h('div', { class: 'hub-head__right' }, cloudBtn, coinBox)),
-    ribbonBox,
+    stageSection,
     startBox,
     navBox);
   root.appendChild(el);
 
+  function getActiveHero() {
+    const activeHero = HERO_IDS.includes(save.selectedHero) && save.unlockedHeroes.includes(save.selectedHero)
+      ? save.selectedHero
+      : 'zhou';
+    save.selectedHero = activeHero;
+    return activeHero;
+  }
+
   function statLine(s) {
-    if (!s.stats?.runs) return '头一回守夜，莫慌';
-    const best = s.leaderboard?.bestScore ? ` · 最高 ${formatCoins(s.leaderboard.bestScore)}分` : '';
-    return `已守 ${s.stats.runs} 夜 · 见 ${s.stats.clears} 回天亮${best}`;
+    if (!s.stats?.runs) return '头一回守夜 · 提灯上街';
+    const best = s.leaderboard?.bestScore ? ` · 最高 ${formatCoins(s.leaderboard.bestScore)}` : '';
+    return `守 ${s.stats.runs} 夜 · 天亮 ${s.stats.clears} 回${best}`;
   }
 
   function cloudLabelText() {
     const st = ctx.cloudState?.() || { available: false };
-    if (!st.available) return '本机已存';
-    if (st.syncing) return '云同步中';
-    if (st.lastError) return '云端重试';
-    if (st.dirty) return '待传云端';
-    if (st.lastSyncAt > 0 || st.lastUploadAt > 0) return '云端已同步';
-    return '云端同步';
+    if (!st.available) return '本机';
+    if (st.syncing) return '同步中';
+    if (st.lastError) return '重试';
+    if (st.dirty) return '待传';
+    if (st.lastSyncAt > 0 || st.lastUploadAt > 0) return '已同步';
+    return '云同步';
   }
 
   function destroyStage() {
@@ -99,23 +157,43 @@ export function renderHub(root, ctx) {
     }
   }
 
+  function ensureStage() {
+    if (stageCtl) {
+      stageCtl.refreshNow();
+      return;
+    }
+    stageCtl = createHeroStage(stageCanvas, () => {
+      const hid = getActiveHero();
+      const sw = getHeroStarterWeapon(save, hid);
+      return {
+        mode: 'hero',
+        heroId: hid,
+        skinId: getEquippedHeroSkin(save, hid),
+        starterWeapon: sw,
+        attackVfx: getEquippedAttackVfx(save),
+        isSignature: isHeroSignatureWeapon(hid, sw),
+        legacyOutfit: save.cosmetics?.equipped?.outfit || null,
+        legacyLantern: save.cosmetics?.equipped?.lantern || null,
+      };
+    });
+  }
+
   function refreshHeaderAndRibbon() {
     clear(coinBox).appendChild(coinTag(save.coins, true));
-    const daoEl = el.querySelector('.hub-dao');
-    if (daoEl) daoEl.textContent = save.daoName || '守夜打更人';
+    daoEl.textContent = save.daoName || '守夜打更人';
     subLineEl.textContent = statLine(save);
     cloudBtn.textContent = cloudLabelText();
 
     clear(ribbonBox);
     const unclaimedAch = getUnclaimedAchievementCount(save);
     ribbonBox.append(
-      ribbonItem('鬼市', '衣冠特效', 'open-market', () => openMarket()),
-      ribbonItem('功绩', unclaimedAch > 0 ? `可领 ${unclaimedAch}` : '解锁秘器', 'open-achievements', () => openAchievements(), unclaimedAch),
-      ribbonItem('天榜', '五更总榜', 'open-leaderboard', () => {
+      ribbonItem('鬼市', '衣冠', 'open-market', () => openMarket(getActiveHero())),
+      ribbonItem('功绩', unclaimedAch > 0 ? `领${unclaimedAch}` : '秘器', 'open-achievements', () => openAchievements(), unclaimedAch),
+      ribbonItem('天榜', '排行', 'open-leaderboard', () => {
         if (ctx.onOpenLeaderboard) ctx.onOpenLeaderboard();
         else openLocalLeaderboardFallback();
       }),
-      ribbonItem('同守', '多人联机', 'open-coop', () => {
+      ribbonItem('同守', '联机', 'open-coop', () => {
         if (ctx.onOpenCoop) ctx.onOpenCoop();
         else openCoopFallback();
       }),
@@ -137,13 +215,6 @@ export function renderHub(root, ctx) {
     dot);
   }
 
-  function refresh() {
-    reconcileAchievements(save);
-    refreshHeaderAndRibbon();
-    renderStart();
-    renderNav();
-  }
-
   function getUnlockedWeaponList() {
     const raw = Array.isArray(save.unlockedWeapons) && save.unlockedWeapons.length
       ? save.unlockedWeapons.filter((w) => WEAPON_IDS.includes(w))
@@ -151,42 +222,44 @@ export function renderHub(root, ctx) {
     return raw.length ? raw : [...DEFAULT_UNLOCKED_WEAPONS];
   }
 
-  // ───────── 起更（演武台 + 6角色 + 自选初始兵刃 + 夜色 + 护身符）─────────
-  function renderStart() {
-    destroyStage();
-    clear(startBox);
-
-    const activeHero = HERO_IDS.includes(save.selectedHero) && save.unlockedHeroes.includes(save.selectedHero)
-      ? save.selectedHero
-      : 'zhou';
-    save.selectedHero = activeHero;
+  // ───────── 原地刷新备战区与舞台铭牌（零画布重建，丝滑切换动画）─────────
+  function renderStart(animateSwitch = false) {
+    const activeHero = getActiveHero();
     const unlockedWeapons = getUnlockedWeaponList();
     const activeStarter = getHeroStarterWeapon(save, activeHero);
     save.selectedStarterWeapon = activeStarter;
     const isSig = isHeroSignatureWeapon(activeHero, activeStarter);
-
-    // 1. 实时动态演武预览台
-    const stageCanvas = h('canvas', {
-      class: 'hero-stage__canvas',
-      width: 620,
-      height: 216,
-      'aria-label': '当前角色衣冠与本命兵刃演武台',
-      onClick: () => openMarket(activeHero),
-    });
+    const hero = heroInfo(activeHero);
     const skinDef = getSkinDef(getEquippedHeroSkin(save, activeHero), activeHero);
     const vfxDef = getAttackVfxDef(getEquippedAttackVfx(save));
-    const stageWrap = h('div', { class: 'hero-stage' },
-      stageCanvas,
-      h('div', { class: 'hero-stage__overlay' },
-        h('span', { class: 'hero-stage__tag' }, `${skinDef.name} · ${vfxDef.name}`),
+
+    // 1. 舞台浮层人物铭牌 + 换装标签 + 本命专精徽章
+    const sigBadge = isSig
+      ? h('div', { class: 'signature-badge' },
+        h('i', { class: 'stamp stamp--xs' }, '本'),
+        h('span', {}, '本命专精 · 伤+25% 速+10% 域+15%'))
+      : h('div', { class: 'signature-badge is-hidden', hidden: true });
+
+    clear(heroSpotlightEl).append(
+      h('div', { class: 'hero-spotlight__top' },
+        h('span', { class: 'hero-spotlight__name' }, hero.name),
         h('button', {
           type: 'button',
           class: 'hero-stage__wardrobe',
           onClick: () => openMarket(activeHero),
-        }, '换装')));
+        }, `${skinDef.name} · 换装`)),
+      sigBadge,
+      h('p', { class: 'hero-spotlight__trait' },
+        `绝技「${hero.ultName}」· ${hero.trait}`),
+      h('p', { class: 'hero-spotlight__vfx' },
+        `${hero.flavor} · ${vfxDef.name}`));
 
-    // 2. 6 名守夜打更人选择栏
-    const heroes = h('div', { class: 'hero-row', role: 'radiogroup', 'aria-label': '选打更人' });
+    if (animateSwitch) {
+      pulseClass(heroSpotlightEl, 'is-popping', 240);
+    }
+
+    // 2. 六守夜人单行精巧头像条
+    clear(heroRowEl);
     for (const id of HERO_IDS) {
       const info = heroInfo(id);
       const unlocked = save.unlockedHeroes.includes(id);
@@ -199,49 +272,49 @@ export function renderHub(root, ctx) {
         class: `hero-tile${sel ? ' is-on' : ''}${unlocked ? '' : ' is-locked'}`,
         onClick: () => {
           if (!unlocked) {
-            toast(`未解锁：${info.unlock}`);
+            const p = heroUnlockProgress(save, id);
+            const prog = p ? `（进度 ${p.have}/${p.need}）` : '';
+            toast(`未解锁：${info.unlock}${prog}`);
             return;
           }
+          if (save.selectedHero === id) return;
           save.selectedHero = id;
           save.selectedStarterWeapon = getHeroStarterWeapon(save, id);
           ctx.persist(false);
           ctx.onProfileChange?.();
-          renderStart();
+          renderStart(true);
+          stageCtl?.triggerBurst();
         },
       },
-      icon('hero', id, 44, HERO_GLYPH[id]),
+      icon('hero', id, 34, HERO_GLYPH[id]),
       h('span', { class: 'hero-tile__name' }, info.short),
       sel ? h('i', { class: 'stamp stamp--xs hero-tile__stamp' }, '选') : null,
-      unlocked ? null : h('i', { class: 'hero-tile__lock' }, '未解'));
-      heroes.appendChild(tile);
+      unlocked ? null : h('i', { class: 'hero-tile__lock' }, '锁'));
+      heroRowEl.appendChild(tile);
     }
 
-    const hero = heroInfo(activeHero);
-    const sigBadge = isSig
-      ? h('div', { class: 'signature-badge' },
-        h('i', { class: 'stamp stamp--xs' }, '本'),
-        h('span', {}, '本命专精 · 伤+25% 速+10% 域+15%'))
-      : h('div', { class: 'signature-badge is-hidden', hidden: true });
+    // 3. 横向滑动起手兵刃架（本命兵刃与当前已选兵刃置前，切换角色立即可见且永不半截裁切）
+    starterHeadSubEl.textContent = isSig
+      ? `已携「${weaponName(activeStarter)}」· 本命加成`
+      : `已携「${weaponName(activeStarter)}」· 择「${weaponName(hero.weapon)}」享本命`;
 
-    const heroCard = h('div', { class: 'hero-card' },
-      h('div', { class: 'hero-card__top' },
-        h('p', { class: 'hero-card__name' }, hero.name),
-        sigBadge),
-      h('p', { class: 'hero-card__flavor' }, hero.flavor),
-      h('p', { class: 'hero-card__meta' }, `本命「${weaponName(hero.weapon)}」· 绝技「${hero.ultName}」· ${hero.trait}`));
-
-    // 3. 自选初始兵刃栏
-    const displayWeaponIds = [
+    const rawWeaponIds = [
       ...unlockedWeapons,
       ...[...ACH_WEAPON_SET].filter((w) => !unlockedWeapons.includes(w)),
     ];
-    const starterGrid = h('div', { class: 'starter-grid', role: 'radiogroup', 'aria-label': '自选起手兵刃' });
+    const priorityIds = [hero.weapon, activeStarter].filter((w, i, a) => w && rawWeaponIds.includes(w) && a.indexOf(w) === i);
+    const displayWeaponIds = [
+      ...priorityIds,
+      ...rawWeaponIds.filter((w) => !priorityIds.includes(w)),
+    ];
+    clear(starterGridEl);
+    let activeChipEl = null;
     for (const wid of displayWeaponIds) {
       const wUnlocked = unlockedWeapons.includes(wid);
       const picked = wUnlocked && activeStarter === wid;
       const wSig = isHeroSignatureWeapon(activeHero, wid);
       const wName = weaponName(wid, false);
-      starterGrid.appendChild(h('button', {
+      const chip = h('button', {
         type: 'button',
         role: 'radio',
         disabled: !wUnlocked,
@@ -256,108 +329,61 @@ export function renderHub(root, ctx) {
           if (setHeroStarterWeapon(save, activeHero, wid)) {
             ctx.persist(false);
             ctx.onProfileChange?.();
-            renderStart();
+            renderStart(true);
+            stageCtl?.triggerBurst();
           }
         },
       },
       icon('weapon', wid, 26, wName[0]),
       h('span', { class: 'starter-chip__name' }, wName),
       wSig && wUnlocked ? h('em', { class: 'starter-chip__tag' }, '本命') : null,
-      !wUnlocked ? h('em', { class: 'starter-chip__tag is-lock' }, '功绩') : null));
+      !wUnlocked ? h('em', { class: 'starter-chip__tag is-lock' }, '功绩') : null);
+      if (picked) activeChipEl = chip;
+      starterGridEl.appendChild(chip);
     }
-    const starterSec = h('div', { class: 'starter-sec' },
-      h('div', { class: 'starter-sec__head' },
-        h('span', { class: 'starter-sec__title' }, '起手兵刃'),
-        h('span', { class: 'starter-sec__sub' }, `已携「${weaponName(activeStarter)}」${isSig ? '（本命加成已激活）' : '（可选本命兵刃享专精）'}`)),
-      starterGrid);
+    if (animateSwitch && activeChipEl) {
+      try {
+        activeChipEl.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+      } catch {}
+    }
 
-    // 未解锁英雄条件说明
-    const locks = HERO_IDS.filter((id) => !save.unlockedHeroes.includes(id)).map((id) => {
-      const info = heroInfo(id);
-      const p = heroUnlockProgress(save, id);
-      return h('li', {}, h('b', {}, info.short), `：${info.unlock}`, p ? h('span', { class: 'muted' }, `（进度 ${p.have}/${p.need}）`) : null);
-    });
-
-    // 4. 夜色选择
+    // 4. 夜色难度与护身符同排紧凑配置（永远在首屏可见）
     const n = Math.min(save.selectedNight, save.nightUnlocked);
-    const night = h('div', { class: 'night' },
+    const nightEl = h('div', { class: 'night' },
       h('button', {
         type: 'button', class: 'night__arrow', 'aria-label': '夜色降一级', disabled: n <= 0,
-        onClick: () => { save.selectedNight = Math.max(0, n - 1); ctx.persist(false); renderStart(); },
+        onClick: () => { save.selectedNight = Math.max(0, n - 1); ctx.persist(false); renderStart(false); },
       }, '‹'),
       h('div', { class: 'night__mid' },
         h('p', { class: 'night__name' }, nightLabel(n)),
         h('p', { class: 'night__desc' }, nightDesc(n))),
       h('button', {
         type: 'button', class: 'night__arrow', 'aria-label': '夜色升一级', disabled: n >= save.nightUnlocked,
-        onClick: () => { save.selectedNight = Math.min(save.nightUnlocked, n + 1); ctx.persist(false); renderStart(); },
+        onClick: () => { save.selectedNight = Math.min(save.nightUnlocked, n + 1); ctx.persist(false); renderStart(false); },
       }, '›'));
 
-    // 5. 护身符
     const counts = {};
     for (const c of save.charms) counts[c.relicId] = (counts[c.relicId] || 0) + 1;
     const charmIds = Object.keys(counts);
     if (charmPick && !counts[charmPick]) charmPick = null;
-    let charmRow = null;
+    let charmBtn = null;
     if (charmIds.length) {
       const opts = [null, ...charmIds];
       const idx = opts.indexOf(charmPick);
-      charmRow = h('button', {
-        type: 'button', class: 'charm-pick',
-        onClick: () => { charmPick = opts[(idx + 1) % opts.length]; renderStart(); },
+      charmBtn = h('button', {
+        type: 'button',
+        class: `charm-pick${charmPick ? ' is-on' : ''}`,
+        onClick: () => { charmPick = opts[(idx + 1) % opts.length]; renderStart(false); },
       },
       h('span', { class: 'charm-pick__label' }, '护身符'),
-      h('span', { class: 'charm-pick__val' }, charmPick ? `${relicName(charmPick)} ×${counts[charmPick]}` : '不带'),
-      h('span', { class: 'charm-pick__hint' }, charmPick ? '开局即得此法器一级，用后即耗' : '点此换'));
+      h('span', { class: 'charm-pick__val' }, charmPick ? `${relicName(charmPick)}×${counts[charmPick]}` : '不带'));
     }
 
-    const footWrap = h('div', { class: 'hub-foot' },
-      sealButton('出门打更', () => {
-        const charm = charmPick ? { relicId: charmPick } : null;
-        const chosenStarter = getHeroStarterWeapon(save, save.selectedHero);
-        ctx.onStart({
-          heroId: save.selectedHero,
-          startWeapon: chosenStarter,
-          unlockedWeapons: getUnlockedWeaponList(),
-          nightLevel: n,
-          charm,
-        });
-      }, { cls: 'btn--wide btn--big' }));
-
-    startBox.appendChild(scroll({
-      title: '起更',
-      sub: '择守夜之人 · 选趁手兵刃',
-      cls: 'hub-scroll',
-      body: [
-        stageWrap,
-        heroes,
-        heroCard,
-        starterSec,
-        locks.length ? h('ul', { class: 'lock-list' }, locks) : null,
-        h('div', { class: 'ink-rule ink-rule--thin', 'aria-hidden': 'true' }),
-        night,
-        charmRow,
-      ],
-      footer: [footWrap],
-    }));
-
-    stageCtl = createHeroStage(stageCanvas, () => {
-      const hid = HERO_IDS.includes(save.selectedHero) ? save.selectedHero : 'zhou';
-      const sw = getHeroStarterWeapon(save, hid);
-      return {
-        mode: 'hero',
-        heroId: hid,
-        skinId: getEquippedHeroSkin(save, hid),
-        starterWeapon: sw,
-        attackVfx: getEquippedAttackVfx(save),
-        isSignature: isHeroSignatureWeapon(hid, sw),
-        legacyOutfit: save.cosmetics?.equipped?.outfit || null,
-        legacyLantern: save.cosmetics?.equipped?.lantern || null,
-      };
-    });
+    clear(runBarEl).append(nightEl, charmBtn);
+    ensureStage();
   }
 
-  // ───────── 底部固定四项入口（100% 兼容旧冒烟与 E2E）─────────
+  // ───────── 底部固定四项入口（暗漆沉稳风，100% 兼容旧冒烟与 E2E）─────────
   function renderNav() {
     clear(navBox);
     const st = getCheckinState(save, ctx.now());
@@ -370,8 +396,15 @@ export function renderHub(root, ctx) {
   }
   function navSeal(text, sub, onClick, dot = false, label = undefined) {
     return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), h('small', {}, sub)), onClick, {
-      kind: 'square', cls: dot ? 'has-dot' : '', label,
+      kind: 'square', cls: `hub-dock-btn${dot ? ' has-dot' : ''}`, label,
     });
+  }
+
+  function refresh() {
+    reconcileAchievements(save);
+    refreshHeaderAndRibbon();
+    renderStart(false);
+    renderNav();
   }
 
   // ───────── 鬼市商铺 ─────────
@@ -385,6 +418,7 @@ export function renderHub(root, ctx) {
       onCosmeticChange: () => {
         ctx.onCosmeticChange?.();
         refresh();
+        stageCtl?.triggerBurst();
       },
       onOpenStatShop: () => openShop(),
       initialHero,
@@ -406,7 +440,7 @@ export function renderHub(root, ctx) {
     });
   }
 
-  // ───────── 五更守夜总榜本地荣誉榜（M3 优雅占位，M4 对接真实线上榜）─────────
+  // ───────── 五更守夜总榜本地荣誉榜（兜底）─────────
   function openLocalLeaderboardFallback() {
     let v;
     let col = 'public';
@@ -439,6 +473,7 @@ export function renderHub(root, ctx) {
               h('p', { class: 'shop-row__flavor' }, `${nightLabel(row.nightLevel || 0)} · 斩祟 ${row.kills} · ${formatTime(row.timeSec)}`)),
             h('b', {}, `${formatCoins(row.score)}分`)));
         });
+        applyStagger(bodyBox, '.shop-row', 8);
       }
     };
     renderLb();
@@ -451,7 +486,7 @@ export function renderHub(root, ctx) {
     }), { onBackdrop: () => v.close() });
   }
 
-  // ───────── 同守五更联机面板占位（M4 注入真实多通道房间逻辑）─────────
+  // ───────── 同守五更联机面板占位（兜底）─────────
   function openCoopFallback() {
     let v;
     v = veil(root, scroll({
@@ -468,7 +503,7 @@ export function renderHub(root, ctx) {
     let v;
     const list = h('div', { class: 'shop-list' });
     const head = h('div', { class: 'shop-coins shop-coins--bar' });
-    const render = () => {
+    const render = (stagger = false) => {
       clear(head).append(
         coinTag(save.coins, true),
         h('button', {
@@ -476,9 +511,9 @@ export function renderHub(root, ctx) {
           class: 'link-btn shop-market-link',
           dataset: { action: 'open-market' },
           onClick: () => {
-            v?.close();
+            v?.close({ instant: true });
             ctx.onCloudFlush?.();
-            openMarket();
+            openMarket(getActiveHero());
           },
         }, '前往鬼市衣冠 ›'),
       );
@@ -505,17 +540,18 @@ export function renderHub(root, ctx) {
               if (!r.ok) { toast(r.reason === 'coins' ? `铜钱不够，还差 ${cost - save.coins}` : '已经满了'); return; }
               ctx.persist(true);
               toast(`${it.name || copy.name}升到${cnNum(r.level)}级`);
-              render();
+              render(false);
               refresh();
             }, { kind: 'small', disabled: save.coins < cost, label: `${it.name} 升级，${cost} 铜钱` }));
         list.appendChild(row);
       }
+      if (stagger) applyStagger(list, '.shop-row', 8);
     };
     const closeShop = () => {
       v?.close();
       ctx.onCloudFlush?.();
     };
-    render();
+    render(true);
     v = veil(root, scroll({
       title: '加点',
       sub: '花铜钱，长本事，一辈子都在',
@@ -530,7 +566,7 @@ export function renderHub(root, ctx) {
     let v;
     const body = h('div', { class: 'checkin' });
     const foot = h('div', { class: 'checkin-foot' });
-    const render = () => {
+    const render = (stagger = false) => {
       const st = getCheckinState(save, ctx.now());
       clear(body);
       const grid = h('div', { class: 'checkin-grid' });
@@ -547,6 +583,7 @@ export function renderHub(root, ctx) {
         r.claimed ? h('i', { class: 'stamp stamp--sm checkin-cell__stamp' }, '押') : null);
         grid.appendChild(cell);
       }
+      if (stagger) applyStagger(grid, '.checkin-cell', 7);
       body.append(grid, h('p', { class: 'checkin-note' },
         st.rollback ? `簿上记着 ${save.checkin.lastClaimDate}，比今天还晚。等日子走到了再来。`
           : st.claimedToday ? '今日已画押，明日再来。'
@@ -559,7 +596,7 @@ export function renderHub(root, ctx) {
           if (!r.ok) { toast('今日领不了'); return; }
           ctx.persist(true);
           toast(rewardText(r), 2600);
-          render();
+          render(false);
           refresh();
         };
         foot.appendChild(sealButton('画押领取', () => claim(false)));
@@ -572,7 +609,7 @@ export function renderHub(root, ctx) {
       }
       foot.appendChild(sealButton('回去', () => { v.close(); ctx.onCloudFlush?.(); }, { kind: 'ghost', dataset: { action: 'close-modal' } }));
     };
-    render();
+    render(true);
     v = veil(root, scroll({
       title: '更簿',
       sub: '七日一轮，第七日有好东西',

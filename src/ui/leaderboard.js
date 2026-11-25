@@ -1,5 +1,6 @@
 // 五更守夜总榜木版画弹窗（F12：全服总榜 public / 好友榜 friends / 我的排名 / 原生榜单唤起 / 降级回退）
 import { h, clear, scroll, sealButton, veil, toast, formatCoins, formatTime } from './dom.js';
+import { applyStagger } from './motion.js';
 import { heroInfo, nightLabel } from './copy.js';
 import {
   LEADERBOARD_COLLECTIONS,
@@ -119,6 +120,7 @@ export function openLeaderboardModal(root, opts = {}) {
         h('b', {}, formatCoins(row.score || 0)),
         h('small', {}, PRIMARY_LEADERBOARD_UNIT))));
     });
+    applyStagger(listBox, '.lb-row', 8);
   }
 
   async function loadCurrentTab() {

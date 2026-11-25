@@ -384,41 +384,126 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     isSignature = true,
     legacyOutfit = null,
     legacyLantern = null,
+    burstProgress = 1, // 0..1 切换角色/兵刃时的破墨金芒涟漪
   } = state;
 
-  // 演武台暗夜木刻底衬
+  const isTall = h >= 145;
+  // 演武台暗夜木刻底衬 + 月晕景深
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, w, h);
 
-  // 左右暖火灯柱框景
-  for (const side of [-1, 1]) {
-    const px = side < 0 ? 18 : w - 18;
-    ctx.strokeStyle = PAPER_SHADE;
-    ctx.lineWidth = 1.5;
+  const cx = w * (isTall ? 0.44 : 0.5);
+  const cy = h * (isTall ? 0.44 : 0.56);
+  const vfxPal = getVfxPalette(attackVfx);
+
+  // 月晕与暖火氛围背光
+  const backR = Math.min(w, h) * (isTall ? 0.72 : 0.62);
+  const backGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, backR);
+  backGrad.addColorStop(0, isSignature ? lanternA(0.28) : paperA(0.16));
+  backGrad.addColorStop(0.45, vermA(isSignature ? 0.16 : 0.09));
+  backGrad.addColorStop(1, inkA(0));
+  ctx.fillStyle = backGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  if (isTall) {
+    // 远景古月与街巷飞檐剪影（填补上方天空层次，营造古镇子夜演武场氛围）
+    const moonX = w * 0.22;
+    const moonY = h * 0.18;
+    const moonGlow = ctx.createRadialGradient(moonX, moonY, 6, moonX, moonY, 54);
+    moonGlow.addColorStop(0, paperA(0.26));
+    moonGlow.addColorStop(0.55, lanternA(0.08));
+    moonGlow.addColorStop(1, inkA(0));
+    ctx.fillStyle = moonGlow;
     ctx.beginPath();
-    ctx.moveTo(px, 8);
-    ctx.lineTo(px, h - 8);
+    ctx.arc(moonX, moonY, 54, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = paperA(0.32);
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 16, 0, TAU);
+    ctx.fill();
+
+    // 远景重檐屋脊剪影
+    ctx.fillStyle = vermA(0.09);
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.52);
+    ctx.lineTo(w * 0.14, h * 0.42);
+    ctx.lineTo(w * 0.28, h * 0.46);
+    ctx.lineTo(w * 0.44, h * 0.36);
+    ctx.lineTo(w * 0.62, h * 0.45);
+    ctx.lineTo(w * 0.78, h * 0.40);
+    ctx.lineTo(w, h * 0.48);
+    ctx.lineTo(w, h * 0.60);
+    ctx.lineTo(0, h * 0.60);
+    ctx.closePath();
+    ctx.fill();
+
+    // 左上挑角飞檐
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(w * 0.32, 0);
+    ctx.quadraticCurveTo(w * 0.22, h * 0.08, w * 0.10, h * 0.10);
+    ctx.lineTo(0, h * 0.12);
+    ctx.closePath();
+    ctx.fill();
+
+    // 青石院坪地平线与淡金砖缝透视线
+    const horizonY = h * 0.56;
+    ctx.fillStyle = vermA(0.08);
+    ctx.fillRect(0, horizonY, w, h - horizonY);
+    ctx.strokeStyle = lanternA(0.18);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    ctx.lineTo(w, horizonY);
     ctx.stroke();
 
-    const ly = 24 + Math.sin(tSec * 2.2 + (side > 0 ? 1.4 : 0)) * 2;
+    // 柔和飘升暖金星火
+    for (let i = 0; i < 12; i++) {
+      const ph = (tSec * 0.32 + i * 0.15) % 1;
+      const ex = cx + Math.sin(i * 2.1 + tSec * 1.4) * (w * 0.36);
+      const ey = h * 0.78 - ph * (h * 0.70);
+      ctx.fillStyle = i % 3 === 0 ? VERM : LANTERN;
+      ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.6;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 1.3 + (i % 2) * 0.7, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 左右暖火灯柱框景（高舞台下左侧悬灯映衬）
+  const pillarInset = isTall ? 16 : 18;
+  for (const side of [-1, 1]) {
+    if (isTall && side > 0) continue; // 右侧留给功能纵栏
+    const px = side < 0 ? pillarInset : w - pillarInset;
+    ctx.strokeStyle = paperA(0.24);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px, 8);
+    ctx.lineTo(px, isTall ? h * 0.56 : h - 8);
+    ctx.stroke();
+
+    const ly = (isTall ? h * 0.16 : 24) + Math.sin(tSec * 2.2 + (side > 0 ? 1.4 : 0)) * 2.5;
+    const glowSpr = getLanternGlowCanvas();
+    if (glowSpr) {
+      ctx.drawImage(glowSpr, px - 28, ly - 28, 56, 56);
+    }
     ctx.fillStyle = VERM;
     ctx.beginPath();
-    ctx.arc(px, ly, 5.5, 0, TAU);
+    ctx.arc(px, ly, 6, 0, TAU);
     ctx.fill();
     ctx.fillStyle = LANTERN;
     ctx.beginPath();
-    ctx.arc(px, ly, 2.8, 0, TAU);
+    ctx.arc(px, ly, 3, 0, TAU);
     ctx.fill();
   }
-
-  const cx = w * 0.5;
-  const cy = h * 0.56;
-  const vfxPal = getVfxPalette(attackVfx);
 
   if (mode === 'vfx') {
     // 锋芒异彩特写展台：大比例展示主题法阵 + 震波环 + 刀光扇斩
     ctx.save();
-    ctx.translate(cx, h * 0.52);
+    ctx.translate(w * 0.5, h * 0.52);
     if (attackVfx === 'default') {
       ctx.strokeStyle = VERM;
       ctx.lineWidth = 4;
@@ -464,44 +549,67 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     return;
   }
 
-  // 青石八卦演武石台基座
-  const daisY = h * 0.78;
+  // 青石八卦演武石台基座（高舞台居中偏上，稳稳压住视觉中心）
+  const daisY = h * (isTall ? 0.55 : 0.78);
+  const daisRx = isTall ? 92 : 68;
+  const daisRy = isTall ? 22 : 18;
   ctx.save();
   ctx.translate(cx, daisY);
   ctx.fillStyle = isSignature ? vermA(0.24) : lanternA(0.14);
   ctx.beginPath();
-  ctx.ellipse(0, 0, 68, 18, 0, 0, TAU);
+  ctx.ellipse(0, 0, daisRx, daisRy, 0, 0, TAU);
   ctx.fill();
 
   ctx.strokeStyle = isSignature ? LANTERN : PAPER_SHADE;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 62, 15.5, 0, 0, TAU);
+  ctx.ellipse(0, 0, daisRx * 0.9, daisRy * 0.86, 0, 0, TAU);
   ctx.stroke();
 
   ctx.strokeStyle = vfxPal.primary;
   ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 46, 11.5, 0, 0, TAU);
+  ctx.ellipse(0, 0, daisRx * 0.66, daisRy * 0.64, 0, 0, TAU);
   ctx.stroke();
+
+  // 切换角色/兵刃时的破墨金环扩散波
+  if (burstProgress < 1) {
+    const bp = Math.max(0, Math.min(1, burstProgress));
+    const waveR = daisRx * (0.45 + bp * 0.95);
+    ctx.strokeStyle = lanternA((1 - bp) * 0.85);
+    ctx.lineWidth = 3 * (1 - bp * 0.6);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, waveR, waveR * 0.28, 0, 0, TAU);
+    ctx.stroke();
+
+    ctx.strokeStyle = vermA((1 - bp) * 0.65);
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, -32, 22 + bp * 58, 0, TAU);
+    ctx.stroke();
+  }
   ctx.restore();
 
   // 背景攻击特效主题微缩气旋环
   if (attackVfx && attackVfx !== 'default') {
     const ringSpr = vfxRingSprite(attackVfx, 0);
     ctx.save();
-    ctx.translate(cx, cy - 8);
+    ctx.translate(cx, daisY - (isTall ? 46 : 26));
     ctx.rotate(tSec * 0.75);
-    ctx.globalAlpha = 0.58;
-    const rs = 0.25;
+    ctx.globalAlpha = 0.64;
+    const rs = isTall ? 0.40 : 0.25;
     ctx.drawImage(ringSpr.canvas, -ringSpr.w * 0.5 * rs, -ringSpr.h * 0.5 * rs, ringSpr.w * rs, ringSpr.h * rs);
     ctx.restore();
   }
 
-  // 角色主体（呼吸起伏 + 四帧步态 + 提灯轻摆 + 脚底专属矿物灵阵）
+  // 角色主体（呼吸起伏 + 四帧步态 + 切换时的弹性落台缩放）
   const stepFrame = Math.floor(tSec * 4.2) % 4;
-  const bobY = Math.sin(tSec * 3.4) * 1.8;
-  const swing = Math.sin(tSec * 2.8) * 0.18;
+  const bobY = Math.sin(tSec * 3.2) * (isTall ? 2.6 : 1.8);
+  const swing = Math.sin(tSec * 2.6) * 0.18;
+  const popScale = burstProgress < 1
+    ? 1 + Math.sin(burstProgress * Math.PI) * 0.14
+    : 1;
+  const baseScale = isTall ? Math.min(2.45, Math.max(2.0, h / 135)) : 1.52;
   drawHeroWithSkin(ctx, {
     heroId,
     skinId,
@@ -509,10 +617,10 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     y: daisY + bobY,
     frame: stepFrame,
     flip: 1,
-    lean: Math.sin(tSec * 1.8) * 0.03,
+    lean: Math.sin(tSec * 1.7) * 0.03,
     swing,
-    scale: 1.52,
-    auraRot: tSec * 3.2,
+    scale: baseScale * popScale,
+    auraRot: tSec * 3.0,
     showAura: true,
     legacyOutfit,
     legacyLantern,
@@ -521,18 +629,21 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   // 环绕演武的当前自选初始兵刃图标 + 灵火轨迹
   if (starterWeapon && typeof Sprites.drawIcon === 'function') {
     const orbitA = tSec * 1.85;
-    const wx = cx + Math.cos(orbitA) * 52;
-    const wy = daisY - 22 + Math.sin(orbitA) * 12;
+    const orbitRx = isTall ? 78 : 52;
+    const orbitRy = isTall ? 18 : 12;
+    const wx = cx + Math.cos(orbitA) * orbitRx;
+    const wy = daisY - (isTall ? 38 : 22) + Math.sin(orbitA) * orbitRy;
     ctx.save();
     ctx.fillStyle = vfxPal.bright;
     ctx.globalAlpha = 0.85;
     ctx.beginPath();
-    ctx.arc(wx, wy, 13.5, 0, TAU);
+    ctx.arc(wx, wy, isTall ? 16.5 : 13.5, 0, TAU);
     ctx.fill();
     ctx.globalAlpha = 1;
     const badgeSpr = getOrbitWeaponBadge(starterWeapon, isSignature);
     if (badgeSpr) {
-      ctx.drawImage(badgeSpr, wx - 14, wy - 14, 28, 28);
+      const sz = isTall ? 34 : 28;
+      ctx.drawImage(badgeSpr, wx - sz * 0.5, wy - sz * 0.5, sz, sz);
     }
     ctx.restore();
   }
@@ -566,10 +677,12 @@ export function createHeroStage(canvas, getState) {
   let rafId = 0;
   let active = true;
   let startMs = 0;
+  let burstStartMs = -9999;
+  const BURST_MS = 420;
 
   function syncCanvasDims() {
-    const cssW = Math.max(220, Math.floor(canvas.clientWidth || 310));
-    const cssH = Math.max(96, Math.floor(canvas.clientHeight || 106));
+    const cssW = Math.max(220, Math.floor(canvas.clientWidth || 340));
+    const cssH = Math.max(96, Math.floor(canvas.clientHeight || 180));
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const bw = Math.round(cssW * dpr);
     const bh = Math.round(cssH * dpr);
@@ -580,12 +693,16 @@ export function createHeroStage(canvas, getState) {
     return { cssW, cssH, dpr };
   }
 
-  function renderAt(tSec) {
+  function renderAt(tSec, nowMs) {
     if (!ctx) return;
     const { cssW, cssH, dpr } = syncCanvasDims();
+    const burstProgress = Math.max(0, Math.min(1, (nowMs - burstStartMs) / BURST_MS));
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    renderStagePreviewFrame(ctx, cssW, cssH, tSec, getState?.() || {});
+    renderStagePreviewFrame(ctx, cssW, cssH, tSec, {
+      ...(getState?.() || {}),
+      burstProgress,
+    });
     ctx.restore();
   }
 
@@ -593,8 +710,9 @@ export function createHeroStage(canvas, getState) {
     rafId = 0;
     if (!active || !canvas.isConnected) return;
     if (document.hidden) return;
-    if (!startMs) startMs = ts || 16;
-    renderAt(((ts || 16) - startMs) / 1000);
+    const now = ts || 16;
+    if (!startMs) startMs = now;
+    renderAt((now - startMs) / 1000, now);
     rafId = requestAnimationFrame(tickHeroStage);
   }
 
@@ -615,10 +733,15 @@ export function createHeroStage(canvas, getState) {
   function refreshNow() {
     const now = typeof performance !== 'undefined' ? performance.now() : 16;
     if (!startMs) startMs = now;
-    renderAt((now - startMs) / 1000);
+    renderAt((now - startMs) / 1000, now);
     if (active && !rafId && !document.hidden) {
       rafId = requestAnimationFrame(tickHeroStage);
     }
+  }
+
+  function triggerBurst() {
+    burstStartMs = typeof performance !== 'undefined' ? performance.now() : 16;
+    refreshNow();
   }
 
   function destroy() {
@@ -631,5 +754,5 @@ export function createHeroStage(canvas, getState) {
   }
 
   refreshNow();
-  return { refreshNow, destroy };
+  return { refreshNow, triggerBurst, destroy };
 }

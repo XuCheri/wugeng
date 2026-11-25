@@ -1,5 +1,6 @@
 // 结算页：守夜积分、五更守夜总榜入口、多人同守全队贡献榜与魁首 MVP 朱印、铜钱、开光神兵、新解锁与功绩、「广告 · 铜钱翻倍」。
 import { h, clear, scroll, sealButton, adButton, formatBig, formatTime, formatCoins } from './dom.js';
+import { applyStagger } from './motion.js';
 import { heroInfo, weaponName, nightLabel, watchName, ACHIEVEMENT_NAMES } from './copy.js';
 import { canShowResultDouble } from '../ads/ad-policy.js';
 
@@ -33,6 +34,7 @@ export function renderResult(root, opts) {
     row('打散', `${formatBig(s.kills)} 只`),
     row('最狠一击', formatBig(s.maxHit)),
     row(isCoop ? '扶起同袍' : '等级', isCoop ? `${s.revivesDone || 0} 回` : String(s.level ?? '—')));
+  applyStagger(rows, '.result-row', 4);
 
   // 联机小队贡献榜与魁首 MVP 印章（F14）
   let squadBox = null;
@@ -51,6 +53,7 @@ export function renderResult(root, opts) {
         h('span', {}, `伤 ${formatBig(m.damageDealt || 0)}`),
         h('span', {}, `斩 ${m.kills || 0}`),
         h('span', {}, `救 ${m.revivesDone || 0}`)))));
+    applyStagger(squadBox, '.result-squad__row', 4);
   }
 
   const evolvedWeapons = (s.weapons || []).filter((w) => w && w.evolved).map((w) => weaponName(w.id, true));
@@ -65,6 +68,7 @@ export function renderResult(root, opts) {
     ...(recorded.achievements || []).slice(0, 4).map((a) => `达成功绩「${ACHIEVEMENT_NAMES[a] || a}」`).filter(Boolean),
   ];
   for (const t of unlocks) unlockBox.appendChild(h('p', { class: 'result-unlock' }, h('i', { class: 'stamp stamp--sm' }, '得'), t));
+  if (unlocks.length) applyStagger(unlockBox, '.result-unlock', 6);
 
   const actions = h('div', { class: 'result-actions' });
   const renderActions = () => {

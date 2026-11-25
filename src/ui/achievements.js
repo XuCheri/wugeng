@@ -8,6 +8,7 @@ import {
   getUnclaimedAchievementCount,
   reconcileAchievements,
 } from '../meta/achievements.js';
+import { applyStagger } from './motion.js';
 import { getSkinDef } from '../meta/cosmetics.js';
 import { drawHeroWithSkin } from '../render/skins.js';
 import { INK, PAPER_SHADE } from '../render/palette.js';
@@ -219,6 +220,7 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed } =
       syncRow(entry);
       listBox.appendChild(entry.row);
     }
+    applyStagger(listBox, '.achievement-row', 8);
   }
 
   function refreshAll() {

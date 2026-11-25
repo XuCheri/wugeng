@@ -4,6 +4,7 @@ import { HERO_IDS, WEAPON_IDS, RELIC_IDS, ENEMY_IDS } from '../meta/save.js';
 import { ensureCodex, getCodexCounts } from '../meta/codex.js';
 import { heroUnlockProgress } from '../meta/unlocks.js';
 import { h, clear, scroll, sealButton, veil, formatCoins } from './dom.js';
+import { applyStagger } from './motion.js';
 import {
   heroInfo, weaponName, relicName, pairOf, weaponPairRelic,
   weaponTags, relicTags, schoolName,
@@ -207,6 +208,7 @@ export function openCodex(root, save) {
     else if (activeTab === 'relics') renderRelics();
     else if (activeTab === 'enemies') renderEnemies();
     else renderHeroes();
+    applyStagger(listBox, '.codex-row', 8);
   }
 
   renderTabs();

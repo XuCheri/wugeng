@@ -1,5 +1,6 @@
 // 铜钱鬼市商铺（F8：百相衣冠 18 套皮肤 + 锋芒异彩 5 套攻击特效，实时演武预览与铜钱购买穿戴）
 import { HERO_IDS, getHeroStarterWeapon } from '../meta/save.js';
+import { applyStagger } from './motion.js';
 import {
   ATTACK_VFX_LIST,
   HERO_SKINS,
@@ -532,6 +533,7 @@ export function openCosmeticShop(root, {
       }
     }
     syncCardsInPlace();
+    applyStagger(gridBox, '.cosmetic-card', 8);
   }
 
   function syncAllStates() {

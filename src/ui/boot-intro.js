@@ -279,18 +279,19 @@ function drawStudioLogoScene(ctx, W, H, u01, clock) {
   ctx.arc(cx, cy - 26, haloR, 0, TAU);
   ctx.fill();
 
-  // 水墨飞白破墨圆环阵
-  const ringR = Math.min(W * 0.36, 134) * (0.68 + 0.32 * rippleK);
+  // 水墨飞白破墨圆环阵（14点平滑毛笔圆弧，呈现禅意墨圆）
+  const ringR = Math.min(W * 0.35, 132) * (0.72 + 0.28 * rippleK);
+  const ensoPts = [];
+  const arcSpan = Math.PI * 1.48 * Math.max(0.2, rippleK);
+  for (let i = 0; i <= 14; i++) {
+    const a = Math.PI * 0.88 + (i / 14) * arcSpan;
+    ensoPts.push([cx + Math.cos(a) * ringR, cy - 34 + Math.sin(a) * ringR * 0.86]);
+  }
   brushStroke(
     ctx,
-    [
-      [cx - ringR, cy - 30],
-      [cx - ringR * 0.42, cy - 30 - ringR * 0.88],
-      [cx + ringR * 0.62, cy - 30 - ringR * 0.66],
-      [cx + ringR, cy - 18],
-    ],
-    10,
-    { color: PAPER_SHADE, seed: 41, dry: 0.52, alpha: 0.34 * rippleK },
+    ensoPts,
+    9,
+    { color: PAPER_SHADE, seed: 41, dry: 0.56, taperIn: 0.14, taperOut: 0.32, alpha: 0.34 * rippleK },
   );
   splatter(ctx, cx - ringR * 0.56, cy - 54, 15 * rippleK, rng, { color: VERM, count: 10, mainScale: 0.45 });
   splatter(ctx, cx + ringR * 0.64, cy + 16, 13 * rippleK, rng, { color: LANTERN, count: 9, mainScale: 0.35 });
