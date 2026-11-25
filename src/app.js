@@ -34,6 +34,7 @@ import { createRunUI } from './ui/run-ui.js';
 import { runBootIntro } from './ui/boot-intro.js';
 import { openLeaderboardModal } from './ui/leaderboard.js';
 import { openCoopLobbyModal } from './ui/coop-lobby.js';
+import { createCoach } from './ui/coach.js';
 
 export async function startApp(bootOpts = {}) {
   const root = document.getElementById('ui');
@@ -49,6 +50,7 @@ export async function startApp(bootOpts = {}) {
   };
   const audio = createAudio();
   const haptics = createHaptics();
+  const coach = createCoach(root, { save, persist });
   setClickSound(() => audio.play('click'));
 
   let screen = null;          // 当前全屏界面元素
@@ -156,11 +158,15 @@ export async function startApp(bootOpts = {}) {
 
   const game = createGame({
     canvas,
-    onStatusChange: (run) => runUI?.handleStatus(run),
+    onStatusChange: (run) => {
+      runUI?.handleStatus(run);
+      coach.onStatus(run);
+    },
     onSummary: (summary) => finishRun(summary),
     onEvents: (events, run) => {
       audio.onEvents(events);
       haptics.onEvents(events);
+      coach.onEvents(events, run);
       if (run && events && events.length) checkMidRunAchievements(run);
     },
     onAutoPause: () => runUI?.showPause(),
@@ -170,6 +176,7 @@ export async function startApp(bootOpts = {}) {
     shouldSkipAutoPause: (run) => coop.isActive() || (Array.isArray(run?.players) && run.players.length > 1),
     onStart: (run) => {
       menuScene?.stop();
+      coach.reset();
       finished = false;
       if (screen) setScreen(null);
       runUI?.closeCurrent();
@@ -178,6 +185,7 @@ export async function startApp(bootOpts = {}) {
       if (syncCodexFromRun(save, run)) persist(false);
     },
     onClear: () => {
+      coach.reset();
       runUI?.teardown();
     },
   });
@@ -421,6 +429,7 @@ export async function startApp(bootOpts = {}) {
     const recorded = recordRun(save, summary, Date.now());
     persist(true);
     leaderboard.submitScore(summary.score, save);
+    coach.reset();
     runUI.teardown();
     audio.setMusicMode('menu');
     const el = renderResult(root, {
@@ -452,6 +461,7 @@ export async function startApp(bootOpts = {}) {
     game,
     audio,
     haptics,
+    coach,
     cloud,
     leaderboard,
     friends,

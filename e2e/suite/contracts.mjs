@@ -227,7 +227,7 @@ export const LEGACY_ACHIEVEMENT_IDS = [
 ];
 
 export const PRIMARY_LEADERBOARD_ID = 'c5mzumajes9houq0ra';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export const COOP_SPEC = {
   maxPlayers: 4,

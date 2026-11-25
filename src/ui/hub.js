@@ -25,6 +25,7 @@ import { createHeroStage } from '../render/menu-scene.js';
 import { openCodex } from './codex.js';
 import { openCosmeticShop } from './cosmetic-shop.js';
 import { openAchievementsModal } from './achievements.js';
+import { getHubFeatureLock } from './coach.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
 const ACH_WEAPON_SET = new Set(['taomujian', 'zhinian_kite']);
@@ -70,7 +71,7 @@ export function renderHub(root, ctx) {
     width: 680,
     height: 360,
     'aria-label': '当前角色衣冠与本命兵刃演武台',
-    onClick: () => openMarket(getActiveHero()),
+    onClick: () => guardFeature('market', () => openMarket(getActiveHero())),
   });
   const heroSpotlightEl = h('div', { class: 'hero-spotlight' });
   const ribbonBox = h('div', { class: 'hub-ribbon', role: 'toolbar', 'aria-label': '更房要务' });
@@ -134,8 +135,17 @@ export function renderHub(root, ctx) {
     return activeHero;
   }
 
+  function guardFeature(feature, action) {
+    const lk = getHubFeatureLock(save, feature);
+    if (lk.locked) {
+      toast(lk.toast);
+      return;
+    }
+    action();
+  }
+
   function statLine(s) {
-    if (!s.stats?.runs) return '头一回守夜 · 提灯上街';
+    if (!s.stats?.runs) return '头一回守夜 · 先出门打一更试试手';
     const best = s.leaderboard?.bestScore ? ` · 最高 ${formatCoins(s.leaderboard.bestScore)}` : '';
     return `守 ${s.stats.runs} 夜 · 天亮 ${s.stats.clears} 回${best}`;
   }
@@ -186,28 +196,32 @@ export function renderHub(root, ctx) {
 
     clear(ribbonBox);
     const unclaimedAch = getUnclaimedAchievementCount(save);
+    const lkMarket = getHubFeatureLock(save, 'market');
+    const lkAch = getHubFeatureLock(save, 'achievements');
+    const lkLb = getHubFeatureLock(save, 'leaderboard');
+    const lkCoop = getHubFeatureLock(save, 'coop');
     ribbonBox.append(
-      ribbonItem('鬼市', '衣冠', 'open-market', () => openMarket(getActiveHero())),
-      ribbonItem('功绩', unclaimedAch > 0 ? `领${unclaimedAch}` : '秘器', 'open-achievements', () => openAchievements(), unclaimedAch),
-      ribbonItem('天榜', '排行', 'open-leaderboard', () => {
+      ribbonItem('鬼市', lkMarket.locked ? lkMarket.label : '衣冠', 'open-market', () => guardFeature('market', () => openMarket(getActiveHero())), 0, lkMarket.locked),
+      ribbonItem('功绩', lkAch.locked ? lkAch.label : (unclaimedAch > 0 ? `领${unclaimedAch}` : '秘器'), 'open-achievements', () => guardFeature('achievements', () => openAchievements()), lkAch.locked ? 0 : unclaimedAch, lkAch.locked),
+      ribbonItem('天榜', lkLb.locked ? lkLb.label : '排行', 'open-leaderboard', () => guardFeature('leaderboard', () => {
         if (ctx.onOpenLeaderboard) ctx.onOpenLeaderboard();
         else openLocalLeaderboardFallback();
-      }),
-      ribbonItem('同守', '联机', 'open-coop', () => {
+      }), 0, lkLb.locked),
+      ribbonItem('同守', lkCoop.locked ? lkCoop.label : '联机', 'open-coop', () => guardFeature('coop', () => {
         if (ctx.onOpenCoop) ctx.onOpenCoop();
         else openCoopFallback();
-      }),
+      }), 0, lkCoop.locked),
     );
   }
 
-  function ribbonItem(title, sub, action, onClick, badgeCount = 0) {
+  function ribbonItem(title, sub, action, onClick, badgeCount = 0, locked = false) {
     const dot = badgeCount > 0
       ? h('span', { class: 'badge-dot', dataset: { badge: String(badgeCount) } }, String(badgeCount))
       : h('span', { class: 'badge-dot', hidden: true }, '0');
     return h('button', {
       type: 'button',
-      class: `hub-ribbon__btn${badgeCount > 0 ? ' has-badge' : ''}`,
-      dataset: { action },
+      class: `hub-ribbon__btn${badgeCount > 0 ? ' has-badge' : ''}${locked ? ' is-coach-locked' : ''}`,
+      dataset: locked ? { action, locked: '1' } : { action },
       onClick,
     },
     h('b', {}, title),
@@ -246,7 +260,7 @@ export function renderHub(root, ctx) {
         h('button', {
           type: 'button',
           class: 'hero-stage__wardrobe',
-          onClick: () => openMarket(activeHero),
+          onClick: () => guardFeature('market', () => openMarket(activeHero)),
         }, `${skinDef.name} · 换装`)),
       sigBadge,
       h('p', { class: 'hero-spotlight__trait' },
@@ -388,15 +402,20 @@ export function renderHub(root, ctx) {
     clear(navBox);
     const st = getCheckinState(save, ctx.now());
     const cc = getCodexCounts(save);
+    const lkShop = getHubFeatureLock(save, 'shop');
+    const lkCodex = getHubFeatureLock(save, 'codex');
     navBox.append(
-      navSeal('加点', '长本事', () => openShop()),
-      navSeal('图鉴', `${cc.have}/${cc.total}`, () => openCodex(root, save), false, '百物谱图鉴'),
+      navSeal('加点', lkShop.locked ? lkShop.label : '长本事', () => guardFeature('shop', () => openShop()), false, undefined, lkShop.locked),
+      navSeal('图鉴', lkCodex.locked ? lkCodex.label : `${cc.have}/${cc.total}`, () => guardFeature('codex', () => openCodex(root, save)), false, '百物谱图鉴', lkCodex.locked),
       navSeal('更簿', st.canClaim ? '可画押' : '签到', () => openCheckin(), st.canClaim),
       navSeal('设置', '杂项', () => openSettings()));
   }
-  function navSeal(text, sub, onClick, dot = false, label = undefined) {
+  function navSeal(text, sub, onClick, dot = false, label = undefined, locked = false) {
     return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), h('small', {}, sub)), onClick, {
-      kind: 'square', cls: `hub-dock-btn${dot ? ' has-dot' : ''}`, label,
+      kind: 'square',
+      cls: `hub-dock-btn${dot ? ' has-dot' : ''}${locked ? ' is-coach-locked' : ''}`,
+      label,
+      dataset: locked ? { locked: '1' } : undefined,
     });
   }
 

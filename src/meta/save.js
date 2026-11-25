@@ -9,7 +9,8 @@ import {
 } from './cosmetics.js';
 
 export const SAVE_KEY = 'wugeng.save';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
+export const COACH_KEYS = ['firstLevelUp', 'firstChest', 'firstUltReady', 'firstEvolve', 'firstElite'];
 export const DEFAULT_DAO_NAME = '守夜打更人';
 
 export const HERO_IDS = ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'];
@@ -107,6 +108,13 @@ export function defaultLeaderboard() {
   };
 }
 
+export function defaultCoach() {
+  return {
+    seen: {},
+    runsPlayed: 0,
+  };
+}
+
 export function defaultSave() {
   const shop = {};
   for (const id of SHOP_IDS) shop[id] = 0;
@@ -136,6 +144,7 @@ export function defaultSave() {
     },
     charms: [],           // 护身符：[{ relicId }]，开局带一枚，用掉即消耗
     leaderboard: defaultLeaderboard(),
+    coach: defaultCoach(),
     stats: {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
@@ -487,6 +496,22 @@ export function migrateSave(raw) {
     enemies,
   };
 
+  // 情境新手旁白与渐进开放状态迁移：旧版（<v4）已有守夜记录的老玩家默认已读全部提点，避免重复打扰
+  const srcVersion = int(src.version, 0, 0, 99);
+  const seenCoach = {};
+  if (isObj(src.coach) && isObj(src.coach.seen)) {
+    for (const k of COACH_KEYS) {
+      if (src.coach.seen[k] === true) seenCoach[k] = true;
+    }
+  } else if (srcVersion < 4 && (out.stats.runs > 0 || out.stats.firstRunDone || out.stats.clears > 0)) {
+    for (const k of COACH_KEYS) seenCoach[k] = true;
+  }
+  const rawCoachRuns = isObj(src.coach) ? int(src.coach.runsPlayed, 0, 0, 1e9) : 0;
+  out.coach = {
+    seen: seenCoach,
+    runsPlayed: Math.max(out.stats.runs, rawCoachRuns, out.stats.firstRunDone ? 1 : 0),
+  };
+
   out.version = SAVE_VERSION;
   return out;
 }
@@ -674,6 +699,15 @@ export function mergeSaves(localRaw, remoteRaw) {
     totalBossKills: Math.max(a.stats.totalBossKills, b.stats.totalBossKills),
     coopRuns: Math.max(a.stats.coopRuns, b.stats.coopRuns),
     coopRevives: Math.max(a.stats.coopRevives, b.stats.coopRevives),
+  };
+
+  const coachSeen = {};
+  for (const k of COACH_KEYS) {
+    if (a.coach?.seen?.[k] || b.coach?.seen?.[k]) coachSeen[k] = true;
+  }
+  merged.coach = {
+    seen: coachSeen,
+    runsPlayed: Math.max(a.coach?.runsPlayed || 0, b.coach?.runsPlayed || 0, merged.stats.runs),
   };
 
   const histMap = new Map();

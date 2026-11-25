@@ -515,6 +515,13 @@ export const APPLY_SAVE_PATCH_IN_PAGE = (target, patch) => {
       }
     }
   }
+  if (patch.coach && typeof patch.coach === 'object') {
+    target.coach = target.coach || { seen: {}, runsPlayed: 0 };
+    if (patch.coach.seen && typeof patch.coach.seen === 'object') {
+      target.coach.seen = Object.assign({}, target.coach.seen || {}, patch.coach.seen);
+    }
+    if (patch.coach.runsPlayed !== undefined) target.coach.runsPlayed = patch.coach.runsPlayed;
+  }
   if (patch.leaderboard && typeof patch.leaderboard === 'object') {
     target.leaderboard = Object.assign(
       { bestScore: 0, bestEndlessSec: 0, bestKills: 0, pendingScore: 0, history: [] },
@@ -1090,6 +1097,7 @@ export async function bootGame(page, baseUrl, opts = {}) {
 }
 
 export async function bootToHub(page, baseUrl, opts = {}) {
+  const unlockHubFeatures = !opts.freshCoach && !opts.keepFreshCoach;
   const canFastReset = Boolean(
     !opts.query &&
     !opts.coldIntro &&
@@ -1102,7 +1110,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
 
   if (canFastReset) {
     await page.evaluate(
-      ({ patch, patchFnSrc, pristineJson }) => {
+      ({ patch, patchFnSrc, pristineJson, unlockHub }) => {
         const w = window.__wugeng;
         if (w.coop) {
           try {
@@ -1117,7 +1125,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         }
         w.game.clear();
         document
-          .querySelectorAll('#ui .veil, #ui .veil--inspector, #ui .toast, #ui .run-hint, .boot-intro, body > .mock-ad')
+          .querySelectorAll('#ui .veil, #ui .veil--inspector, #ui .toast, #ui .run-hint, #ui .coach-whisper, .boot-intro, body > .mock-ad')
           .forEach((el) => el.remove());
         localStorage.clear();
         sessionStorage.clear();
@@ -1133,6 +1141,12 @@ export async function bootToHub(page, baseUrl, opts = {}) {
           target[k] = structuredClone(v);
         }
 
+        if (unlockHub) {
+          target.coach = target.coach || { seen: {}, runsPlayed: 0 };
+          target.coach.runsPlayed = Math.max(target.coach.runsPlayed || 0, 2);
+          target.nightCleared = Math.max(target.nightCleared ?? -1, 0);
+        }
+
         if (patch) {
           // eslint-disable-next-line no-new-func
           const applyPatch = new Function('return (' + patchFnSrc + ')')();
@@ -1142,6 +1156,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
 
         w.game.applySettings({
           shake: target.settings?.shake ?? true,
+          haptics: target.settings?.haptics ?? true,
           dmgText: target.settings?.dmgText ?? 'all',
           lowQuality: target.settings?.lowQuality ?? false,
           cosmetics: target.cosmetics?.equipped
@@ -1157,6 +1172,7 @@ export async function bootToHub(page, baseUrl, opts = {}) {
         patch: opts.savePatch || null,
         patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString(),
         pristineJson: page.__pristineSaveJson || null,
+        unlockHub: unlockHubFeatures,
       },
     );
     await page.waitForSelector('.screen--hub');
@@ -1177,33 +1193,41 @@ export async function bootToHub(page, baseUrl, opts = {}) {
   }
   await page.waitForSelector('.screen--hub');
 
-  if (opts.savePatch) {
+  if (opts.savePatch || unlockHubFeatures) {
     await page.evaluate(
-      ({ patch, patchFnSrc }) => {
+      ({ patch, patchFnSrc, unlockHub }) => {
         const w = window.__wugeng;
         const s = w.save;
-        // eslint-disable-next-line no-new-func
-        const applyPatch = new Function('return (' + patchFnSrc + ')')();
-        applyPatch(s, patch);
+        if (unlockHub && !patch?.coach && (s.stats?.runs || 0) === 0 && (s.nightCleared ?? -1) < 0) {
+          s.coach = s.coach || { seen: {}, runsPlayed: 0 };
+          s.coach.runsPlayed = Math.max(s.coach.runsPlayed || 0, 2);
+          s.nightCleared = Math.max(s.nightCleared ?? -1, 0);
+        }
+        if (patch) {
+          // eslint-disable-next-line no-new-func
+          const applyPatch = new Function('return (' + patchFnSrc + ')')();
+          applyPatch(s, patch);
+          w.persist(false);
+        }
         w.game.applySettings({
           shake: s.settings?.shake ?? true,
+          haptics: s.settings?.haptics ?? true,
           dmgText: s.settings?.dmgText ?? 'all',
           lowQuality: s.settings?.lowQuality ?? false,
           cosmetics: s.cosmetics?.equipped
             ? structuredClone(s.cosmetics.equipped)
             : { lantern: null, outfit: null, attackVfx: null, heroSkins: {} },
         });
-        w.persist(false);
         w.showHub();
       },
-      { patch: opts.savePatch, patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString() },
+      { patch: opts.savePatch || null, patchFnSrc: APPLY_SAVE_PATCH_IN_PAGE.toString(), unlockHub: unlockHubFeatures },
     );
     await page.waitForSelector('.screen--hub');
   }
 }
 
 export async function bootAndStartRun(page, baseUrl, opts = {}) {
-  await bootToHub(page, baseUrl, opts);
+  await bootToHub(page, baseUrl, { keepFreshCoach: true, ...opts });
   const heroId = opts.heroId || opts.savePatch?.selectedHero || 'zhou';
   const startWeapon = opts.startWeapon ?? null;
   const unlockedWeapons = opts.unlockedWeapons ?? null;

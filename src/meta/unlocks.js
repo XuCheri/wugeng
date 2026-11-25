@@ -282,6 +282,9 @@ export function recordRun(save, summary, now = Date.now()) {
   const st = save.stats;
   st.runs = Math.min(1e9, st.runs + 1);
   st.firstRunDone = true;
+  if (isPlainObj(save.coach) && canWriteProp(save.coach, 'runsPlayed')) {
+    save.coach.runsPlayed = Math.max(safeInt(save.coach.runsPlayed, 1e9), st.runs);
+  }
   st.totalPlaySec = Math.min(1e12, st.totalPlaySec + timeSec);
   st.totalKills = Math.min(1e12, st.totalKills + kills);
   st.totalCoins = Math.min(1e12, st.totalCoins + coins);

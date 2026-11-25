@@ -36,15 +36,15 @@ import {
 import { createCloudSave, ARCHIVE_NAME } from '../../src/meta/cloud-save.js';
 import { recordRun } from '../../src/meta/unlocks.js';
 
-test('v3 M3 Save v3：旧版迁移、道号 XSS 清洗、自选初始兵刃记忆与越界回退', () => {
-  assert.equal(SAVE_VERSION, 3);
+test('v3 M3 Save 迁移：旧版迁移、道号 XSS 清洗、自选初始兵刃记忆与越界回退', () => {
+  assert.equal(SAVE_VERSION, 4);
   const s0 = defaultSave();
-  assert.equal(s0.version, 3);
+  assert.equal(s0.version, SAVE_VERSION);
   assert.deepEqual(s0.unlockedWeapons, [...DEFAULT_UNLOCKED_WEAPONS]);
   assert.equal(getHeroStarterWeapon(s0, 'zhou'), 'gong');
   assert.equal(getHeroStarterWeapon(s0, 'nuoxi'), 'nuo_drum');
 
-  // 旧 v1 存档无损升级至 v3，同时拦截 XSS 与超长道号、脏武器/外观 ID
+  // 旧 v1 存档无损升级至最新版本，同时拦截 XSS 与超长道号、脏武器/外观 ID
   const v1 = migrateSave({
     version: 1,
     daoName: '<script>alert(1)</script>守夜老道长名字超长截断',
@@ -63,7 +63,7 @@ test('v3 M3 Save v3：旧版迁移、道号 XSS 清洗、自选初始兵刃记�
     achievements: { firstClear: 1700000001234, kills800: 1700000002345 },
   });
 
-  assert.equal(v1.version, 3);
+  assert.equal(v1.version, SAVE_VERSION);
   assert.equal(v1.coins, 0);
   assert.equal(/[<>]/.test(v1.daoName), false, 'daoName 必须剥除尖括号防 XSS');
   assert.ok(v1.daoName.length <= 12, 'daoName 长度上限为 12 字符');
@@ -285,7 +285,7 @@ test('v3 M3 F11 云存档 v3 合并：防跨端买皮肤退铜钱漏洞、全字
   });
 
   const mergedAB = mergeSaves(devA, devB);
-  assert.equal(mergedAB.version, 3);
+  assert.equal(mergedAB.version, SAVE_VERSION);
   assert.equal(mergedAB.coins, 910, '更新时间戳端余额胜出');
   assert.ok(mergedAB.unlockedHeroes.includes('yinyang') && mergedAB.unlockedHeroes.includes('nuoxi'));
   assert.ok(mergedAB.unlockedWeapons.includes('taomujian') && mergedAB.unlockedWeapons.includes('zhinian_kite'));
