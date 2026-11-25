@@ -1,6 +1,10 @@
 // 刷怪：按 S(m) 连续累积刷普通敌人（每更不同的种类权重），按时间轴刷巡更小头目与 Boss。
 
-import { SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS, ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate, designMinutes } from './balance.js';
+import {
+  SPAWN, ROSTER, BOSS_TIMELINE, MINI_WARDERS,
+  HEDENG_ROSTER, HEDENG_BOSS_TIMELINE, HEDENG_MINI_WARDERS,
+  ENDLESS, ENEMY_AI, WAVES, ELITE, spawnRate, designMinutes,
+} from './balance.js';
 import { fsin, fcos, fatan2 } from '../core/math.js';
 import { spawnEnemy, ringPoint } from './enemies.js';
 import { spawnBoss } from './bosses.js';
@@ -16,6 +20,9 @@ function spawnAnchorPlayer(run) {
 const ROSTER_LISTS = Object.fromEntries(
   Object.entries(ROSTER).map(([w, tbl]) => [w, Object.entries(tbl).map(([type, weight]) => ({ type, weight }))]),
 );
+const HEDENG_ROSTER_LISTS = Object.fromEntries(
+  Object.entries(HEDENG_ROSTER).map(([w, tbl]) => [w, Object.entries(tbl).map(([type, weight]) => ({ type, weight }))]),
+);
 
 /** 当前用于刷怪公式的设计分钟数（按 PACE 换算，保证 7 分钟曲线形状与原 10 分钟一致） */
 export function spawnMinutes(run) {
@@ -27,11 +34,12 @@ export function spawnMinutes(run) {
 }
 
 export function rosterFor(run) {
-  if (run.mode === 'endless') return ROSTER_LISTS[5];
-  if (run.watch === 1 && run.time >= SPAWN.watch1LateAt && ROSTER_LISTS['1b']) return ROSTER_LISTS['1b'];
-  if (run.watch === 2 && run.time >= SPAWN.watch2LateAt && ROSTER_LISTS['2b']) return ROSTER_LISTS['2b'];
-  if (run.watch === 3 && run.time >= SPAWN.watch3LateAt && ROSTER_LISTS['3b']) return ROSTER_LISTS['3b'];
-  return ROSTER_LISTS[Math.min(5, run.watch)];
+  const lists = run.mapId === 'hedeng' ? HEDENG_ROSTER_LISTS : ROSTER_LISTS;
+  if (run.mode === 'endless') return lists[5];
+  if (run.watch === 1 && run.time >= SPAWN.watch1LateAt && lists['1b']) return lists['1b'];
+  if (run.watch === 2 && run.time >= SPAWN.watch2LateAt && lists['2b']) return lists['2b'];
+  if (run.watch === 3 && run.time >= SPAWN.watch3LateAt && lists['3b']) return lists['3b'];
+  return lists[Math.min(5, run.watch)];
 }
 
 function tri(rng, half) {
@@ -102,10 +110,12 @@ function spawnOne(run) {
 export function updateSpawner(run, dt) {
   ensureAlleyFlow(run, dt);
 
-  // 主线：巡更小头目（150s / 360s 必落供盒）与 Boss 时间轴
+  // 主线：巡更小头目与 Boss 时间轴（河灯水口切换专属巡江头目与河神夜婚终局）
   if (run.mode === 'main') {
+    const warderList = run.mapId === 'hedeng' ? HEDENG_MINI_WARDERS : MINI_WARDERS;
+    const bossTimeline = run.mapId === 'hedeng' ? HEDENG_BOSS_TIMELINE : BOSS_TIMELINE;
     if (!run._warderSpawned) run._warderSpawned = {};
-    for (const mw of MINI_WARDERS) {
+    for (const mw of warderList) {
       if (!run._warderSpawned[mw.id] && run.time >= mw.time) {
         run._warderSpawned[mw.id] = true;
         // 若被测试脚本大跨度跳转时间（超过 30 秒），跳过过时小头目
@@ -132,10 +142,16 @@ export function updateSpawner(run, dt) {
       }
     }
 
-    for (const b of BOSS_TIMELINE) {
-      if (!run._bossSpawned[b.type] && run.time >= b.time) {
-        run._bossSpawned[b.type] = true;
-        spawnBoss(run, b.type, { chest: b.chest, final: b.final });
+    for (const b of bossTimeline) {
+      const key = b.id || b.type;
+      if (!run._bossSpawned[key] && !run._bossSpawned[b.type] && run.time >= b.time) {
+        run._bossSpawned[key] = true;
+        if (!b.id) run._bossSpawned[b.type] = true;
+        spawnBoss(run, b.type, {
+          chest: b.chest,
+          final: b.final,
+          hpMulOverride: b.hpMulOverride,
+        });
       }
     }
   } else {
@@ -151,7 +167,11 @@ export function updateSpawner(run, dt) {
   updateWaves(run);
 
   let rate = spawnRate(spawnMinutes(run)) * run.night.spawnMul * (run.mods?.spawnRateMul || 1) * coopSpawnScale(run);
-  if (run.boss) rate *= run.boss.type === 'youshen' ? SPAWN.youshenSpawnMul : SPAWN.bossSpawnMul;
+  if (run.boss) {
+    rate *= (run.boss.type === 'youshen' || run.boss.type === 'hebo_wedding')
+      ? SPAWN.youshenSpawnMul
+      : SPAWN.bossSpawnMul;
+  }
   run._spawnAcc += rate * dt;
   while (run._spawnAcc >= 1) {
     run._spawnAcc -= 1;

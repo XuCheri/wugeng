@@ -485,6 +485,32 @@ export function updateProjectiles(run, dt) {
         break;
       }
 
+      case 'enemyWaveWall': {
+        const telT = pr.telegraphT || 0.95;
+        if (pr.t < telT) break;
+        pr.y += (pr.vy || 0) * dt;
+        const halfH = pr.halfH || 22;
+        const safeHalfW = pr.safeHalfW || 48;
+        const spanW = pr.spanW || 560;
+        if (!pr._hitSlots) pr._hitSlots = {};
+        if (isCoop) {
+          for (let k = 0; k < run.players.length; k++) {
+            const pl = run.players[k];
+            if (!pl || pl.downed || pl.hp <= 0 || pr._hitSlots[k]) continue;
+            if (Math.abs(pl.y - pr.y) <= halfH + pl.r && Math.abs(pl.x - pr.safeX) <= spanW && Math.abs(pl.x - pr.safeX) > safeHalfW) {
+              pr._hitSlots[k] = true;
+              hurtTargetPlayer(run, pl, pr.dmg);
+            }
+          }
+        } else if (!pr._hitSlots[0]) {
+          if (Math.abs(p.y - pr.y) <= halfH + p.r && Math.abs(p.x - pr.safeX) <= spanW && Math.abs(p.x - pr.safeX) > safeHalfW) {
+            pr._hitSlots[0] = true;
+            hurtPlayer(run, pr.dmg);
+          }
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -527,7 +553,7 @@ export function updateProjectiles(run, dt) {
     }
 
     const slot = pr.ownerSlot || 0;
-    if (pr.kind !== 'enemyBullet' && slot > 0 && run.players?.[slot]) {
+    if (pr.kind !== 'enemyBullet' && pr.kind !== 'enemyWaveWall' && slot > 0 && run.players?.[slot]) {
       withPlayerContext(run, run.players[slot], () => stepSingleProj(pr));
     } else {
       stepSingleProj(pr);

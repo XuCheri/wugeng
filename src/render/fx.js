@@ -6,13 +6,14 @@ import { normalizeAttackVfxId } from '../meta/cosmetics.js';
 import { getVfxPalette } from './vfx-themes.js';
 
 const TAU = Math.PI * 2;
-const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'paperbride', 'suona', 'horse', 'umbrella']);
+const PAPER_TYPES = new Set(['paperkid', 'sedan', 'lanternghost', 'paperbride', 'suona', 'paper_raft', 'horse', 'umbrella', 'hebo_wedding']);
 const CN_NUM = ['', '一', '二', '三', '四', '五'];
-export const BOSS_NAMES = { horse: '纸马将军', umbrella: '无面伞女', youshen: '夜游神' };
+export const BOSS_NAMES = { horse: '纸马将军', umbrella: '无面伞女', youshen: '夜游神', hebo_wedding: '河神夜婚' };
 export const BOSS_EPITHETS = {
   horse: '铁蹄踏纸，三冲夺命',
   umbrella: '撑伞隐月，纸钱满街',
   youshen: '执戟巡夜，五更决断',
+  hebo_wedding: '红轿踏浪，万灯锁魂',
 };
 export const EVOLVED_NAMES = {
   gong: '五更鸣锣',

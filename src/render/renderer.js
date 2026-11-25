@@ -102,11 +102,19 @@ const GROUND_KINDS = new Set([
   'moltenZone',
   'nuoDanceRing',
   'inkLine',
+  'enemyWaveWall',
 ]);
 
 // 精灵朝右绘制、需要随朝向翻转的敌人
-const FLIP_TYPES = new Set(['weasel', 'drowned', 'suona', 'archer_ghost', 'shaman', 'horse', 'umbrella', 'shade', 'youshen', 'sedan']);
-const FLOAT_TYPES = new Set(['shade', 'lanternghost', 'paperbride', 'shaman', 'sedan', 'drowned', 'umbrella']);
+const FLIP_TYPES = new Set([
+  'weasel', 'drowned', 'suona', 'archer_ghost', 'shaman',
+  'water_lurker', 'paper_raft', 'water_puller',
+  'horse', 'umbrella', 'shade', 'youshen', 'hebo_wedding', 'sedan',
+]);
+const FLOAT_TYPES = new Set([
+  'shade', 'lanternghost', 'paperbride', 'shaman', 'sedan', 'drowned',
+  'paper_raft', 'umbrella', 'hebo_wedding',
+]);
 const LANTERN_R = 118; // 基础灯笼光圈半径（CSS px）
 const SHRINE_GLYPH = { altar: '香', trial: '碑', peddler: '货' };
 const SHRINE_TITLE = { altar: '土地香案', trial: '镇邪试炼碑', peddler: '鬼市货郎' };
@@ -254,7 +262,7 @@ export function createRenderer(canvas, opts = {}) {
     return px < e.x ? -1 : 1;
   }
 
-  function drawEnemy(e, x, y, px, a, crowded) {
+  function drawEnemy(e, x, y, px, a, crowded, runRef = null) {
     const d = enemyDef(e.type);
     const s = (e.r || d.r) / d.r;
     const id = e.id || 0;
@@ -288,9 +296,56 @@ export function createRenderer(canvas, opts = {}) {
 
     const er = e.r || d.r;
     const feetY = y + er * 0.72;
-    const alpha = e.mirrorClone ? a * 0.78 : a;
+    let alpha = e.mirrorClone ? a * 0.78 : a;
+    if (e.submerged) {
+      alpha *= 0.38;
+      sy *= 0.65;
+      oy += 5;
+    }
     const sh = shadowSprite(er * 0.95);
     blit(ctx, sh, x, feetY, 1, 1, 0, alpha);
+
+    if (e.submerged) {
+      ctx.save();
+      ctx.strokeStyle = inkA(0.55);
+      ctx.lineWidth = 1.4;
+      const rk = (clock * 1.4 + id * 0.2) % 1;
+      ctx.beginPath();
+      ctx.ellipse(x, feetY, er * (0.9 + rk * 0.9), er * (0.38 + rk * 0.36), 0, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (e.pullingTarget && Number.isFinite(e.pullTargetX) && Number.isFinite(e.pullTargetY)) {
+      ctx.save();
+      ctx.strokeStyle = VERM;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10);
+      ctx.quadraticCurveTo((x + e.pullTargetX) * 0.5, (y + e.pullTargetY) * 0.5 - 16, e.pullTargetX, e.pullTargetY - 10);
+      ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (e.bossWardOf && runRef?.boss && runRef.boss.id === e.bossWardOf) {
+      const parentBoss = (runRef.enemies || []).find((b) => !b.dead && b.id === e.bossWardOf);
+      if (parentBoss) {
+        ctx.save();
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 12);
+        ctx.lineTo(parentBoss.x, parentBoss.y - 32);
+        ctx.stroke();
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     if (e.elite || e.boss || e.warder) {
       blit(ctx, eliteRingSprite(er * (e.warder ? 1.3 : 1.15)), x, feetY, 1, 1, 0, alpha);
@@ -303,9 +358,9 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
-    // 无面伞女：护盾结界 vs 旋伞破绽地面法环（T1-F2-05）
-    if (e.type === 'umbrella') {
-      const shielded = e.state === 'shield';
+    // 无面伞女与河神夜婚：护盾结界地面法环（始终保持朱砂警示色）
+    if (e.type === 'umbrella' || (e.type === 'hebo_wedding' && e.wardShieldActive)) {
+      const shielded = e.type === 'umbrella' ? e.state === 'shield' : true;
       ctx.save();
       ctx.strokeStyle = shielded ? VERM : LANTERN;
       ctx.lineWidth = shielded ? 2.8 : 1.6;
@@ -1490,6 +1545,55 @@ export function createRenderer(canvas, opts = {}) {
         }
         break;
       }
+      case 'enemyWaveWall': {
+        const safeX = p.safeX ?? p.x;
+        const safeHalfW = p.safeHalfW || 48;
+        const halfH = p.halfH || 22;
+        const spanW = p.spanW || 560;
+        const telT = p.telegraphT || 0.95;
+        const isWarn = p.t < telT;
+        const left0 = safeX - spanW;
+        const left1 = safeX - safeHalfW;
+        const right0 = safeX + safeHalfW;
+        const right1 = safeX + spanW;
+        ctx.save();
+        if (isWarn) {
+          const prog = Math.max(0.1, Math.min(1, p.t / telT));
+          ctx.fillStyle = vermA(0.16 + 0.18 * prog);
+          ctx.fillRect(left0, p.y - halfH, left1 - left0, halfH * 2);
+          ctx.fillRect(right0, p.y - halfH, right1 - right0, halfH * 2);
+          ctx.strokeStyle = VERM;
+          ctx.lineWidth = 2.4;
+          ctx.strokeRect(left0, p.y - halfH, left1 - left0, halfH * 2);
+          ctx.strokeRect(right0, p.y - halfH, right1 - right0, halfH * 2);
+        } else {
+          ctx.fillStyle = INK;
+          ctx.fillRect(left0, p.y - halfH, left1 - left0, halfH * 2);
+          ctx.fillRect(right0, p.y - halfH, right1 - right0, halfH * 2);
+          ctx.strokeStyle = VERM;
+          ctx.lineWidth = 3.2;
+          ctx.strokeRect(left0, p.y - halfH, left1 - left0, halfH * 2);
+          ctx.strokeRect(right0, p.y - halfH, right1 - right0, halfH * 2);
+          ctx.strokeStyle = PAPER;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          for (const [a0, a1] of [[left0, left1], [right0, right1]]) {
+            for (let wx = a0 + 18; wx < a1 - 18; wx += 36) {
+              ctx.moveTo(wx, p.y);
+              ctx.quadraticCurveTo(wx + 9, p.y - 8, wx + 18, p.y);
+            }
+          }
+          ctx.stroke();
+        }
+        // 中央木板安全桥口提示框（暖金高亮）
+        ctx.fillStyle = lanternA(0.20);
+        ctx.fillRect(left1 + 2, p.y - halfH, safeHalfW * 2 - 4, halfH * 2);
+        ctx.strokeStyle = LANTERN;
+        ctx.lineWidth = 2.2;
+        ctx.strokeRect(left1 + 2, p.y - halfH, safeHalfW * 2 - 4, halfH * 2);
+        ctx.restore();
+        break;
+      }
       default: {
         ctx.fillStyle = INK;
         ctx.beginPath();
@@ -2139,7 +2243,7 @@ export function createRenderer(canvas, opts = {}) {
     for (let i = 0; i < projs.length; i++) {
       const q = projs[i];
       if (!GROUND_KINDS.has(q.kind)) continue;
-      const gm = Math.max(150, (q.radius || q.maxRadius || 60) + 40);
+      const gm = q.kind === 'enemyWaveWall' ? 620 : Math.max(150, (q.radius || q.maxRadius || 60) + 40);
       if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
     }
 
@@ -2234,7 +2338,7 @@ export function createRenderer(canvas, opts = {}) {
       const d = drawList[i];
       if (d.t === 0) blit(ctx, propSprite(d.o.kind), d.x, d.y);
       else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
-      else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded);
+      else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded, run);
       else if (d.t === 4) {
         const ally = d.o;
         const allyEvo = Array.isArray(ally.weapons) ? ally.weapons.filter((w) => w && w.evolved).length : 0;

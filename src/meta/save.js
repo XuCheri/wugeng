@@ -44,7 +44,8 @@ export const RELIC_IDS = [
 export const ENEMY_IDS = [
   'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',
   'suona', 'paperbride', 'cinder', 'archer_ghost', 'firecracker_boy', 'twin_paper', 'shaman',
-  'horse', 'umbrella', 'youshen',
+  'water_lurker', 'paper_raft', 'water_puller',
+  'horse', 'umbrella', 'youshen', 'hebo_wedding',
 ];
 export const NIGHT_MAX = 10;
 export const SHOP_MAX_LEVEL = 5;

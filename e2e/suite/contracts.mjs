@@ -213,12 +213,16 @@ export const NEW_REGULAR_ENEMY_IDS = [
 export const V4_NEW_REGULAR_ENEMY_IDS = [
   'archer_ghost', 'firecracker_boy', 'twin_paper', 'shaman',
 ];
+export const V4_M5_REGULAR_ENEMY_IDS = [
+  'water_lurker', 'paper_raft', 'water_puller',
+];
 export const REGULAR_ENEMY_IDS = [
   ...CLASSIC_REGULAR_ENEMY_IDS,
   ...NEW_REGULAR_ENEMY_IDS,
   ...V4_NEW_REGULAR_ENEMY_IDS,
+  ...V4_M5_REGULAR_ENEMY_IDS,
 ];
-export const BOSS_ENEMY_IDS = ['horse', 'umbrella', 'youshen'];
+export const BOSS_ENEMY_IDS = ['horse', 'umbrella', 'youshen', 'hebo_wedding'];
 export const ALL_ENEMY_IDS = [...REGULAR_ENEMY_IDS, ...BOSS_ENEMY_IDS];
 
 export const ELITE_AFFIX_IDS = [

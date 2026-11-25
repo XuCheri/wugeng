@@ -144,7 +144,7 @@ function summaryEvolvedCount(summary) {
 function summaryBossKillCount(summary) {
   let fromMap = 0;
   if (isPlainObj(summary.killsByType)) {
-    for (const bid of ['horse', 'umbrella', 'youshen']) {
+    for (const bid of ['horse', 'umbrella', 'youshen', 'hebo_wedding']) {
       fromMap += safeInt(summary.killsByType[bid], 1e6);
     }
   }

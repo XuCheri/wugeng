@@ -114,12 +114,17 @@ export const ENEMIES = {
   firecracker_boy: { name: '爆竹童子', hp: 28, speed: 82, dmg: 8, r: 11, xp: 1.8 },
   twin_paper: { name: '剪纸双生', hp: 52, speed: 54, dmg: 9, r: 15, xp: 2.3 },
   shaman: { name: '纸钱妖师', hp: 74, speed: 44, dmg: 10, r: 14, xp: 2.6 },
+  water_lurker: { name: '沉水鬼', hp: 46, speed: 58, dmg: 11, r: 13, xp: 2.1 },
+  paper_raft: { name: '浮木纸妖', hp: 62, speed: 74, dmg: 10, r: 16, xp: 2.4 },
+  water_puller: { name: '拉脚水怪', hp: 50, speed: 60, dmg: 9, r: 12, xp: 2.2 },
   horse: { name: '纸马将军', hp: 2800, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
   umbrella: { name: '无面伞女', hp: 58000, speed: 52, dmg: 38, r: 28, xp: 75, boss: true },
   youshen: { name: '夜游神', hp: 176000, speed: 58, dmg: 79, r: 40, xp: 0, boss: true },
+  hebo_wedding: { name: '河神夜婚', hp: 168000, speed: 56, dmg: 76, r: 38, xp: 0, boss: true },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES);
 export const REGULAR_ENEMY_IDS = ENEMY_IDS.filter((k) => !ENEMIES[k].boss);
+export const BOSS_IDS = ENEMY_IDS.filter((k) => !!ENEMIES[k].boss);
 export const ENEMY_NAMES = Object.fromEntries(Object.entries(ENEMIES).map(([k, v]) => [k, v.name]));
 export const MAX_ENEMY_RADIUS = 40;
 
@@ -167,6 +172,20 @@ export const ENEMY_AI = {
     retreatDist: 190, holdDist: 265, castCd: 6.0, firstCastMin: 2.2, firstCastMax: 3.8,
     summonCount: 4, summonDist: 34, shieldRadius: 145, maxShieldTargets: 8,
   },
+  // 沉水鬼：潜行减伤疾近，临身破水蓄势猛扑
+  water_lurker: {
+    submergeDr: 0.55, submergeSpeedMul: 1.24, ambushDist: 92, windup: 0.42,
+    lungeSpeed: 248, lungeTime: 0.38, recover: 2.4,
+  },
+  // 浮木纸妖：沿河道横向疾滑，对准高度后直线猛撞
+  paper_raft: {
+    glideXMul: 1.38, ramTriggerY: 52, ramRange: 295, windup: 0.54,
+    ramSpeed: 286, ramTime: 0.62, recover: 1.85,
+  },
+  // 拉脚水怪：中近距蓄势出手拉拽，将玩家往河水或自身方向拖拽
+  water_puller: {
+    tetherRange: 142, windup: 0.45, pullTime: 0.56, pullSpeed: 72, pullCd: 2.75,
+  },
 };
 
 export const BOSS_AI = {
@@ -192,6 +211,20 @@ export const BOSS_AI = {
     bulletSpeed: 225, bulletDmg: 55, bulletR: 7, bulletLife: 6,
     enrageSpeedMul: 1.60, enrageSummonInterval: 1.90, enrageRingInterval: 0.41, enrageRingCount: 25, ringTurn: 0.2,
     lungeEvery: 4.55, lungeWindup: 0.74, lungeSpeed: 450, lungeTime: 0.44, lungeDmgMul: 1.95, lungeRecover: 0.25,
+  },
+  hebo_wedding: {
+    hpMul: 2.90,
+    phase2At: 0.65,
+    phase3At: 0.30,
+    // 一阶段：红轿二连冲 + 吹鼓鬼护轿
+    chase: 2.4, windup: 0.84, chargeSpeed: 396, chargeTime: 0.50, gap: 0.26, charges: 2, rest: 1.55,
+    chargeDmgMul: 1.35, summonInterval: 5.2, summonCount: 3, summonTypes: ['suona', 'paperbride'], summonDist: 120,
+    // 二阶段：沧浪横街水墙（留木板桥安全口）+ 扇形水珠
+    waveEvery: 4.1, waveTelegraph: 0.95, waveSpeed: 215, waveHalfH: 22, waveSafeHalfW: 48, waveLife: 3.1, waveDmg: 48,
+    fanEvery: 1.45, fanShots: 5, fanSpread: 0.22, bulletSpeed: 215, bulletDmg: 44, bulletR: 7, bulletLife: 4.6,
+    // 三阶段：万灯锁魂四阵眼护盾（打碎全部阵眼破盾易伤）
+    wardCount: 4, wardDist: 126, wardHpRatio: 0.042, wardShieldDr: 0.80, wardOrbitSpeed: 0.95,
+    wardRecastCd: 11.5, wardExposeSec: 4.5, wardExposeVuln: 0.35, ringEvery: 0.88, ringCount: 16,
   },
 };
 
@@ -303,6 +336,30 @@ export const BOSS_TIMELINE = [
   { time: Math.round(240 * PACE), type: 'horse', chest: true },
   { time: WATCH5_TIME, type: 'umbrella', chest: true },
   { time: MAIN_DURATION, type: 'youshen', chest: false, final: true },
+];
+
+// 河灯水口专属巡更头目、刷怪权重与夜主时间轴（换掉第 2、3 尊夜主，终局讨伐河神夜婚）
+export const HEDENG_MINI_WARDERS = [
+  { id: 'warder_150', time: Math.round(150 * PACE), type: 'paper_raft', affix: 'swift_step', name: '河口引轿', hpMul: 1.75, rMul: 1.18, chest: true },
+  { id: 'warder_360', time: Math.round(360 * PACE), type: 'water_lurker', affix: 'soul_fire', name: '深水暗鬼', hpMul: 3.0, rMul: 1.22, chest: true },
+  { id: 'warder_430', time: Math.round(430 * PACE), type: 'suona', affix: 'mirror_twin', name: '夜水鼓头', hpMul: 3.0, rMul: 1.22, chest: true },
+];
+
+export const HEDENG_ROSTER = {
+  1: { paperkid: 52, shade: 26, water_lurker: 22 },
+  '1b': { paperkid: 22, shade: 14, lanternghost: 30, water_lurker: 20, paper_raft: 14 },
+  2: { paperkid: 16, shade: 12, lanternghost: 24, water_lurker: 18, paper_raft: 16, water_puller: 8, suona: 6 },
+  '2b': { paperkid: 10, shade: 10, lanternghost: 16, water_lurker: 16, paper_raft: 16, water_puller: 14, suona: 8, archer_ghost: 10 },
+  3: { paperkid: 8, shade: 10, drowned: 12, water_lurker: 16, paper_raft: 16, water_puller: 14, paperbride: 8, suona: 8, firecracker_boy: 8 },
+  '3b': { shade: 6, drowned: 14, water_lurker: 16, paper_raft: 15, water_puller: 15, paperbride: 12, suona: 6, twin_paper: 8, archer_ghost: 8 },
+  4: { drowned: 14, water_lurker: 16, paper_raft: 15, water_puller: 15, paperbride: 12, suona: 6, twin_paper: 8, shaman: 7, cinder: 7 },
+  5: { drowned: 14, water_lurker: 17, paper_raft: 16, water_puller: 16, paperbride: 10, suona: 6, twin_paper: 7, shaman: 7, cinder: 7 },
+};
+
+export const HEDENG_BOSS_TIMELINE = [
+  { id: 'hedeng_b1', time: Math.round(240 * PACE), type: 'horse', chest: true },
+  { id: 'hedeng_b2', time: WATCH5_TIME, type: 'youshen', hpMulOverride: 0.34, chest: true, final: false },
+  { id: 'hedeng_b3', time: MAIN_DURATION, type: 'hebo_wedding', chest: false, final: true },
 ];
 
 // ───────────────────────── 无尽（PLAN §4.5）─────────────────────────

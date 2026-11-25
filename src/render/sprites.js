@@ -1525,6 +1525,169 @@ function drawYoushen(g, rng, f) {
   fs(g, INK, 1);
 }
 
+function drawWaterLurker(g, rng, f) {
+  // 沉水鬼：水纹漩涡中半探身的披发水祟，双目幽黄，披湿芦草水衣
+  const bob = [0, -1.2, 0, 1.0][f];
+  ink(g, 1.3, inkA(0.65));
+  ell(g, 0, -2, 14, 5.2);
+  g.stroke();
+  ell(g, 0, -2, 9.5, 3.4);
+  g.stroke();
+  // 湿透墨衣与水草肩披
+  poly(g, [[-11, -2], [-9, -18 + bob], [0, -22 + bob], [10, -17 + bob], [12, -2]]);
+  fs(g, INK, 1.2);
+  poly(g, [[-12, -13 + bob], [-5, -18 + bob], [0, -10 + bob], [6, -18 + bob], [12, -12 + bob]]);
+  fs(g, PAPER_SHADE, 1.0);
+  // 苍白半露面庞 + 湿发垂额
+  ell(g, 1, -22 + bob, 6.6, 6.2);
+  fs(g, PAPER, 1.3);
+  poly(g, [[-6, -24 + bob], [1, -29 + bob], [8, -24 + bob], [6, -19 + bob], [-5, -19 + bob]]);
+  fs(g, INK, 1.0);
+  // 幽黄双瞳 + 朱砂额印
+  g.fillStyle = LANTERN;
+  circ(g, -1.2, -21.5 + bob, 1.5);
+  g.fill();
+  circ(g, 3.6, -21.5 + bob, 1.5);
+  g.fill();
+  vfill(g, () => circ(g, 1.2, -24.5 + bob, 1.2));
+  // 前探利爪
+  line(g, 7, -14 + bob, 14, -11 + bob, 1.8, INK);
+  line(g, 14, -11 + bob, 16, -8 + bob, 1.3, VERM);
+}
+
+function drawPaperRaft(g, rng, f) {
+  // 浮木纸妖：翘首竹木纸排 + 招魂三角纸幡 + 撑排纸偶与船头引路红灯
+  const tilt = [-0.6, 0.5, 0.8, -0.4][f];
+  // 水波底痕
+  ink(g, 1.1, inkA(0.45));
+  ell(g, 0, -2, 20, 6);
+  g.stroke();
+  // 翘头浮木排身
+  poly(g, [[-18, -5], [13, -5], [20, -11 + tilt], [15, -2], [-16, -2]]);
+  fs(g, PAPER_SHADE, 1.5);
+  line(g, -13, -4, 12, -4, 1.1, INK);
+  // 纸幡桅杆与朱白斜纹帆幡
+  line(g, -4, -5, -4, -34, 1.8, INK);
+  poly(g, [[-4, -33], [11, -24 + tilt], [-4, -14]]);
+  fs(g, PAPER, 1.3);
+  vfill(g, () => poly(g, [[-3, -29], [7, -24 + tilt], [-3, -19]]));
+  // 排上纸偶操桨手
+  poly(g, [[-11, -6], [-9, -19], [-4, -19], [-3, -6]]);
+  fs(g, INK, 1.1);
+  circ(g, -6.5, -22, 3.8);
+  fs(g, PAPER, 1.2);
+  // 排首暖黄红灯
+  line(g, 13, -8, 18, -17 + tilt, 1.3, INK);
+  ell(g, 18, -14 + tilt, 3.2, 4.0);
+  fs(g, VERM, 1.0);
+  circ(g, 18, -14 + tilt, 1.5);
+  g.fillStyle = LANTERN;
+  g.fill();
+}
+
+function drawWaterPuller(g, rng, f) {
+  // 拉脚水怪：佝偻蹲伏的长臂水怪，青白纸面裂口，双爪缠朱红水草索前抓
+  const reach = [0, 2.2, 1.0, -1.2][f];
+  // 蹲伏躯干
+  poly(g, [[-10, -2], [-12, -16], [-3, -23], [7, -20], [9, -2]]);
+  fs(g, INK, 1.3);
+  // 背脊鳍刺
+  poly(g, [[-11, -15], [-16, -19], [-9, -20], [-13, -25], [-5, -23]]);
+  fs(g, VERM, 1.0);
+  // 诡笑阔面
+  ell(g, 2, -23, 6.8, 6.0);
+  fs(g, PAPER, 1.35);
+  g.fillStyle = INK;
+  circ(g, 0, -24, 1.3);
+  g.fill();
+  circ(g, 4.6, -24, 1.3);
+  g.fill();
+  ink(g, 1.3, VERM);
+  g.beginPath();
+  g.arc(2.4, -21, 3.4, 0.15, Math.PI - 0.15);
+  g.stroke();
+  // 超长前伸拉脚鬼爪与朱砂水索
+  brushStroke(g, [[4, -15], [11 + reach * 0.5, -13], [17 + reach, -9]], 2.8, { seed: 91, color: INK, dry: 0.1 });
+  line(g, 17 + reach, -9, 20 + reach, -12, 1.4, VERM);
+  line(g, 17 + reach, -9, 21 + reach, -8, 1.4, VERM);
+  line(g, 17 + reach, -9, 19 + reach, -5, 1.4, VERM);
+  ink(g, 1.2, VERM);
+  g.beginPath();
+  g.arc(12 + reach * 0.6, -11, 5.5, -0.6, 1.8);
+  g.stroke();
+}
+
+function drawHeboWedding(g, rng, f) {
+  // 河神夜婚（终局夜主）：怒涛黑浪托举八抬朱金喜轿，轿顶河神冠冕半现、四角悬引魂河灯
+  const surge = [0, -2.2, 0, 1.8][f];
+  // 1. 底部翻涌墨浪底座
+  poly(g, [[-44, -2], [-48, -14 - surge * 0.5], [-28, -20], [0, -16 + surge * 0.4], [28, -21], [48, -14 + surge * 0.5], [44, -2]]);
+  fs(g, INK, 1.8);
+  ink(g, 1.4, PAPER_SHADE);
+  g.beginPath();
+  g.moveTo(-38, -8);
+  g.quadraticCurveTo(-18, -15, 0, -9);
+  g.quadraticCurveTo(18, -3, 38, -10);
+  g.stroke();
+
+  // 2. 横贯长轿杠与四角悬垂暖金河灯
+  line(g, -48, -34 + surge, 48, -34 + surge, 3.2, INK);
+  for (const lx of [-42, 42]) {
+    line(g, lx, -34 + surge, lx, -22 + surge, 1.3, INK);
+    ell(g, lx, -19 + surge, 4.6, 5.8);
+    fs(g, VERM, 1.2);
+    circ(g, lx, -19 + surge, 2.2);
+    g.fillStyle = LANTERN;
+    g.fill();
+  }
+
+  // 3. 朱红喜轿轿厢与宣纸窗棂喜封
+  poly(g, [[-26, -16 + surge], [-28, -68 + surge], [28, -68 + surge], [26, -16 + surge]]);
+  fs(g, VERM, 2.0);
+  poly(g, [[-16, -58 + surge], [16, -58 + surge], [15, -28 + surge], [-15, -28 + surge]]);
+  fs(g, INK, 1.5);
+  // 轿帘交叉红绸与中央暖金喜印
+  ink(g, 2.2, VERM);
+  g.beginPath();
+  g.moveTo(-15, -57 + surge);
+  g.lineTo(15, -29 + surge);
+  g.moveTo(15, -57 + surge);
+  g.lineTo(-15, -29 + surge);
+  g.stroke();
+  poly(g, [[-7, -49 + surge], [7, -49 + surge], [7, -36 + surge], [-7, -36 + surge]]);
+  fs(g, LANTERN, 1.3);
+  vfill(g, () => poly(g, [[-3.5, -45.5 + surge], [3.5, -45.5 + surge], [3.5, -39.5 + surge], [-3.5, -39.5 + surge]]));
+
+  // 4. 重檐飞角轿顶
+  poly(g, [[-38, -66 + surge], [0, -86 + surge], [38, -66 + surge], [30, -62 + surge], [-30, -62 + surge]]);
+  fs(g, INK, 1.8);
+  poly(g, [[-28, -80 + surge], [0, -96 + surge], [28, -80 + surge], [22, -76 + surge], [-22, -76 + surge]]);
+  fs(g, VERM, 1.6);
+
+  // 5. 轿顶上方显化的河神法相（冕旒神冠 + 白面金瞳 + 双角水龙须）
+  poly(g, [[-18, -94 + surge], [-14, -118 + surge], [14, -118 + surge], [18, -94 + surge]]);
+  fs(g, INK, 1.6);
+  ell(g, 0, -112 + surge, 10.5, 11.5);
+  fs(g, PAPER, 1.7);
+  // 怒目金瞳
+  g.fillStyle = VERM;
+  ell(g, -4.2, -112 + surge, 2.8, 2.0);
+  g.fill();
+  ell(g, 4.2, -112 + surge, 2.8, 2.0);
+  g.fill();
+  g.fillStyle = LANTERN;
+  circ(g, -4.2, -112 + surge, 1.2);
+  g.fill();
+  circ(g, 4.2, -112 + surge, 1.2);
+  g.fill();
+  // 河伯平天冠与双角宝珠
+  poly(g, [[-15, -121 + surge], [15, -121 + surge], [12, -133 + surge], [-12, -133 + surge]]);
+  fs(g, INK, 1.5);
+  line(g, -20, -133 + surge, 20, -133 + surge, 2.6, LANTERN);
+  circ(g, 0, -138 + surge, 4.2);
+  fs(g, LANTERN, 1.2);
+}
+
 /* ------------------------------------------------------------------ */
 /* 实体精灵表                                                          */
 /* ------------------------------------------------------------------ */
@@ -1545,9 +1708,13 @@ const ENEMY_DEFS = {
   firecracker_boy: { w: 36, h: 42, ax: 17, ay: 38, r: 11, frames: 4, draw: drawFirecrackerBoy, eyes: [[-2, -23.8], [2, -23.8]] },
   twin_paper: { w: 38, h: 40, ax: 19, ay: 36, r: 15, frames: 4, draw: drawTwinPaper, eyes: [[-6, -24.8], [6, -24.8]] },
   shaman: { w: 44, h: 48, ax: 20, ay: 44, r: 14, frames: 4, draw: drawShaman, eyes: [[-2, -27.8], [2, -27.8]] },
+  water_lurker: { w: 38, h: 38, ax: 18, ay: 34, r: 13, frames: 4, draw: drawWaterLurker, eyes: [[-1.2, -21.5], [3.6, -21.5]] },
+  paper_raft: { w: 46, h: 42, ax: 22, ay: 38, r: 16, frames: 4, draw: drawPaperRaft, eyes: null },
+  water_puller: { w: 46, h: 38, ax: 18, ay: 34, r: 12, frames: 4, draw: drawWaterPuller, eyes: [[0, -24], [4.6, -24]] },
   horse: { w: 112, h: 124, ax: 50, ay: 118, r: 30, frames: 4, draw: drawHorse, eyes: [[37.6, -64.6], [-2.1, -78.6], [2.1, -78.6]], lw: 2 },
   umbrella: { w: 100, h: 116, ax: 50, ay: 110, r: 28, frames: 4, draw: drawUmbrella, eyes: null },
   youshen: { w: 104, h: 160, ax: 50, ay: 154, r: 40, frames: 4, draw: drawYoushen, eyes: [[-4, -104], [4.8, -104]] },
+  hebo_wedding: { w: 112, h: 156, ax: 56, ay: 148, r: 38, frames: 4, draw: drawHeboWedding, eyes: [[-4.2, -112], [4.2, -112]] },
 };
 
 export const ENEMY_TYPES = Object.keys(ENEMY_DEFS);

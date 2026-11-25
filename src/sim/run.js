@@ -363,8 +363,8 @@ function settleStatus(run) {
   if (run.status === 'cleared') {
     if (run.chestChoices.length) run.chestChoices.length = 0;
     run.activeShrine = null;
-    if (run.projectiles.some((pr) => pr.dead || pr.kind === 'enemyBullet')) {
-      run.projectiles = run.projectiles.filter((pr) => !pr.dead && pr.kind !== 'enemyBullet');
+    if (run.projectiles.some((pr) => pr.dead || pr.kind === 'enemyBullet' || pr.kind === 'enemyWaveWall')) {
+      run.projectiles = run.projectiles.filter((pr) => !pr.dead && pr.kind !== 'enemyBullet' && pr.kind !== 'enemyWaveWall');
     }
     return;
   }
@@ -681,7 +681,7 @@ export function revive(run) {
       }
     }
     compactEnemies(run);
-    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet');
+    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet' && pr.kind !== 'enemyWaveWall');
     run.events.push({ type: 'revive' });
     if (run.status !== 'cleared') run.status = 'playing';
     settleStatus(run);
@@ -723,7 +723,7 @@ export function computeRunScore(run, clearedArg) {
   const kbt = run.stats && typeof run.stats.killsByType === 'object' && run.stats.killsByType ? run.stats.killsByType : {};
   const bossKills = Math.min(
     1e6,
-    ['horse', 'umbrella', 'youshen'].reduce(
+    ['horse', 'umbrella', 'youshen', 'hebo_wedding'].reduce(
       (acc, k) => acc + (Number.isFinite(kbt[k]) && kbt[k] > 0 ? Math.min(1e6, Math.floor(kbt[k])) : 0),
       0,
     ),
@@ -824,7 +824,7 @@ export function endRun(run, clearedArg) {
   }
   const bossKills = Math.min(
     1e6,
-    ['horse', 'umbrella', 'youshen'].reduce(
+    ['horse', 'umbrella', 'youshen', 'hebo_wedding'].reduce(
       (acc, k) => acc + (Object.hasOwn(cleanKbt, k) ? Math.min(1e6, cleanKbt[k]) : 0),
       0,
     ),

@@ -127,6 +127,12 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
     if (e.type === 'umbrella' && e.state === 'shield' && !opts.armorBreak) {
       dmg *= 1 - BOSS_AI.umbrella.shieldDr;
     }
+    if (e.type === 'hebo_wedding' && e.wardShieldActive && !opts.armorBreak) {
+      dmg *= 1 - BOSS_AI.hebo_wedding.wardShieldDr;
+    }
+    if (e.type === 'water_lurker' && e.submerged && !opts.armorBreak) {
+      dmg *= 1 - ENEMY_AI.water_lurker.submergeDr;
+    }
     if (e.paperArmor > 0 && !(e.vulnT > 0) && !opts.armorBreak) {
       dmg *= 1 - ELITE_AFFIXES.paper_armor.dmgReduce;
       e.paperArmor--;
@@ -191,10 +197,16 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
   const crit = !(opts && opts.noCrit) && run.rng.next() < m.critChance;
   if (crit) dmg *= m.critMult ?? PLAYER_BASE.critMult;
 
-  // 无面伞女撑伞减伤 & 精英纸甲（破甲攻击可贯穿）
+  // 无面伞女撑伞减伤、河神夜婚万灯护盾、沉水鬼潜行减伤 & 精英纸甲（破甲攻击可贯穿）
   const armorBreak = !!(opts && opts.armorBreak);
   if (e.type === 'umbrella' && e.state === 'shield' && !armorBreak) {
     dmg *= 1 - BOSS_AI.umbrella.shieldDr;
+  }
+  if (e.type === 'hebo_wedding' && e.wardShieldActive && !armorBreak) {
+    dmg *= 1 - BOSS_AI.hebo_wedding.wardShieldDr;
+  }
+  if (e.type === 'water_lurker' && e.submerged && !armorBreak) {
+    dmg *= 1 - ENEMY_AI.water_lurker.submergeDr;
   }
   if (e.paperArmor > 0 && !(e.vulnT > 0) && !armorBreak) {
     dmg *= 1 - ELITE_AFFIXES.paper_armor.dmgReduce;

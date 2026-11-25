@@ -10,6 +10,7 @@ import { hurtPlayer } from './player.js';
 import { updateBoss } from './bosses.js';
 import { damageEnemy, knockback } from './combat.js';
 import { coopHpScale, coopPartySize, nearestLivingPlayer, hurtTargetPlayer, withPlayerContext } from './coop.js';
+import { riverChannelYAt, RIVER_GAP_Y } from './maps.js';
 
 function resolveEndlessStartSec(run) {
   return Number.isFinite(run._endlessStart) && run._endlessStart > 0
@@ -129,7 +130,15 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     bleedSlot: 0,
     _bleedTick: 0,
     buffedT: 0,
-    state: 'move',
+    state: type === 'water_lurker' ? 'submerge' : 'move',
+    submerged: type === 'water_lurker',
+    pullingTarget: false,
+    pullTargetX: 0,
+    pullTargetY: 0,
+    bossWardOf: opts.bossWardOf || 0,
+    wardOrbitIdx: opts.wardOrbitIdx ?? 0,
+    wardOrbitCount: opts.wardOrbitCount ?? 4,
+    wardShieldActive: false,
     angle: fatan2(run.player.y - sy, run.player.x - sx),
     telegraphX: 0,
     telegraphY: 0,
@@ -157,10 +166,15 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     _fireT: initFireT,
     _affixT: affix === 'soul_fire' ? run.rng.range(1.0, ELITE_AFFIXES.soul_fire.fireInterval) : 0,
     _summonT: initSummonT,
+    _pullCd: type === 'water_puller' ? 1.15 : 0,
     _spiralA: 0,
     _charges: 0,
     _windupTotal: 0,
     _lungeCd: 0,
+    _waveT: 0,
+    _wardAngle: 0,
+    _wardRecastT: 0,
+    _wardHadActive: false,
     _lanternTicks: 0,
     _mirrorRampUntil: 0,
     _mirrorStacks: 0,
@@ -187,7 +201,7 @@ export function flushSpawnQueue(run) {
   }
   for (let i = 0; i < q.length; i++) {
     const item = q[i];
-    const isPriority = Boolean(ENEMIES[item.type]?.boss || item.opts?.warder || item.opts?.chest);
+    const isPriority = Boolean(ENEMIES[item.type]?.boss || item.opts?.warder || item.opts?.chest || item.opts?.bossWardOf);
     if (!isPriority && alive >= SPAWN.cap) continue;
     spawnEnemy(run, item.type, item.x, item.y, item.opts);
     alive++;
@@ -357,6 +371,21 @@ export function updateEnemies(run, dt) {
 
     let vx = 0;
     let vy = 0;
+    e.pullingTarget = false;
+    if (e.bossWardOf) {
+      if (!liveBoss || liveBoss.dead || liveBoss.id !== e.bossWardOf) {
+        e.dead = true;
+        e.hp = 0;
+        continue;
+      }
+      const orbitA = (liveBoss._wardAngle || 0) + (e.wardOrbitIdx / Math.max(1, e.wardOrbitCount || 4)) * Math.PI * 2;
+      const wardD = 126;
+      e.x = liveBoss.x + fcos(orbitA) * wardD;
+      e.y = liveBoss.y + fsin(orbitA) * wardD;
+      e.kbx = 0;
+      e.kby = 0;
+      continue;
+    }
     if (e.boss) {
       const v = isCoop && p !== p0 ? withPlayerContext(run, p, () => updateBoss(run, e, dt, tx, ty, d)) : updateBoss(run, e, dt, tx, ty, d);
       vx = v.x;
@@ -370,6 +399,10 @@ export function updateEnemies(run, dt) {
         e._fireT = 0.6;
       } else if (e.type === 'firecracker_boy' && e.state === 'fuse') {
         e.stateT += dt;
+      } else if ((e.type === 'water_lurker' || e.type === 'paper_raft' || e.type === 'water_puller') && e.state === 'windup') {
+        e.state = e.type === 'water_lurker' ? 'recover' : 'move';
+        e.submerged = false;
+        e.stateT = 1.0;
       }
       clearTelegraph(e);
     } else {
@@ -583,6 +616,139 @@ export function updateEnemies(run, dt) {
               shielded++;
             }
           }
+        }
+      } else if (e.type === 'water_lurker') {
+        const WL = ai.water_lurker;
+        const telLen = WL.lungeSpeed * WL.lungeTime + e.r;
+        const telWid = e.r * 2;
+        if (e.state === 'submerge') {
+          e.submerged = true;
+          spd *= WL.submergeSpeedMul;
+          if (d <= WL.ambushDist && e.stateT <= 0) {
+            e.state = 'windup';
+            e.submerged = false;
+            e.stateT = WL.windup;
+            e.dx = tx;
+            e.dy = ty;
+            e.angle = fatan2(ty, tx);
+            setTelegraph(e, telLen, telWid, 0.04);
+            spd = 0;
+          }
+        } else if (e.state === 'windup') {
+          e.submerged = false;
+          spd = 0;
+          setTelegraph(e, telLen, telWid, clamp(1 - Math.max(0, e.stateT) / WL.windup, 0.02, 1));
+          if (e.stateT <= 0) {
+            e.state = 'lunge';
+            e.stateT = WL.lungeTime;
+            clearTelegraph(e);
+          }
+        } else if (e.state === 'lunge') {
+          e.submerged = false;
+          moveX = e.dx;
+          moveY = e.dy;
+          spd = WL.lungeSpeed * run.night.enemySpeedMul * (e.slowT > 0 ? ai.slowMul : 1);
+          if (e.stateT <= 0) {
+            e.state = 'recover';
+            e.stateT = WL.recover;
+            clearTelegraph(e);
+          }
+        } else {
+          e.submerged = false;
+          spd *= 0.85;
+          if (e.stateT <= 0) {
+            e.state = 'submerge';
+            e.submerged = true;
+          }
+        }
+      } else if (e.type === 'paper_raft') {
+        const PR = ai.paper_raft;
+        const telLen = PR.ramSpeed * PR.ramTime + e.r;
+        const telWid = e.r * 2;
+        if (e.state === 'windup') {
+          spd = 0;
+          setTelegraph(e, telLen, telWid, clamp(1 - Math.max(0, e.stateT) / PR.windup, 0.02, 1));
+          if (e.stateT <= 0) {
+            e.state = 'dash';
+            e.stateT = PR.ramTime;
+            clearTelegraph(e);
+          }
+        } else if (e.state === 'dash') {
+          moveX = e.dx;
+          moveY = e.dy;
+          spd = PR.ramSpeed * run.night.enemySpeedMul * (e.slowT > 0 ? ai.slowMul : 1);
+          if (e.stateT <= 0) {
+            e.state = 'move';
+            e.stateT = PR.recover;
+            clearTelegraph(e);
+          }
+        } else {
+          const hx = Math.sign(tx || 1) * 0.90;
+          const hy = ty * 0.45;
+          const hl = Math.hypot(hx, hy) || 1;
+          moveX = hx / hl;
+          moveY = hy / hl;
+          spd *= PR.glideXMul;
+          if (Math.abs(p.y - e.y) <= PR.ramTriggerY && d <= PR.ramRange && e.stateT <= 0) {
+            e.state = 'windup';
+            e.stateT = PR.windup;
+            const rx = Math.sign(tx || 1);
+            const ry = clamp(ty * 0.35, -0.35, 0.35);
+            const rl = Math.hypot(rx, ry) || 1;
+            e.dx = rx / rl;
+            e.dy = ry / rl;
+            e.angle = fatan2(e.dy, e.dx);
+            setTelegraph(e, telLen, telWid, 0.03);
+            spd = 0;
+          }
+        }
+      } else if (e.type === 'water_puller') {
+        const WP = ai.water_puller;
+        e._pullCd = (e._pullCd || 0) - dt;
+        if (e.state === 'windup') {
+          spd = 0;
+          setTelegraph(e, Math.min(d + 12, WP.tetherRange + 20), 16, clamp(1 - Math.max(0, e.stateT) / WP.windup, 0.03, 1));
+          if (e.stateT <= 0) {
+            e.state = 'pull';
+            e.stateT = WP.pullTime;
+            clearTelegraph(e);
+          }
+        } else if (e.state === 'pull') {
+          spd = 0;
+          if (d <= WP.tetherRange + 48 && !p.downed && p.hp > 0) {
+            e.pullingTarget = true;
+            e.pullTargetX = p.x;
+            e.pullTargetY = p.y;
+            let goalX = e.x;
+            let goalY = e.y;
+            if (run.mapId === 'hedeng') {
+              const nearK = Math.round((p.y - 175) / RIVER_GAP_Y);
+              const riverY = riverChannelYAt(p.x, nearK, run._seedNum);
+              goalX = p.x * 0.4 + e.x * 0.6;
+              goalY = riverY;
+            }
+            const pdx = goalX - p.x;
+            const pdy = goalY - p.y;
+            const pd = Math.hypot(pdx, pdy) || 1;
+            if (pd > 4) {
+              const resist = clamp(run.mods?.slowResist || 0, 0, 0.9);
+              const pullStep = WP.pullSpeed * (1 - resist * 0.6) * dt;
+              p.x += (pdx / pd) * pullStep;
+              p.y += (pdy / pd) * pullStep;
+            }
+          }
+          if (e.stateT <= 0) {
+            e.state = 'move';
+            e._pullCd = WP.pullCd;
+          }
+        } else if (d <= WP.tetherRange && e._pullCd <= 0) {
+          e.state = 'windup';
+          e.stateT = WP.windup;
+          e.dx = tx;
+          e.dy = ty;
+          e.angle = fatan2(ty, tx);
+          setTelegraph(e, Math.min(d + 12, WP.tetherRange + 20), 16, 0.03);
+          spd = 0;
         }
       }
 

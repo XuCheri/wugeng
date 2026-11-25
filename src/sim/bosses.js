@@ -1,15 +1,17 @@
 // Boss：纸马将军（三连冲锋 + 预警走廊）、无面伞女（撑伞减伤 + 纸钱弹幕）、
-// 夜游神（召唤 → 弹幕 → 狂暴追击 + 蓄力挥戟突刺预警）。
+// 夜游神（召唤 → 弹幕 → 狂暴追击 + 蓄力挥戟突刺预警）、
+// 河神夜婚（一折红轿连冲吹鼓护轿 → 二折沧浪横街留木板桥安全口 → 三折万灯锁魂四阵眼护盾）。
 
 import { ENEMIES, BOSS_AI, SPAWN, ENDLESS, DARKNESS, MAIN_DURATION } from './balance.js';
 import { clamp, fsin, fcos, fatan2 } from '../core/math.js';
 import { spawnEnemy, queueSpawn, setTelegraph, clearTelegraph } from './enemies.js';
 import { dropPickup } from './pickups.js';
 import { coopHpScale, coopPartySize, nearestLivingPlayer } from './coop.js';
+import { findNearestBridgeX, RIVER_GAP_Y } from './maps.js';
 
 const V = { x: 0, y: 0 };
 
-/** 生成 Boss。opts.chest：死亡掉供盒；opts.final：最终 Boss（打败即通关） */
+/** 生成 Boss。opts.chest：死亡掉供盒；opts.final：最终 Boss（打败即通关）；opts.hpMulOverride：可选巡江中头目倍率 */
 export function spawnBoss(run, type, opts = {}) {
   const p =
     run.player?.downed && coopPartySize(run) > 1
@@ -22,7 +24,7 @@ export function spawnBoss(run, type, opts = {}) {
     (1 + SPAWN.nightHpGrowth * run.nightLevel) *
     run.night.bossHpMul *
     BOSS_AI.hpMul *
-    (BOSS_AI[type]?.hpMul || 1) *
+    (opts.hpMulOverride ?? BOSS_AI[type]?.hpMul ?? 1) *
     coopHpScale(run);
   if (run.mode === 'endless') {
     const es = Number.isFinite(run._endlessStart) && run._endlessStart > 0
@@ -30,7 +32,7 @@ export function spawnBoss(run, type, opts = {}) {
       : Math.min(Math.max(0, run.time || 0), MAIN_DURATION);
     hp *= ENDLESS.bossHpMul * Math.pow(ENDLESS.hpGrowth, Math.max(0, (run.time - es) / 60));
   }
-  e.hp = e.maxHp = Math.round(hp);
+  e.hp = e.maxHp = Math.max(100, Math.round(hp));
   e.chest = !!opts.chest;
   e.final = !!opts.final;
   e.phase = 1;
@@ -41,12 +43,20 @@ export function spawnBoss(run, type, opts = {}) {
   e._charges = 0;
   e._windupTotal = 0;
   e._lungeCd = BOSS_AI.youshen.lungeEvery * 0.6;
+  e._waveT = 1.2;
+  e._wardAngle = 0;
+  e._wardRecastT = 0;
+  e._wardHadActive = false;
+  e.wardShieldActive = false;
   if (type === 'horse') {
     e.state = 'chase';
     e.stateT = BOSS_AI.horse.chase;
   } else if (type === 'umbrella') {
     e.state = 'shield';
     e.stateT = BOSS_AI.umbrella.shieldTime;
+  } else if (type === 'hebo_wedding') {
+    e.state = 'chase';
+    e.stateT = BOSS_AI.hebo_wedding.chase;
   } else {
     e.state = 'summon';
   }
@@ -89,6 +99,7 @@ export function updateBoss(run, e, dt, tx, ty, d) {
   }
   if (e.type === 'horse') horse(run, e, dt, tx, ty);
   else if (e.type === 'umbrella') umbrella(run, e, dt, tx, ty);
+  else if (e.type === 'hebo_wedding') heboWedding(run, e, dt, tx, ty, d);
   else youshen(run, e, dt, tx, ty, d);
   if (run.boss && run.boss.id === e.id) {
     run.boss.hp = Math.max(0, e.hp);
@@ -290,10 +301,213 @@ function youshen(run, e, dt, tx, ty, d) {
   }
 }
 
+function heboWedding(run, e, dt, tx, ty) {
+  const HB = BOSS_AI.hebo_wedding;
+  const p = run.player;
+  const ratio = e.hp / e.maxHp;
+  const targetPhase = ratio > HB.phase2At ? 1 : ratio > HB.phase3At ? 2 : 3;
+
+  // ── 一阶段（100%→65%）：红轿二连冲 + 吹鼓鬼护轿 ──
+  if (targetPhase === 1) {
+    e.phase = 1;
+    e.wardShieldActive = false;
+    const telLen = HB.chargeSpeed * HB.chargeTime + e.r;
+    const telWid = e.r * 2;
+    e.dmgMul = 1;
+
+    e._summonT -= dt;
+    if (e._summonT <= 0 && e.state !== 'windup' && e.state !== 'charge') {
+      e._summonT = HB.summonInterval;
+      for (let i = 0; i < HB.summonCount; i++) {
+        const stype = HB.summonTypes[i % HB.summonTypes.length];
+        const a = (i / HB.summonCount) * Math.PI * 2 + 0.4;
+        queueSpawn(run, stype, e.x + fcos(a) * HB.summonDist, e.y + fsin(a) * HB.summonDist, { summoned: true });
+      }
+    }
+
+    switch (e.state) {
+      case 'chase':
+        clearTelegraph(e);
+        V.x = tx * e.speed;
+        V.y = ty * e.speed;
+        e.angle = fatan2(ty, tx);
+        if (e.stateT <= 0) {
+          e.state = 'windup';
+          e.stateT = HB.windup;
+          e._windupTotal = HB.windup;
+          e._charges = 0;
+          lockCharge(e, tx, ty);
+          setTelegraph(e, telLen, telWid, 0.03);
+        }
+        break;
+      case 'windup': {
+        const total = e._windupTotal || HB.windup;
+        setTelegraph(e, telLen, telWid, clamp(1 - Math.max(0, e.stateT) / total, 0.02, 1));
+        if (e.stateT <= 0) {
+          e.state = 'charge';
+          e.stateT = HB.chargeTime;
+          clearTelegraph(e);
+        }
+        break;
+      }
+      case 'charge':
+        clearTelegraph(e);
+        V.x = e.dx * HB.chargeSpeed;
+        V.y = e.dy * HB.chargeSpeed;
+        e.dmgMul = HB.chargeDmgMul;
+        if (e.stateT <= 0) {
+          e._charges++;
+          if (e._charges >= HB.charges) {
+            e.state = 'rest';
+            e.stateT = HB.rest;
+          } else {
+            e.state = 'windup';
+            e.stateT = HB.gap + HB.windup * 0.65;
+            e._windupTotal = e.stateT;
+            lockCharge(e, tx, ty);
+            setTelegraph(e, telLen, telWid, 0.03);
+          }
+        }
+        break;
+      default:
+        clearTelegraph(e);
+        if (e.stateT <= 0) {
+          e.state = 'chase';
+          e.stateT = HB.chase;
+        }
+    }
+    return;
+  }
+
+  // ── 二阶段（65%→30%）：沧浪横街水墙 + 木板桥安全口 ──
+  if (targetPhase === 2) {
+    if (e.phase !== 2) {
+      e.phase = 2;
+      e.state = 'wave';
+      e.wardShieldActive = false;
+      e.dmgMul = 1;
+      clearTelegraph(e);
+      e._waveT = 0.55;
+      e._fireT = 0.95;
+    }
+    V.x = tx * e.speed * 0.82;
+    V.y = ty * e.speed * 0.82;
+    e.angle = fatan2(ty, tx);
+
+    e._waveT = (e._waveT ?? HB.waveEvery) - dt;
+    if (e._waveT <= 0) {
+      e._waveT = HB.waveEvery;
+      const dirY = e.y <= p.y ? 1 : -1;
+      const nearK = Math.round((p.y - 175) / RIVER_GAP_Y);
+      const bridgeX = findNearestBridgeX(p.x, nearK, run._seedNum);
+      const safeX = clamp(bridgeX, p.x - 115, p.x + 115);
+      run.projectiles.push({
+        id: run._nextId++,
+        kind: 'enemyWaveWall',
+        x: safeX,
+        y: p.y - dirY * 195,
+        vy: dirY * HB.waveSpeed,
+        safeX,
+        safeHalfW: HB.waveSafeHalfW,
+        halfH: HB.waveHalfH,
+        spanW: 560,
+        telegraphT: HB.waveTelegraph,
+        t: 0,
+        life: HB.waveLife,
+        dmg: HB.waveDmg,
+      });
+    }
+
+    e._fireT -= dt;
+    if (e._fireT <= 0) {
+      e._fireT = HB.fanEvery;
+      const baseA = fatan2(ty, tx);
+      for (let k = 0; k < HB.fanShots; k++) {
+        const a = baseA + (k - (HB.fanShots - 1) / 2) * HB.fanSpread;
+        fireBullet(run, e.x, e.y, a, HB.bulletSpeed, HB.bulletDmg, HB.bulletR, HB.bulletLife, 'ink');
+      }
+    }
+    return;
+  }
+
+  // ── 三阶段（≤30%）：万灯锁魂四阵眼护盾（打碎全部阵眼破盾暴露易伤）──
+  if (e.phase !== 3) {
+    e.phase = 3;
+    e.state = 'array';
+    e.dmgMul = 1;
+    clearTelegraph(e);
+    e._wardRecastT = 0;
+    e._wardHadActive = false;
+    e._wardAngle = 0;
+    e._fireT = 0.75;
+  }
+
+  e._wardAngle = (e._wardAngle || 0) + HB.wardOrbitSpeed * dt;
+  let liveWards = 0;
+  for (let i = 0; i < run.enemies.length; i++) {
+    const w = run.enemies[i];
+    if (!w.dead && w.bossWardOf === e.id) liveWards++;
+  }
+
+  if (liveWards > 0) {
+    e.wardShieldActive = true;
+    e._wardHadActive = true;
+    V.x = tx * e.speed * 0.54;
+    V.y = ty * e.speed * 0.54;
+    e.angle = fatan2(ty, tx);
+    e._fireT -= dt;
+    if (e._fireT <= 0) {
+      e._fireT = HB.ringEvery;
+      e._spiralA += 0.24;
+      ring(run, e, HB.ringCount, e._spiralA, HB, 'paperMoney');
+    }
+  } else if (e._wardHadActive) {
+    e._wardHadActive = false;
+    e.wardShieldActive = false;
+    e.vulnT = Math.max(e.vulnT || 0, HB.wardExposeSec);
+    e.vulnPct = Math.max(e.vulnPct || 0, HB.wardExposeVuln);
+    e._wardRecastT = HB.wardRecastCd;
+    run.events.push({ type: 'wardBroken', x: e.x, y: e.y, bossId: e.id });
+  } else {
+    e.wardShieldActive = false;
+    V.x = tx * e.speed * 0.72;
+    V.y = ty * e.speed * 0.72;
+    e.angle = fatan2(ty, tx);
+    e._wardRecastT = (e._wardRecastT ?? 0) - dt;
+    if (e._wardRecastT <= 0) {
+      const wardHp = Math.max(60, Math.round(e.maxHp * HB.wardHpRatio));
+      for (let k = 0; k < HB.wardCount; k++) {
+        const a = (e._wardAngle || 0) + (k / HB.wardCount) * Math.PI * 2;
+        queueSpawn(run, 'lanternghost', e.x + fcos(a) * HB.wardDist, e.y + fsin(a) * HB.wardDist, {
+          summoned: true,
+          warder: true,
+          warderName: '锁魂河灯',
+          bossWardOf: e.id,
+          wardOrbitIdx: k,
+          wardOrbitCount: HB.wardCount,
+          fixedHp: wardHp,
+        });
+      }
+      e.wardShieldActive = true;
+      e._wardHadActive = true;
+      e._wardRecastT = HB.wardRecastCd;
+    }
+  }
+}
+
 /** Boss 被打败：事件、供盒、通关 */
 export function onBossKilled(run, e) {
   run.events.push({ type: 'bossDefeated', bossType: e.type });
   if (e.chest) dropPickup(run, 'chest', e.x, e.y, 0);
+  if (e.type === 'hebo_wedding') {
+    for (let i = 0; i < run.enemies.length; i++) {
+      const w = run.enemies[i];
+      if (!w.dead && w.bossWardOf === e.id) {
+        w.dead = true;
+        w.hp = 0;
+      }
+    }
+  }
   run.boss = null;
   for (const o of run.enemies) {
     if (o.boss && !o.dead && o !== e) run.boss = { id: o.id, type: o.type, hp: o.hp, maxHp: o.maxHp, phase: o.phase };
@@ -312,7 +526,7 @@ export function onBossKilled(run, e) {
     run.watch = 6;
     run.darkness = DARKNESS.dawn;
     run.events.push({ type: 'dawn' });
-    for (const pr of run.projectiles) if (pr.kind === 'enemyBullet') pr.dead = true;
-    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet');
+    for (const pr of run.projectiles) if (pr.kind === 'enemyBullet' || pr.kind === 'enemyWaveWall') pr.dead = true;
+    run.projectiles = run.projectiles.filter((pr) => pr.kind !== 'enemyBullet' && pr.kind !== 'enemyWaveWall');
   }
 }
