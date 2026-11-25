@@ -76,7 +76,7 @@ export function sanitizeDaoName(raw) {
 }
 
 export function defaultSettings() {
-  return { sfx: true, music: true, shake: true, dmgText: 'all', lowQuality: false };
+  return { sfx: true, music: true, shake: true, haptics: true, dmgText: 'all', lowQuality: false };
 }
 
 export function defaultCodex() {
@@ -368,6 +368,7 @@ export function migrateSave(raw) {
     out.settings.sfx = bool(s.sfx, true);
     out.settings.music = bool(s.music, true);
     out.settings.shake = bool(s.shake, true);
+    out.settings.haptics = bool(s.haptics, true);
     out.settings.dmgText = DMG_TEXT_MODES.includes(s.dmgText) ? s.dmgText : 'all';
     out.settings.lowQuality = bool(s.lowQuality, false);
   }

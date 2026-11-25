@@ -10,6 +10,7 @@ export function settingsBody(settings, onChange) {
     segmented('音效', ONOFF, settings.sfx, set('sfx')),
     segmented('乐声', ONOFF, settings.music, set('music')),
     segmented('震屏', ONOFF, settings.shake, set('shake')),
+    segmented('震动', ONOFF, settings.haptics !== false, set('haptics')),
     segmented('伤害字', [
       { value: 'all', label: '全显' }, { value: 'crit', label: '只暴击' }, { value: 'off', label: '不显' },
     ], settings.dmgText, set('dmgText')),

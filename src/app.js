@@ -22,6 +22,7 @@ import { createCoopManager } from './net/coop-net.js';
 import { adsEnabled, watchAd } from './ads/ads.js';
 import { adResultMessage } from './ads/ad-policy.js';
 import { createAudio } from './audio/synth.js';
+import { createHaptics } from './platform/haptics.js';
 import { createMenuScene } from './render/menu-scene.js';
 import { h, toast, setClickSound } from './ui/dom.js';
 import { playScreenTransition } from './ui/motion.js';
@@ -47,6 +48,7 @@ export async function startApp(bootOpts = {}) {
     if (syncCloud) cloud.scheduleSync(save);
   };
   const audio = createAudio();
+  const haptics = createHaptics();
   setClickSound(() => audio.play('click'));
 
   let screen = null;          // 当前全屏界面元素
@@ -158,6 +160,7 @@ export async function startApp(bootOpts = {}) {
     onSummary: (summary) => finishRun(summary),
     onEvents: (events, run) => {
       audio.onEvents(events);
+      haptics.onEvents(events);
       if (run && events && events.length) checkMidRunAchievements(run);
     },
     onAutoPause: () => runUI?.showPause(),
@@ -192,6 +195,7 @@ export async function startApp(bootOpts = {}) {
 
   function applySettings(s) {
     audio.setEnabled({ sfx: s.sfx, music: s.music });
+    haptics.setEnabled(s.haptics !== false);
     game.applySettings({
       shake: s.shake, dmgText: s.dmgText, lowQuality: s.lowQuality,
       cosmetics: buildCosmeticsSnapshot(),
@@ -447,6 +451,7 @@ export async function startApp(bootOpts = {}) {
     get save() { return save; },
     game,
     audio,
+    haptics,
     cloud,
     leaderboard,
     friends,

@@ -24,7 +24,7 @@ test('默认存档字段齐全', () => {
   assert.equal(s.selectedHero, 'zhou');
   assert.equal(s.nightUnlocked, 0);
   assert.equal(s.nightCleared, -1);
-  assert.deepEqual(s.settings, { sfx: true, music: true, shake: true, dmgText: 'all', lowQuality: false });
+  assert.deepEqual(s.settings, { sfx: true, music: true, shake: true, haptics: true, dmgText: 'all', lowQuality: false });
   assert.deepEqual(s.checkin.cycleDay, 0);
   assert.equal(s.checkin.lastClaimDate, null);
   assert.deepEqual(s.cosmetics, {
