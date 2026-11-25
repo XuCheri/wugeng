@@ -396,11 +396,22 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   const cy = h * (isTall ? 0.44 : 0.56);
   const vfxPal = getVfxPalette(attackVfx);
 
+  // 角色专属演武场氛围色与背后法相阵纹（六名守夜人各有独特舞台气场）
+  const heroThemes = {
+    zhou: { halo0: lanternA(0.30), halo1: vermA(0.18), sigil: 'gong', accent: LANTERN },
+    mian: { halo0: paperA(0.28), halo1: vermA(0.22), sigil: 'paper', accent: PAPER },
+    daotong: { halo0: lanternA(0.26), halo1: paperA(0.18), sigil: 'bagua', accent: LANTERN },
+    yinyang: { halo0: paperA(0.24), halo1: lanternA(0.22), sigil: 'stars', accent: PAPER_SHADE },
+    tiejiang: { halo0: vermA(0.32), halo1: lanternA(0.20), sigil: 'forge', accent: VERM },
+    nuoxi: { halo0: vermA(0.34), halo1: paperA(0.16), sigil: 'drum', accent: VERM },
+  };
+  const hTheme = heroThemes[heroId] || heroThemes.zhou;
+
   // 月晕与暖火氛围背光
-  const backR = Math.min(w, h) * (isTall ? 0.72 : 0.62);
+  const backR = Math.min(w, h) * (isTall ? 0.78 : 0.62);
   const backGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, backR);
-  backGrad.addColorStop(0, isSignature ? lanternA(0.28) : paperA(0.16));
-  backGrad.addColorStop(0.45, vermA(isSignature ? 0.16 : 0.09));
+  backGrad.addColorStop(0, isSignature ? hTheme.halo0 : paperA(0.16));
+  backGrad.addColorStop(0.48, hTheme.halo1);
   backGrad.addColorStop(1, inkA(0));
   ctx.fillStyle = backGrad;
   ctx.fillRect(0, 0, w, h);
@@ -458,6 +469,94 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     ctx.moveTo(0, horizonY);
     ctx.lineTo(w, horizonY);
     ctx.stroke();
+
+    // 角色专属背后法相阵纹（大幅增强切人仪式感与辨识度）
+    ctx.save();
+    ctx.translate(cx, h * 0.40);
+    ctx.strokeStyle = hTheme.accent;
+    ctx.fillStyle = hTheme.accent;
+    if (hTheme.sigil === 'gong') {
+      ctx.globalAlpha = 0.24;
+      ctx.lineWidth = 2.2;
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.arc(0, 0, 42 + k * 24 + Math.sin(tSec * 2 + k) * 3, 0, TAU);
+        ctx.stroke();
+      }
+    } else if (hTheme.sigil === 'paper') {
+      ctx.globalAlpha = 0.26;
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * TAU + tSec * 0.4;
+        ctx.save();
+        ctx.translate(Math.cos(a) * 62, Math.sin(a) * 38);
+        ctx.rotate(a + 0.5);
+        ctx.fillRect(-7, -14, 14, 28);
+        ctx.restore();
+      }
+    } else if (hTheme.sigil === 'bagua') {
+      ctx.globalAlpha = 0.26;
+      ctx.rotate(tSec * 0.22);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        const rx = Math.cos(a) * 74;
+        const ry = Math.sin(a) * 74;
+        if (i === 0) ctx.moveTo(rx, ry);
+        else ctx.lineTo(rx, ry);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 48, 0, TAU);
+      ctx.stroke();
+    } else if (hTheme.sigil === 'stars') {
+      ctx.globalAlpha = 0.30;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 7; i++) {
+        const sx = -68 + i * 22;
+        const sy = Math.sin(i * 1.15) * 36 - 8;
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+      for (let i = 0; i < 7; i++) {
+        const sx = -68 + i * 22;
+        const sy = Math.sin(i * 1.15) * 36 - 8;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3.8, 0, TAU);
+        ctx.fill();
+      }
+    } else if (hTheme.sigil === 'forge') {
+      ctx.globalAlpha = 0.28;
+      ctx.lineWidth = 2.6;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU + tSec * 0.25;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 44, Math.sin(a) * 44);
+        ctx.lineTo(Math.cos(a) * 78, Math.sin(a) * 78);
+        ctx.stroke();
+      }
+    } else if (hTheme.sigil === 'drum') {
+      ctx.globalAlpha = 0.30;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 72, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = vermA(0.16);
+      ctx.beginPath();
+      ctx.arc(0, 0, 56, 0, TAU);
+      ctx.fill();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU - tSec * 0.3;
+        ctx.fillStyle = LANTERN;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 64, Math.sin(a) * 64, 4.2, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
 
     // 柔和飘升暖金星火
     for (let i = 0; i < 12; i++) {
@@ -609,7 +708,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   const popScale = burstProgress < 1
     ? 1 + Math.sin(burstProgress * Math.PI) * 0.14
     : 1;
-  const baseScale = isTall ? Math.min(2.45, Math.max(2.0, h / 135)) : 1.52;
+  const baseScale = isTall ? Math.min(2.60, Math.max(2.15, h / 128)) : 1.52;
   drawHeroWithSkin(ctx, {
     heroId,
     skinId,
