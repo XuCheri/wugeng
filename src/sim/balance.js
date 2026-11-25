@@ -502,6 +502,50 @@ export const WEAPONS = {
       vulnDur: 2.8, vulnPct: 0.16, stunDur: 0.60, maskBursts: 5, maskBurstR: 50, maskBurstMul: 0.28,
     },
   },
+  mourning_staff: {
+    name: '引魂丧杆', pair: 'altar_mirror', tags: ['zhenhun'], evoName: '幽冥镇魂杆',
+    evoDesc: '周天双幡旋扫震碎敌弹，重创定身并每三扫震开镇魂余波',
+    evoMult: 1.92,
+    dmg: [21, 28, 36, 45, 55], radius: [96, 102, 108, 115, 122], spread: [165, 175, 185, 195, 210],
+    cd: [1.55, 1.48, 1.40, 1.32, 1.24], sweepLife: 0.26, knockback: 145,
+    evo: {
+      radiusMul: 1.24, stunDur: 0.55, vulnDur: 2.8, vulnPct: 0.24,
+      pulseEvery: 3, pulseRadiusMul: 1.38, pulseDmgMul: 0.72,
+    },
+  },
+  sky_lantern: {
+    name: '孔明灯', pair: 'lamp_oil', tags: ['yangyan'], evoName: '九天赤焰灯',
+    evoDesc: '多枚赤焰天灯升空洒火，轰落引爆阳炎火印并留流火余烬',
+    evoMult: 1.98,
+    count: [1, 1, 2, 2, 3], dmg: [23, 31, 40, 50, 62], radius: [58, 62, 66, 72, 78],
+    cd: [2.2, 2.08, 1.96, 1.84, 1.72], flight: 0.62, range: 265, knockback: 115,
+    evo: {
+      bonusCount: 2, flight: 0.54, radiusMul: 1.22, markDuration: 3.0,
+      emberLife: 2.0, emberTick: 0.38, emberDmgMul: 0.26,
+    },
+  },
+  carpenter_line: {
+    name: '墨斗线', pair: 'folk_rice', tags: ['zhizha'], evoName: '乾坤断魂线',
+    evoDesc: '布下三才断魂墨阵持续斩裂沿线邪祟，碎甲减速并引爆墨煞',
+    evoMult: 1.94,
+    count: [1, 1, 2, 2, 3], dmg: [19, 26, 34, 43, 53], length: [190, 205, 220, 238, 256],
+    cd: [1.75, 1.66, 1.57, 1.48, 1.38], width: 20, life: 0.45, bleedDpsMul: 0.35, bleedDur: 2.2, knockback: 32,
+    evo: {
+      lines: 3, lengthMul: 1.26, widthMul: 1.3, life: 1.35,
+      tick: 0.28, tickDmgMul: 0.48, burstRadius: 56, burstDmgMul: 0.72,
+    },
+  },
+  luopan_slip: {
+    name: '风水飞签', pair: 'cinnabar_pen', tags: ['daofa'], evoName: '天罡定穴签',
+    evoDesc: '金朱飞签疾速追踪连穿，三中同祟引爆定穴破脉震晕四邻',
+    evoMult: 1.90,
+    count: [2, 3, 3, 4, 5], dmg: [11, 15, 19, 24, 30], cd: [1.15, 1.08, 1.02, 0.96, 0.90],
+    speed: 455, life: 1.55, r: 8, pierce: 1, turnRate: 10.5, seekRange: 330, knockback: 18,
+    evo: {
+      bonusCount: 3, speed: 525, pierce: 3, turnRate: 13.0,
+      acupointHits: 3, burstRadius: 58, burstDmgMul: 0.85, stunDur: 0.50, vulnDur: 2.6, vulnPct: 0.22,
+    },
+  },
 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 export const WEAPON_NAMES = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].name]));
@@ -526,7 +570,7 @@ export const FX = {
   chainLife: 0.25,
 };
 
-// ───────────────────────── 法器（16 件：经典 8 + v2 新增 4 + v3 新增 4）─────────────────────────
+// ───────────────────────── 法器（20 件：经典 8 + v2 新增 4 + v3 新增 4 + v4 新增 4）─────────────────────────
 export const RELICS = {
   clapper: { name: '梆子', pair: 'gong', tags: ['zhenhun'], perLevel: { cdr: 0.08 } },
   censer: { name: '香炉', pair: 'lantern', tags: ['yangyan'], perLevel: { areaPct: 0.10 } },
@@ -544,6 +588,10 @@ export const RELICS = {
   yinpai: { name: '勾魂阴牌', pair: 'suohun_chain', tags: ['zhenhun'], perLevel: { dmgPct: 0.06, armor: 1, controlDurPct: 0.08 } },
   huoyao_pouch: { name: '硫磺火药囊', pair: 'zhinian_kite', tags: ['zhizha', 'yangyan'], perLevel: { areaPct: 0.07, dmgPct: 0.05 } },
   wuse_mask: { name: '五色傩面', pair: 'nuo_drum', tags: ['zhizha', 'daofa'], perLevel: { cdr: 0.04, speedPct: 0.04, ultChargePct: 0.08 } },
+  altar_mirror: { name: '镇坛铜镜', pair: 'mourning_staff', tags: ['zhenhun'], perLevel: { armor: 1, maxHp: 8, hurtInvuln: 0.03 } },
+  lamp_oil: { name: '长明灯油', pair: 'sky_lantern', tags: ['yangyan'], perLevel: { areaPct: 0.06, durPct: 0.06, lightPct: 0.06 } },
+  folk_rice: { name: '百家米', pair: 'carpenter_line', tags: ['zhizha'], perLevel: { maxHp: 12, xpPct: 0.06, pickupPct: 0.08 } },
+  cinnabar_pen: { name: '朱砂笔', pair: 'luopan_slip', tags: ['daofa'], perLevel: { critChance: 0.04, critDmg: 0.14, cdr: 0.03 } },
 };
 export const RELIC_IDS = Object.keys(RELICS);
 export const RELIC_NAMES = Object.fromEntries(RELIC_IDS.map((k) => [k, RELICS[k].name]));

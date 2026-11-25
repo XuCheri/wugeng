@@ -891,14 +891,14 @@ function drawHead(g, heroId, L, B, t) {
 const WEAPON_STYLE = {
   gong: 'wave', nuo_drum: 'wave', bell: 'wave',
   lantern: 'shoot', talisman: 'shoot', coinsword: 'blade', paperman: 'shoot', firecracker: 'throw',
-  brush: 'blade', taomujian: 'blade', soulbanner: 'blade', suohun_chain: 'whip',
-  compass: 'beam', bronze_mirror: 'beam', paperhorse: 'shoot', zhinian_kite: 'shoot',
+  brush: 'blade', taomujian: 'blade', soulbanner: 'blade', mourning_staff: 'blade', suohun_chain: 'whip', carpenter_line: 'whip',
+  compass: 'beam', bronze_mirror: 'beam', paperhorse: 'shoot', zhinian_kite: 'shoot', sky_lantern: 'throw', luopan_slip: 'shoot',
 };
 
 const HIT_P = {
   gong: 0.56, nuo_drum: 0.56, bell: 0.54,
-  brush: 0.5, taomujian: 0.56, coinsword: 0.56, soulbanner: 0.58,
-  compass: 0.38, bronze_mirror: 0.36, suohun_chain: 0.46, firecracker: 0.62,
+  brush: 0.5, taomujian: 0.56, coinsword: 0.56, soulbanner: 0.58, mourning_staff: 0.54,
+  compass: 0.38, bronze_mirror: 0.36, suohun_chain: 0.46, carpenter_line: 0.48, firecracker: 0.62, sky_lantern: 0.6, luopan_slip: 0.52,
 };
 
 export function getShowcaseHitPhase(weaponId) {

@@ -444,8 +444,21 @@ export function updateProjectiles(run, dt) {
         break;
 
       case 'soulSweep':
+      case 'mourningSweep':
         pr.x = p.x;
         pr.y = p.y;
+        break;
+
+      case 'skyLantern':
+        updateSkyLanternProj(run, pr, hash, arr);
+        break;
+
+      case 'inkLine':
+        updateInkLineProj(run, pr, dt, hash);
+        break;
+
+      case 'luopanSlip':
+        updateLuopanSlipProj(run, pr, dt, hash, near);
         break;
 
       case 'enemyBullet': {
@@ -483,7 +496,14 @@ export function updateProjectiles(run, dt) {
     pr.t += dt;
     if (pr.persistent) {
       if (pr.t >= 1) pr.t -= 1;
-    } else if (pr.t >= pr.life && pr.kind !== 'firecracker' && pr.kind !== 'compassField' && pr.kind !== 'fireCrow') {
+    } else if (
+      pr.t >= pr.life
+      && pr.kind !== 'firecracker'
+      && pr.kind !== 'skyLantern'
+      && pr.kind !== 'compassField'
+      && pr.kind !== 'fireCrow'
+      && !(pr.kind === 'inkLine' && pr.evolved && pr.snapBurst)
+    ) {
       if (pr.kind === 'paperman' && pr.mode === 'imp') {
         const slot = pr.ownerSlot || 0;
         if (slot > 0 && run.players?.[slot]) {
@@ -1354,5 +1374,158 @@ function updateNuoDrumProj(run, pr, dt) {
         });
       }
     }
+  }
+}
+
+function updateSkyLanternProj(run, pr, hash, arr) {
+  const def = WEAPONS.sky_lantern;
+  const evo = def.evo;
+  const k = Math.min(1, pr.t / pr.life);
+  pr.x = pr.fromX + (pr.toX - pr.fromX) * k;
+  pr.y = pr.fromY + (pr.toY - pr.fromY) * k;
+
+  if (pr.evolved && !pr._midSpark && k >= 0.5) {
+    pr._midSpark = true;
+    damageCircle(run, pr.x, pr.y, Math.max(26, pr.radius * 0.5), pr.dmg * 0.28, 'sky_lantern', { knock: 45 });
+  }
+
+  if (k >= 1) {
+    pr.dead = true;
+    const blastR = pr.radius || 62;
+    if (pr.evolved) {
+      const marked = hash.queryCircle(pr.toX, pr.toY, blastR, run._sys.scratchW2);
+      for (let i = 0; i < marked.length; i++) {
+        const e = marked[i];
+        if (e.dead) continue;
+        e.yangyanMarkT = Math.max(e.yangyanMarkT || 0, evo.markDuration);
+        e.yangyanBurstDmg = Math.max(e.yangyanBurstDmg || 0, pr.dmg * 0.8);
+        e.yangyanBurstR = Math.max(e.yangyanBurstR || 0, blastR * 0.88);
+      }
+      arr.push({
+        id: run._nextId++,
+        kind: 'inkPool',
+        weaponId: 'sky_lantern',
+        subKind: 'emberZone',
+        ownerSlot: pr.ownerSlot || 0,
+        attackVfx: pr.attackVfx || null,
+        evolved: true,
+        x: pr.toX,
+        y: pr.toY,
+        r: Math.max(0, blastR),
+        radius: blastR,
+        angle: 0,
+        t: 0,
+        life: evo.emberLife * (run.mods?.durMul || 1),
+        tick: evo.emberTick,
+        _tickT: 0.16,
+        dmg: pr.dmg * evo.emberDmgMul,
+      });
+    }
+    explode(run, pr.toX, pr.toY, blastR, pr.dmg, 'sky_lantern', {
+      evolved: pr.evolved,
+      explosionKind: pr.evolved ? 'skyLanternEvo' : 'skyLantern',
+      knock: def.knockback,
+    });
+  }
+}
+
+function updateInkLineProj(run, pr, dt, hash) {
+  const def = WEAPONS.carpenter_line;
+  const evo = def.evo;
+  if (pr.evolved && pr.tick > 0) {
+    pr._tickT -= dt;
+    if (pr._tickT <= 0) {
+      pr._tickT += pr.tick;
+      const halfW = (pr.width || 24) * 0.5;
+      const mx = (pr.ax + pr.bx) * 0.5;
+      const my = (pr.ay + pr.by) * 0.5;
+      const segHalf = (pr.length || 180) * 0.5 + halfW + 36;
+      const list = hash.queryCircle(mx, my, segHalf, run._sys.scratchW2);
+      const activeSlot = pr.ownerSlot || 0;
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (e.dead) continue;
+        const rr = halfW + e.r;
+        if (pointToSegDist2(e.x, e.y, pr.ax, pr.ay, pr.bx, pr.by) > rr * rr) continue;
+        applySlow(run, e, 0.75);
+        if (pr.bleedDur > 0 && pr.bleedDps > 0) {
+          e.bleedT = Math.max(e.bleedT || 0, pr.bleedDur);
+          e.bleedDps = Math.max(e.bleedDps || 0, pr.bleedDps);
+          e.bleedSlot = activeSlot;
+        }
+        damageEnemy(run, e, pr.dmg, 'carpenter_line', {
+          knock: def.knockback * 0.5,
+          armorBreak: true,
+        });
+      }
+    }
+  }
+  if (pr.t >= pr.life) {
+    pr.dead = true;
+    if (pr.evolved && pr.snapBurst) {
+      explode(
+        run,
+        (pr.ax + pr.bx) * 0.5,
+        (pr.ay + pr.by) * 0.5,
+        evo.burstRadius * (run.mods?.areaMul || 1),
+        (pr.fullDmg || pr.dmg) * evo.burstDmgMul,
+        'carpenter_line',
+        {
+          evolved: true,
+          explosionKind: 'inkSnap',
+          knock: 95,
+          armorBreak: true,
+        },
+      );
+    }
+  }
+}
+
+function updateLuopanSlipProj(run, pr, dt, hash, near) {
+  const def = WEAPONS.luopan_slip;
+  const evo = def.evo;
+  let t = pr._tgt;
+  if (!t || t.dead) {
+    t = pr._tgt = hash.nearest(pr.x, pr.y, pr.seekRange || def.seekRange, near, (e) => !e.dead && !pr._hit.includes(e.id));
+  }
+  if (t) {
+    const want = Math.atan2(t.y - pr.y, t.x - pr.x);
+    pr.angle = turnToward(pr.angle, want, (pr.turnRate || def.turnRate) * dt);
+    pr.vx = Math.cos(pr.angle) * pr.speed;
+    pr.vy = Math.sin(pr.angle) * pr.speed;
+  }
+  pr.x += pr.vx * dt;
+  pr.y += pr.vy * dt;
+  hitPropsCircle(run, pr.x, pr.y, pr.r);
+
+  const list = hash.queryCircle(pr.x, pr.y, pr.r, near);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead || pr._hit.includes(e.id)) continue;
+    pr._hit.push(e.id);
+    damageEnemy(run, e, pr.dmg, 'luopan_slip', {
+      knock: def.knockback,
+      knockDx: pr.vx,
+      knockDy: pr.vy,
+    });
+    if (pr.evolved && !e.dead) {
+      e._acupointHits = (e._acupointHits || 0) + 1;
+      if (e._acupointHits >= evo.acupointHits) {
+        e._acupointHits = 0;
+        explode(run, e.x, e.y, evo.burstRadius * (run.mods?.areaMul || 1), pr.dmg * evo.burstDmgMul, 'luopan_slip', {
+          evolved: true,
+          explosionKind: 'acupointBurst',
+          knock: 85,
+          stun: evo.stunDur,
+          vuln: evo.vulnDur,
+          vulnPct: evo.vulnPct,
+        });
+      }
+    }
+    if (pr.pierce-- <= 0) {
+      pr.dead = true;
+      break;
+    }
+    pr._tgt = null;
   }
 }

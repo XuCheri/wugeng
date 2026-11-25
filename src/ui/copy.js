@@ -139,6 +139,10 @@ const WEAPON_FALLBACK = {
   suohun_chain: ['无常锁魂链', '黑白无常夺魄索'],
   zhinian_kite: ['纸鸢火鸦', '金乌焚天火鸦阵'],
   nuo_drum: ['傩神战鼓', '太古百相傩坛'],
+  mourning_staff: ['引魂丧杆', '幽冥镇魂杆'],
+  sky_lantern: ['孔明灯', '九天赤焰灯'],
+  carpenter_line: ['墨斗线', '乾坤断魂线'],
+  luopan_slip: ['风水飞签', '天罡定穴签'],
 };
 
 const RELIC_FALLBACK = {
@@ -158,6 +162,10 @@ const RELIC_FALLBACK = {
   yinpai: '勾魂阴牌',
   huoyao_pouch: '硫磺火药囊',
   wuse_mask: '五色傩面',
+  altar_mirror: '镇坛铜镜',
+  lamp_oil: '长明灯油',
+  folk_rice: '百家米',
+  cinnabar_pen: '朱砂笔',
 };
 
 const PAIRS = {
@@ -177,6 +185,10 @@ const PAIRS = {
   yinpai: 'suohun_chain',
   huoyao_pouch: 'zhinian_kite',
   wuse_mask: 'nuo_drum',
+  altar_mirror: 'mourning_staff',
+  lamp_oil: 'sky_lantern',
+  folk_rice: 'carpenter_line',
+  cinnabar_pen: 'luopan_slip',
 };
 
 export const WEAPON_INTRO = {
@@ -196,6 +208,10 @@ export const WEAPON_INTRO = {
   suohun_chain: '甩出无常铁链破甲定身，将前方邪祟强力拽聚',
   zhinian_kite: '放飞纸鸢火鸦俯冲鬼群，轰然爆裂灼烧一片',
   nuo_drum: '立起傩神战鼓连擂逐疫音波，减速震退四方群祟',
+  mourning_staff: '挥舞白幡丧杆横扫近身群祟，击退减速',
+  sky_lantern: '放飞孔明灯升空索敌，天火轰落灼燃一片',
+  carpenter_line: '弹射笔直墨线贯穿两点之间群祟并附流血',
+  luopan_slip: '齐射多枚索敌飞签灵巧穿刺群祟',
 };
 
 export const EVOLVE_INTRO = {
@@ -215,6 +231,10 @@ export const EVOLVE_INTRO = {
   suohun_chain: B.WEAPONS?.suohun_chain?.evoDesc || '双链裂空贯穿破甲，强力拽聚群祟定身并引爆夺魄阴煞',
   zhinian_kite: B.WEAPONS?.zhinian_kite?.evoDesc || '成群金乌火鸦俯冲轰炸并刻印阳炎，掠过之处铺开流火焚天径',
   nuo_drum: B.WEAPONS?.nuo_drum?.evoDesc || '立起百相神鼓连擂四重逐疫震波，净除敌弹、破甲易伤并终响五方爆裂',
+  mourning_staff: B.WEAPONS?.mourning_staff?.evoDesc || '周天双幡旋扫震碎敌弹，重创定身并每三扫震开镇魂余波',
+  sky_lantern: B.WEAPONS?.sky_lantern?.evoDesc || '多枚赤焰天灯升空洒火，轰落引爆阳炎火印并留流火余烬',
+  carpenter_line: B.WEAPONS?.carpenter_line?.evoDesc || '布下三才断魂墨阵持续斩裂沿线邪祟，碎甲减速并引爆墨煞',
+  luopan_slip: B.WEAPONS?.luopan_slip?.evoDesc || '金朱飞签疾速追踪连穿，三中同祟引爆定穴破脉震晕四邻',
 };
 
 export const RECIPE_LABELS = {

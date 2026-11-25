@@ -39,10 +39,14 @@ const SFX = {
   fire_soulbanner:    { gap: 0.05,  vol: 0.34 },
   fire_bronze_mirror: { gap: 0.05,  vol: 0.32 },
   fire_paperhorse:    { gap: 0.045, vol: 0.32 },
-  fire_taomujian:     { gap: 0.04,  vol: 0.30 },
-  fire_suohun_chain:  { gap: 0.05,  vol: 0.33 },
-  fire_zhinian_kite:  { gap: 0.045, vol: 0.29 },
-  fire_nuo_drum:      { gap: 0.055, vol: 0.36 },
+  fire_taomujian:      { gap: 0.04,  vol: 0.30 },
+  fire_suohun_chain:   { gap: 0.05,  vol: 0.33 },
+  fire_zhinian_kite:   { gap: 0.045, vol: 0.29 },
+  fire_nuo_drum:       { gap: 0.055, vol: 0.36 },
+  fire_mourning_staff: { gap: 0.05,  vol: 0.33 },
+  fire_sky_lantern:    { gap: 0.05,  vol: 0.30 },
+  fire_carpenter_line: { gap: 0.045, vol: 0.32 },
+  fire_luopan_slip:    { gap: 0.038, vol: 0.28 },
 
   // 局内战斗、奇遇与多人协同扩展事件音色
   explosion:      { gap: 0.045, vol: 0.48 },
@@ -382,6 +386,30 @@ export function createAudio() {
         osc('sine', 293.66, t + 0.02, 0.13, v * 0.38, out, { a: 0.003 });
       }
       return 0.17;
+    },
+    fire_mourning_staff(t, v, out, evo = false) {
+      noise(t, 0.09, v * 0.48, out, { freq: 1150, q: 1.3, sweepTo: 620 });
+      osc('triangle', evo ? 293.66 : 329.63, t, 0.10, v * 0.42, out, { a: 0.003, bend: 0.74 });
+      if (evo) osc('sine', 587.33, t + 0.015, 0.09, v * 0.34, out, { a: 0.002 });
+      return 0.12;
+    },
+    fire_sky_lantern(t, v, out, evo = false) {
+      noise(t, 0.08, v * 0.38, out, { freq: 1450, q: 1.5, sweepTo: 2200 });
+      osc('sine', 523.25, t, 0.11, v * 0.44, out, { a: 0.004, bend: 1.18 });
+      if (evo) osc('triangle', 1046.5, t + 0.02, 0.09, v * 0.32, out, { a: 0.002 });
+      return 0.13;
+    },
+    fire_carpenter_line(t, v, out, evo = false) {
+      osc('triangle', evo ? 440 : 392, t, 0.09, v * 0.52, out, { a: 0.001, bend: 0.86 });
+      noise(t, 0.05, v * 0.38, out, { type: 'bandpass', freq: 2600, q: 2.4 });
+      if (evo) osc('sine', 880, t + 0.014, 0.08, v * 0.34, out, { a: 0.002 });
+      return 0.11;
+    },
+    fire_luopan_slip(t, v, out, evo = false) {
+      noise(t, 0.045, v * 0.36, out, { type: 'highpass', freq: 3200, q: 1.6 });
+      osc('triangle', 1567.98, t, 0.07, v * 0.44, out, { a: 0.001, bend: 1.22 });
+      if (evo) osc('sine', 2349.32, t + 0.016, 0.07, v * 0.30, out, { a: 0.002 });
+      return 0.10;
     },
 
     // ───────── 爆炸 / 尸潮 / 神龛 / 羁绊 / 命签 / 协同救援 等局内事件音色 ─────────

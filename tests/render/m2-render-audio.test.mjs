@@ -608,9 +608,9 @@ test('synth.js：Karplus-Strong 拨弦、15 基础音效、12 武器开火（含
     // 4. 验证 MAX_VOICES = 20 复音上限节流 + boss/dawn/gong 最高优先级穿透
     mockNow += 20;
     const twentyKeys = [
-      ...CANONICAL_WEAPONS.map((w) => 'fire_' + w), // 16
-      'explosion', 'wave', 'shrineActivate', 'synergyUp', // +4 = 20
-    ];
+      ...CANONICAL_WEAPONS.map((w) => 'fire_' + w),
+      'explosion', 'wave', 'shrineActivate', 'synergyUp',
+    ].slice(0, 20);
     for (const k of twentyKeys) {
       assert.equal(audio.play(k), true, `声部填充 ${k} 应成功`);
     }

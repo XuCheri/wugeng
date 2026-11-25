@@ -30,11 +30,13 @@ export const WEAPON_IDS = [
   'gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell',
   'compass', 'soulbanner', 'bronze_mirror', 'paperhorse',
   'taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum',
+  'mourning_staff', 'sky_lantern', 'carpenter_line', 'luopan_slip',
 ];
 export const RELIC_IDS = [
   'clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring',
   'strawshoes', 'glutinous', 'fivecoins', 'soulwick',
   'leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask',
+  'altar_mirror', 'lamp_oil', 'folk_rice', 'cinnabar_pen',
 ];
 export const ENEMY_IDS = [
   'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',

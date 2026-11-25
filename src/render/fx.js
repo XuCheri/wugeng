@@ -31,6 +31,10 @@ export const EVOLVED_NAMES = {
   suohun_chain: '黑白无常夺魄索',
   zhinian_kite: '金乌焚天火鸦阵',
   nuo_drum: '太古百相傩坛',
+  mourning_staff: '幽冥镇魂杆',
+  sky_lantern: '九天赤焰灯',
+  carpenter_line: '乾坤断魂线',
+  luopan_slip: '天罡定穴签',
 };
 
 const SHAKE_CAP = 5.5; // 混合震屏峰值 CSS px（兼顾打击感与防眩晕）

@@ -420,6 +420,78 @@ export const WEAPON_ICONS = {
     g.arc(34, 2, 10, -Math.PI * 0.3, Math.PI * 0.3);
     g.stroke();
   },
+  mourning_staff(g) {
+    // 引魂丧杆：修竹斜杆 + 叠层宣纸白幡流苏 + 朱红顶结
+    st(g, 5.2, INK);
+    g.beginPath();
+    g.moveTo(-26, 42);
+    g.lineTo(14, -42);
+    g.stroke();
+    circ(g, 14, -42, 6);
+    fs(g, VERM, 3);
+    for (let i = 0; i < 3; i++) {
+      const ox = 10 - i * 8;
+      const oy = -32 + i * 16;
+      poly(g, [[ox, oy], [ox + 26, oy + 6], [ox + 20, oy + 20], [ox - 2, oy + 14]]);
+      fs(g, i === 1 ? PAPER_SHADE : PAPER, 3.2);
+      vfill(g, () => poly(g, [[ox + 16, oy + 6], [ox + 22, oy + 9], [ox + 18, oy + 16]]));
+    }
+  },
+  sky_lantern(g) {
+    // 孔明灯：鼓腹宣纸天灯 + 灯芯暖焰 + 底部竹圈流苏
+    poly(g, [[-22, -22], [0, -38], [22, -22], [16, 18], [-16, 18]]);
+    fs(g, PAPER, 4.6);
+    poly(g, [[-14, -14], [0, -26], [14, -14], [10, 12], [-10, 12]]);
+    fs(g, LANTERN, 2.6, VERM);
+    circ(g, 0, 2, 6.5);
+    fs(g, VERM, 2.2);
+    st(g, 3.6, INK);
+    g.beginPath();
+    g.moveTo(-18, 18);
+    g.lineTo(18, 18);
+    g.moveTo(0, 18);
+    g.lineTo(0, 40);
+    g.stroke();
+    vfill(g, () => poly(g, [[-5, 34], [5, 34], [7, 44], [-7, 44]]));
+  },
+  carpenter_line(g) {
+    // 墨斗线：雕花黑木墨斗盒 + 紧绷斜贯墨线 + 线坠定针
+    poly(g, [[-38, 6], [-10, 2], [-4, 28], [-34, 34]]);
+    fs(g, INK, 4.2);
+    circ(g, -22, 16, 8);
+    fs(g, PAPER_SHADE, 2.8);
+    circ(g, -22, 16, 3.5);
+    g.fillStyle = INK;
+    g.fill();
+    st(g, 3.8, INK);
+    g.beginPath();
+    g.moveTo(-12, 10);
+    g.lineTo(34, -34);
+    g.stroke();
+    st(g, 2.2, VERM);
+    g.beginPath();
+    g.moveTo(-8, 14);
+    g.lineTo(38, -30);
+    g.stroke();
+    poly(g, [[30, -40], [42, -38], [36, -24]]);
+    fs(g, VERM, 3);
+  },
+  luopan_slip(g) {
+    // 风水飞签：扇列三枚刻纹竹签 + 朱砂签头 + 罗盘底环
+    circ(g, 0, 14, 24);
+    fs(g, PAPER_SHADE, 3.6);
+    for (const [a, col] of [[-0.38, PAPER], [0, LANTERN], [0.38, PAPER]]) {
+      g.save();
+      g.translate(0, 24);
+      g.rotate(a);
+      poly(g, [[-5, 0], [-4, -48], [0, -60], [4, -48], [5, 0]]);
+      fs(g, col, 3.2);
+      vfill(g, () => poly(g, [[-4, -44], [0, -58], [4, -44]]));
+      g.restore();
+    }
+    circ(g, 0, 22, 7);
+    fs(g, INK, 2.8);
+  },
 };
 
 /**
@@ -867,6 +939,67 @@ export const EVO_WEAPON_ICONS = {
     g.arc(0, 8, 36, Math.PI - 0.65, Math.PI + 0.65);
     g.stroke();
   },
+  mourning_staff(g) {
+    // 幽冥镇魂杆：周天旋风白幡双环 + 镇魂金轮杖顶 + 朱砂镇字核
+    circ(g, 0, 0, 38);
+    fs(g, PAPER, 4);
+    vfill(g, () => circ(g, 0, 0, 26));
+    for (let i = 0; i < 4; i++) {
+      g.save();
+      g.rotate((i / 4) * TAU + 0.4);
+      poly(g, [[0, -44], [18, -32], [8, -22], [-6, -28]]);
+      fs(g, i % 2 === 0 ? PAPER_SHADE : LANTERN, 2.8);
+      g.restore();
+    }
+    st(g, 5.2, INK);
+    g.beginPath();
+    g.moveTo(0, -34);
+    g.lineTo(0, 36);
+    g.stroke();
+    circ(g, 0, 0, 10);
+    fs(g, LANTERN, 3.2);
+  },
+  sky_lantern(g) {
+    // 九天赤焰灯：三重赤金飞天宝灯 + 流火羽翼星雨
+    poly(g, [[-26, -18], [0, -42], [26, -18], [20, 18], [-20, 18]]);
+    fs(g, VERM, 4.4);
+    poly(g, [[-16, -12], [0, -28], [16, -12], [12, 12], [-12, 12]]);
+    fs(g, LANTERN, 3);
+    circ(g, 0, 0, 6);
+    fs(g, PAPER, 2.4);
+    for (const [sx, sy] of [[-32, 24], [0, 36], [32, 24]]) {
+      poly(g, [[sx, sy - 8], [sx + 6, sy + 2], [sx, sy + 10], [sx - 6, sy + 2]]);
+      fs(g, sx === 0 ? VERM : LANTERN, 2.4);
+    }
+  },
+  carpenter_line(g) {
+    // 乾坤断魂线：三才正逆交叠墨朱星芒阵 + 中心玄墨乾坤轮
+    poly(g, [[0, -42], [36, 22], [-36, 22]]);
+    fs(g, PAPER_SHADE, 3.8);
+    st(g, 3.8, VERM);
+    poly(g, [[0, 42], [36, -22], [-36, -22]]);
+    g.stroke();
+    circ(g, 0, 0, 16);
+    fs(g, INK, 3.6);
+    circ(g, 0, 0, 6.5);
+    fs(g, LANTERN, 2.4);
+  },
+  luopan_slip(g) {
+    // 天罡定穴签：八方金朱飞签环射罗盘心穴
+    octagon(g, 34);
+    fs(g, PAPER, 3.8);
+    for (let i = 0; i < 6; i++) {
+      g.save();
+      g.rotate((i / 6) * TAU);
+      poly(g, [[-3.5, -14], [0, -44], [3.5, -14]]);
+      fs(g, i % 2 === 0 ? VERM : LANTERN, 2.4);
+      g.restore();
+    }
+    circ(g, 0, 0, 12);
+    fs(g, INK, 3);
+    circ(g, 0, 0, 4.5);
+    fs(g, LANTERN, 2);
+  },
 };
 
 export const RELIC_ICONS = {
@@ -1199,6 +1332,60 @@ export const RELIC_ICONS = {
     g.fill();
     poly(g, [[-18, 22], [-12, 10], [-7, 22], [7, 22], [12, 10], [18, 22]]);
     fs(g, PAPER_SHADE, 3.2);
+  },
+  altar_mirror(g) {
+    // 镇坛铜镜：云纹木托底座 + 双圈金铜圆镜 + 镜心朱印
+    poly(g, [[-30, 26], [30, 26], [38, 40], [-38, 40]]);
+    fs(g, INK, 3.8);
+    circ(g, 0, -4, 30);
+    fs(g, LANTERN, 4.4);
+    circ(g, 0, -4, 20);
+    fs(g, PAPER, 3.2);
+    poly(g, [[0, -16], [10, -4], [0, 8], [-10, -4]]);
+    fs(g, VERM, 2.4);
+  },
+  lamp_oil(g) {
+    // 长明灯油：双耳黑陶油壶 + 壶口滴落金油火珠 + 朱红封贴
+    poly(g, [[-12, -32], [12, -32], [8, -16], [28, 6], [24, 36], [-24, 36], [-28, 6], [-8, -16]]);
+    fs(g, INK, 4.4);
+    poly(g, [[0, -4], [14, 10], [0, 24], [-14, 10]]);
+    fs(g, VERM, 2.8);
+    circ(g, 26, -24, 7.5);
+    fs(g, LANTERN, 2.6);
+  },
+  folk_rice(g) {
+    // 百家米：束口百纳拼布米袋 + 满溢雪白米堆 + 朱印福贴
+    poly(g, [[-26, -6], [26, -6], [32, 34], [-32, 34]]);
+    fs(g, PAPER_SHADE, 4.4);
+    g.beginPath();
+    g.moveTo(-22, -6);
+    g.quadraticCurveTo(0, -34, 22, -6);
+    g.closePath();
+    fs(g, PAPER, 3.6);
+    vfill(g, () => poly(g, [[-11, 6], [11, 6], [11, 26], [-11, 26]]));
+    st(g, 2.2, INK);
+    g.beginPath();
+    g.moveTo(-28, 14);
+    g.lineTo(-14, 14);
+    g.moveTo(14, 14);
+    g.lineTo(28, 14);
+    g.stroke();
+  },
+  cinnabar_pen(g) {
+    // 朱砂笔：斜握紫毫长管符笔 + 饱蘸赤朱笔锋 + 飞溅朱点
+    g.save();
+    g.rotate(0.55);
+    poly(g, [[-5, -42], [5, -42], [6, 12], [-6, 12]]);
+    fs(g, INK, 3.6);
+    poly(g, [[-7, 12], [7, 12], [0, 38]]);
+    fs(g, VERM, 3.2);
+    circ(g, 0, -44, 5);
+    fs(g, LANTERN, 2.4);
+    g.restore();
+    for (const [dx, dy, r] of [[-24, 28, 4.5], [-10, 38, 3.2], [18, 30, 3.8]]) {
+      circ(g, dx, dy, r);
+      fs(g, VERM, 1.8);
+    }
   },
 };
 

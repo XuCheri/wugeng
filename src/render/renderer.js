@@ -80,6 +80,10 @@ const KIND_WEAPON = {
   nuoDrum: 'nuo_drum',
   nuoBeat: 'nuo_drum',
   nuoDrumWave: 'nuo_drum',
+  mourningSweep: 'mourning_staff',
+  skyLantern: 'sky_lantern',
+  inkLine: 'carpenter_line',
+  luopanSlip: 'luopan_slip',
 };
 
 const GROUND_KINDS = new Set([
@@ -97,6 +101,7 @@ const GROUND_KINDS = new Set([
   'qimenArray',
   'moltenZone',
   'nuoDanceRing',
+  'inkLine',
 ]);
 
 // 精灵朝右绘制、需要随朝向翻转的敌人
@@ -1392,6 +1397,82 @@ export function createRenderer(canvas, opts = {}) {
           const ma = clock * 3.4 + (m / 3) * TAU;
           blit(ctx, projSprite('nuoMaskTotem'), p.x + Math.cos(ma) * R, p.y - 6 + Math.sin(ma) * R * 0.65, 0.72, 0.72, 0, 0.88 * fade);
         }
+        break;
+      }
+      case 'mourningSweep': {
+        const R = p.radius || 100;
+        const spread = Math.min(TAU * 0.96, p.spread ?? Math.PI);
+        const ang = p.angle || 0;
+        const a = Math.max(0, 1 - k * 0.85);
+        const spr = brushArcSprite(R, spread, evolved);
+        const sc = R / Math.max(30, Math.round(R / 8) * 8);
+        blit(ctx, spr, p.x, p.y, sc, sc * (p.reverse ? -1 : 1), ang, a * 0.9);
+        ctx.save();
+        ctx.strokeStyle = evolved ? LANTERN : PAPER;
+        ctx.lineWidth = evolved ? 2.8 : 2.2;
+        ctx.globalAlpha = a * 0.88;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, R * 0.94, ang - spread * 0.5, ang + spread * 0.5);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      }
+      case 'skyLantern': {
+        const fx0 = p.fromX ?? p.x;
+        const fy0 = p.fromY ?? p.y;
+        const tx = p.toX ?? p.x;
+        const ty = p.toY ?? p.y;
+        const gx = fx0 + (tx - fx0) * k;
+        const gy = fy0 + (ty - fy0) * k;
+        const lift = Math.sin(Math.PI * k) * 86;
+        const tr = (p.radius || 62) / 100;
+        blit(ctx, shadowSprite(6), gx, gy + 4, Math.max(0.35, 1 - lift / 150), Math.max(0.35, 1 - lift / 150), 0, 0.6);
+        blit(ctx, ringSprite(evolved ? 'verm' : 'vthin', id % 3), tx, ty, tr, tr * 0.52, 0, 0.32 + 0.48 * k);
+        blit(ctx, projSprite(evolved ? 'skyLanternEvo' : 'skyLantern'), gx, gy - lift, evolved ? 1.15 : 1, evolved ? 1.15 : 1, Math.sin(clock * 7 + id) * 0.1);
+        break;
+      }
+      case 'inkLine': {
+        const ax = Number.isFinite(p.ax) ? p.ax : p.x - 60;
+        const ay = Number.isFinite(p.ay) ? p.ay : p.y;
+        const bx = Number.isFinite(p.bx) ? p.bx : p.x + 60;
+        const by = Number.isFinite(p.by) ? p.by : p.y;
+        const fade = k > 0.75 ? (1 - k) / 0.25 : 1;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, fade);
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = evolved ? 4.8 : 3.4;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.strokeStyle = evolved ? VERM : PAPER_SHADE;
+        ctx.lineWidth = evolved ? 2.0 : 1.3;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.fillStyle = VERM;
+        ctx.beginPath();
+        ctx.arc(ax, ay, 3.2, 0, TAU);
+        ctx.arc(bx, by, 3.2, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'luopanSlip': {
+        const ang = p.angle ?? Math.atan2(p.vy || 0, p.vx || 1);
+        if (!low) {
+          const ux = Math.cos(ang);
+          const uy = Math.sin(ang);
+          ctx.strokeStyle = evolved ? lanternA(0.75) : vermA(0.48);
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(p.x - ux * 20, p.y - uy * 20);
+          ctx.lineTo(p.x - ux * 4, p.y - uy * 4);
+          ctx.stroke();
+        }
+        blit(ctx, projSprite(evolved ? 'luopanSlipEvo' : 'luopanSlip'), p.x, p.y, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang);
         break;
       }
       case 'enemyBullet': {

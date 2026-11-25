@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultSave } from '../../src/meta/save.js';
+import { defaultSave, RELIC_IDS } from '../../src/meta/save.js';
 import { getCheckinState, claimCheckin, localDateString, CHECKIN_TABLE, DAY7_DOUBLE_BONUS, COSMETICS } from '../../src/meta/checkin.js';
 
 const day = (d, h = 10) => new Date(2026, 10, d, h, 0, 0); // 2026-11-d 本地时间
@@ -122,5 +122,5 @@ test('护身符随机取自法器列表', () => {
   const s = defaultSave();
   s.checkin.cycleDay = 1;
   const r = claimCheckin(s, day(1), false, () => 0.999);
-  assert.equal(r.charms[0].relicId, 'wuse_mask');
+  assert.equal(r.charms[0].relicId, RELIC_IDS[RELIC_IDS.length - 1]);
 });

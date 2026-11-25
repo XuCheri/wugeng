@@ -339,6 +339,10 @@ const WEAPON_INTRO = {
   suohun_chain: '甩出无常铁链破甲定身，将前方邪祟强力拽聚',
   zhinian_kite: '放飞纸鸢火鸦俯冲鬼群，轰然爆裂灼烧一片',
   nuo_drum: '立起傩神战鼓连擂逐疫音波，减速震退四方群祟',
+  mourning_staff: '挥舞白幡丧杆横扫近身群祟，击退减速',
+  sky_lantern: '放飞孔明灯升空索敌，天火轰落灼燃一片',
+  carpenter_line: '弹射笔直墨线贯穿两点之间群祟并附流血',
+  luopan_slip: '齐射多枚索敌飞签灵巧穿刺群祟',
 };
 
 const EVOLVED_INTRO = Object.fromEntries(WEAPON_IDS.map((k) => [k, WEAPONS[k].evoDesc]));

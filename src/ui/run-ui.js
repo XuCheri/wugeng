@@ -431,7 +431,7 @@ export function createRunUI(root, deps) {
       } else {
         titleEl.textContent = '抽一支签';
         const banishCnt = rr.banishesLeft || 0;
-        sub.textContent = `升到${cnNum(rr.player?.level ?? 1)}级 · 挑一支${banishCnt > 0 ? ` · 弃签余${banishCnt}` : ''}`;
+        sub.textContent = `升到${cnNum(rr.player?.level ?? 1)}级 · 留签下回保留 · 弃签本局封除（余${banishCnt}）`;
       }
 
       clear(ownedHolder).appendChild(buildSelectionOwnedBar(rr));
@@ -464,11 +464,12 @@ export function createRunUI(root, deps) {
 
         let actsEl = null;
         if (!isBlessing) {
-          const canBanish = (rr.banishesLeft || 0) > 0 && (c.kind === 'weapon' || c.kind === 'relic');
+          const banishCnt = rr.banishesLeft || 0;
+          const canBanish = banishCnt > 0 && (c.kind === 'weapon' || c.kind === 'relic');
           actsEl = h('div', { class: 'qian__acts' },
             h('button', {
               type: 'button',
-              class: `qian-act${isLocked ? ' is-on' : ''}`,
+              class: `qian-act qian-act--lock${isLocked ? ' is-on' : ''}`,
               dataset: { action: 'lock', choiceIndex: String(i) },
               'aria-pressed': isLocked ? 'true' : 'false',
               'aria-label': `${isLocked ? '取消留签' : '留签'}：${d.name}`,
@@ -476,13 +477,16 @@ export function createRunUI(root, deps) {
                 e.stopPropagation();
                 if (sim.toggleLockChoice?.(run(), i)) {
                   deps.audio?.play('paper');
+                  if (!isLocked) toast(`已留签：下回保留「${d.name}」`);
                   render();
                 }
               },
-            }, isLocked ? '已留' : '留签'),
+            },
+            h('i', { class: 'qian-act__seal', 'aria-hidden': 'true' }, '留'),
+            h('span', {}, isLocked ? '已留' : '留签')),
             h('button', {
               type: 'button',
-              class: 'qian-act qian-act--banish',
+              class: `qian-act qian-act--banish${canBanish ? ' is-ready' : ''}`,
               disabled: !canBanish,
               dataset: { action: 'banish', choiceIndex: String(i) },
               'aria-label': `弃签：${d.name}`,
@@ -492,10 +496,13 @@ export function createRunUI(root, deps) {
                   toast('弃签次数已尽');
                   return;
                 }
-                deps.audio?.play('paper');
+                deps.audio?.play('banish');
+                toast(`已封除「${d.name}」并重抽新签`);
                 render();
               },
-            }, `弃签${(rr.banishesLeft || 0) > 0 ? `·${rr.banishesLeft}` : ''}`));
+            },
+            h('i', { class: 'qian-act__seal', 'aria-hidden': 'true' }, '封'),
+            h('span', {}, `弃签${banishCnt > 0 ? `·${banishCnt}` : ''}`)));
         }
 
         const lvBadge = isBlessing

@@ -4,7 +4,7 @@ import {
   WEAPONS, WEAPON_IDS, RELICS, MAX_WEAPON_LEVEL, MAX_RELIC_LEVEL, MAX_WEAPONS, FX, EVOLUTION,
   HERO_AFFINITY, isHeroSignatureWeapon,
 } from './balance.js';
-import { damageCircle, damageEnemy, knockback, applyStun, applyVuln } from './combat.js';
+import { damageCircle, damageEnemy, knockback, applyStun, applySlow, applyVuln } from './combat.js';
 import { hasRelic } from './relics.js';
 import { hitPropsCircle } from './props.js';
 import { wrapAngle } from '../core/math.js';
@@ -1220,6 +1220,338 @@ function updateNuoDrum(run, w, dt) {
   emitFire(run, w, tx, ty, aimAngle);
 }
 
+// ───────────────────────── 17. 引魂丧杆 → 幽冥镇魂杆 ─────────────────────────
+
+function pointSegDist2W(px, py, ax, ay, bx, by) {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const l2 = vx * vx + vy * vy;
+  if (l2 < 1e-6) return (px - ax) ** 2 + (py - ay) ** 2;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2));
+  return (px - (ax + vx * t)) ** 2 + (py - (ay + vy * t)) ** 2;
+}
+
+function updateMourningStaff(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  w.cd = cooldown(run, w);
+  const def = WEAPONS.mourning_staff;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const R = wstat('mourning_staff', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const spreadRad = w.evolved ? Math.PI * 2 : (wstat('mourning_staff', 'spread', w.level) * Math.PI) / 180;
+  const dmg = baseDmg(w, run);
+
+  const pri = findPriorityTarget(run, p.x, p.y, R + 60, run._sys.scratchW);
+  const aim = pri ? Math.atan2(pri.y - p.y, pri.x - p.x) : Math.atan2(p.facingY, p.facingX);
+  w._sweeps = (w._sweeps || 0) + 1;
+
+  hitPropsCircle(run, p.x, p.y, R);
+  const list = run._sys.hash.queryCircle(p.x, p.y, R, run._sys.scratchW);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead) continue;
+    const dx = e.x - p.x;
+    const dy = e.y - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > R + e.r) continue;
+    if (!w.evolved) {
+      const da = Math.abs(wrapAngle(Math.atan2(dy, dx) - aim));
+      if (da > spreadRad * 0.5 && dist > p.r + e.r + 10) continue;
+    }
+    applySlow(run, e, 0.9);
+    if (w.evolved) {
+      applyStun(run, e, evo.stunDur);
+      applyVuln(e, evo.vulnDur, evo.vulnPct);
+    }
+    damageEnemy(run, e, dmg, 'mourning_staff', {
+      knock: def.knockback,
+      knockDx: dx || 1,
+      knockDy: dy,
+      armorBreak: w.evolved,
+    });
+  }
+
+  if (w.evolved) {
+    for (let j = 0; j < run.projectiles.length; j++) {
+      const b = run.projectiles[j];
+      if (b.kind === 'enemyBullet' && !b.dead) {
+        const rr = R + (b.r || 0);
+        if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 <= rr * rr) b.dead = true;
+      }
+    }
+    if (w._sweeps % evo.pulseEvery === 0) {
+      const pR = R * evo.pulseRadiusMul;
+      damageCircle(run, p.x, p.y, pR, dmg * evo.pulseDmgMul, 'mourning_staff', {
+        knock: def.knockback * 1.25,
+        stun: evo.stunDur,
+      });
+      newProj(run, 'gongPulse', p.x, p.y, pR, 0, 0.34, {
+        weaponId: 'mourning_staff',
+        radius: 0,
+        maxRadius: pR,
+        evolved: true,
+      });
+    }
+  }
+
+  newProj(run, 'mourningSweep', p.x, p.y, R, aim, def.sweepLife, {
+    weaponId: 'mourning_staff',
+    radius: R,
+    spread: spreadRad,
+    reverse: (w._sweeps & 1) === 0,
+    evolved: w.evolved,
+  });
+  emitFire(run, w, p.x, p.y, aim);
+}
+
+// ───────────────────────── 18. 孔明灯 → 九天赤焰灯 ─────────────────────────
+
+function updateSkyLantern(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  w.cd = cooldown(run, w);
+  const def = WEAPONS.sky_lantern;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = def.range * sigScale;
+  const blastR = wstat('sky_lantern', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const n = wstat('sky_lantern', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
+  const flight = w.evolved ? evo.flight : def.flight;
+  const dmg = baseDmg(w, run);
+
+  const rawList = run._sys.hash.queryCircle(p.x, p.y, seekR, run._sys.scratchW);
+  const live = [];
+  for (let i = 0; i < rawList.length; i++) if (!rawList[i].dead) live.push(rawList[i]);
+
+  let mainAngle = 0;
+  for (let i = 0; i < n; i++) {
+    let tx;
+    let ty;
+    if (live.length > 0) {
+      const pick = live[(i * 3) % live.length];
+      const jitterA = (i / Math.max(1, n)) * Math.PI * 2;
+      const jitterD = i === 0 ? 0 : 24;
+      tx = pick.x + Math.cos(jitterA) * jitterD;
+      ty = pick.y + Math.sin(jitterA) * jitterD;
+    } else {
+      const a = run.rng.range(0, Math.PI * 2);
+      const d = run.rng.range(75, Math.max(95, seekR * 0.72));
+      tx = p.x + Math.cos(a) * d;
+      ty = p.y + Math.sin(a) * d;
+    }
+    if (i === 0) mainAngle = Math.atan2(ty - p.y, tx - p.x);
+    newProj(run, 'skyLantern', p.x, p.y, 10, 0, flight, {
+      weaponId: 'sky_lantern',
+      fromX: p.x,
+      fromY: p.y,
+      toX: tx,
+      toY: ty,
+      radius: blastR,
+      dmg,
+      evolved: w.evolved,
+      _midSpark: false,
+    });
+  }
+  emitFire(run, w, p.x, p.y, mainAngle);
+}
+
+// ───────────────────────── 19. 墨斗线 → 乾坤断魂线 ─────────────────────────
+
+function sliceAlongInkSegment(run, ax, ay, bx, by, halfW, dmg, bleedDps, bleedDur, armorBreak) {
+  const mx = (ax + bx) * 0.5;
+  const my = (ay + by) * 0.5;
+  const segHalf = Math.hypot(bx - ax, by - ay) * 0.5 + halfW + 36;
+  const list = run._sys.hash.queryCircle(mx, my, segHalf, run._sys.scratchW);
+  const activeSlot = run._activeSlot || 0;
+  const lx = bx - ax;
+  const ly = by - ay;
+  const perpX = -ly;
+  const perpY = lx;
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (e.dead) continue;
+    const rr = halfW + e.r;
+    if (pointSegDist2W(e.x, e.y, ax, ay, bx, by) > rr * rr) continue;
+    applySlow(run, e, 0.9);
+    if (bleedDur > 0 && bleedDps > 0) {
+      e.bleedT = Math.max(e.bleedT || 0, bleedDur);
+      e.bleedDps = Math.max(e.bleedDps || 0, bleedDps);
+      e.bleedSlot = activeSlot;
+    }
+    damageEnemy(run, e, dmg, 'carpenter_line', {
+      knock: WEAPONS.carpenter_line.knockback,
+      knockDx: perpX || 1,
+      knockDy: perpY,
+      armorBreak,
+    });
+  }
+  hitPropsCircle(run, mx, my, Math.min(90, segHalf * 0.6));
+}
+
+function updateCarpenterLine(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.carpenter_line;
+  const evo = def.evo;
+  const p = run.player;
+  const areaMul = weaponAreaMul(run, w);
+  const L = wstat('carpenter_line', 'length', w.level) * (w.evolved ? evo.lengthMul : 1) * areaMul;
+  const W = def.width * (w.evolved ? evo.widthMul : 1) * (isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1);
+
+  const rawList = run._sys.hash.queryCircle(p.x, p.y, L * 1.15, run._sys.scratchW);
+  const live = [];
+  for (let i = 0; i < rawList.length; i++) if (!rawList[i].dead) live.push(rawList[i]);
+  if (!live.length) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+  live.sort((a, b) => {
+    const sa = a.boss ? 2 : a.elite ? 1 : 0;
+    const sb = b.boss ? 2 : b.elite ? 1 : 0;
+    if (sb !== sa) return sb - sa;
+    return (a.x - p.x) ** 2 + (a.y - p.y) ** 2 - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
+  });
+
+  w.cd = cooldown(run, w);
+  const dmg = baseDmg(w, run);
+  const bleedDps = dmg * def.bleedDpsMul * (1 + (run.mods?.dmgPct || 0));
+  const bleedDur = def.bleedDur * (run.mods?.durMul || 1);
+  const lineCount = (w.evolved ? evo.lines : wstat('carpenter_line', 'count', w.level)) + run.mods.amount;
+  const life = (w.evolved ? evo.life : def.life) * (run.mods?.durMul || 1);
+  const anchor = live[0];
+  const baseAngle = Math.atan2(anchor.y - p.y, anchor.x - p.x);
+
+  if (w.evolved && lineCount >= 3) {
+    // 乾坤断魂线：以首目标为中心结成贯穿心腹的三才/多向断魂星墨阵并持续斩裂
+    const cx = anchor.x;
+    const cy = anchor.y;
+    const halfSpan = Math.max(72, L * 0.5);
+    for (let i = 0; i < lineCount; i++) {
+      const a = baseAngle + (i / lineCount) * Math.PI;
+      const v0 = { x: cx - Math.cos(a) * halfSpan, y: cy - Math.sin(a) * halfSpan };
+      const v1 = { x: cx + Math.cos(a) * halfSpan, y: cy + Math.sin(a) * halfSpan };
+      sliceAlongInkSegment(run, v0.x, v0.y, v1.x, v1.y, W * 0.5, dmg, bleedDps, bleedDur, true);
+      newProj(run, 'inkLine', cx, cy, W * 0.5, a, life, {
+        weaponId: 'carpenter_line',
+        ax: v0.x,
+        ay: v0.y,
+        bx: v1.x,
+        by: v1.y,
+        width: W,
+        length: halfSpan * 2,
+        dmg: dmg * evo.tickDmgMul,
+        fullDmg: dmg,
+        bleedDps,
+        bleedDur,
+        tick: evo.tick,
+        _tickT: evo.tick,
+        snapBurst: i === 0,
+        evolved: true,
+      });
+    }
+  } else {
+    for (let i = 0; i < lineCount; i++) {
+      const eA = live[i % live.length];
+      let ax;
+      let ay;
+      let bx;
+      let by;
+      if (live.length >= 2) {
+        const eB = live[(i + 1) % live.length];
+        const dx = eB.x - eA.x;
+        const dy = eB.y - eA.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 24 && dist <= L) {
+          const ux = dx / dist;
+          const uy = dy / dist;
+          const pad = Math.min(48, (L - dist) * 0.5);
+          ax = eA.x - ux * pad;
+          ay = eA.y - uy * pad;
+          bx = eB.x + ux * pad;
+          by = eB.y + uy * pad;
+        } else {
+          const ang = baseAngle + Math.PI * 0.5 + i * 0.55;
+          ax = eA.x - Math.cos(ang) * L * 0.5;
+          ay = eA.y - Math.sin(ang) * L * 0.5;
+          bx = eA.x + Math.cos(ang) * L * 0.5;
+          by = eA.y + Math.sin(ang) * L * 0.5;
+        }
+      } else {
+        const ang = baseAngle + Math.PI * 0.5 + i * 0.62;
+        ax = eA.x - Math.cos(ang) * L * 0.5;
+        ay = eA.y - Math.sin(ang) * L * 0.5;
+        bx = eA.x + Math.cos(ang) * L * 0.5;
+        by = eA.y + Math.sin(ang) * L * 0.5;
+      }
+      sliceAlongInkSegment(run, ax, ay, bx, by, W * 0.5, dmg, bleedDps, bleedDur, false);
+      newProj(run, 'inkLine', (ax + bx) * 0.5, (ay + by) * 0.5, W * 0.5, Math.atan2(by - ay, bx - ax), life, {
+        weaponId: 'carpenter_line',
+        ax,
+        ay,
+        bx,
+        by,
+        width: W,
+        length: Math.hypot(bx - ax, by - ay),
+        dmg: dmg * 0.45,
+        fullDmg: dmg,
+        bleedDps,
+        bleedDur,
+        tick: 0,
+        _tickT: 99,
+        snapBurst: false,
+        evolved: false,
+      });
+    }
+  }
+  emitFire(run, w, anchor.x, anchor.y, baseAngle);
+}
+
+// ───────────────────────── 20. 风水飞签 → 天罡定穴签 ─────────────────────────
+
+function updateLuopanSlip(run, w, dt) {
+  w.cd -= dt;
+  if (w.cd > 0) return;
+  const def = WEAPONS.luopan_slip;
+  const evo = def.evo;
+  const p = run.player;
+  const sigScale = isWeaponSignature(w, run) ? 1 + HERO_AFFINITY.areaBonus : 1;
+  const seekR = def.seekRange * sigScale;
+  const t0 = findPriorityTarget(run, p.x, p.y, seekR, run._sys.scratchW);
+  if (!t0) {
+    w.cd = FX.retryDelay;
+    return;
+  }
+  w.cd = cooldown(run, w);
+  const n = wstat('luopan_slip', 'count', w.level) + (w.evolved ? evo.bonusCount : 0) + run.mods.amount;
+  const spd = (w.evolved ? evo.speed : def.speed) * run.mods.durMul;
+  const pierce = (w.evolved ? evo.pierce : def.pierce) + (run.mods.bonusPierce || 0);
+  const turnRate = w.evolved ? evo.turnRate : def.turnRate;
+  const dmg = baseDmg(w, run);
+  const baseA = Math.atan2(t0.y - p.y, t0.x - p.x);
+
+  for (let i = 0; i < n; i++) {
+    const a = baseA + (i - (n - 1) / 2) * 0.16;
+    newProj(run, 'luopanSlip', p.x, p.y, def.r * sigScale, a, def.life * run.mods.durMul, {
+      weaponId: 'luopan_slip',
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd,
+      speed: spd,
+      turnRate,
+      seekRange: seekR,
+      pierce,
+      dmg,
+      evolved: w.evolved,
+      _hit: [],
+      _tgt: i === 0 ? t0 : null,
+    });
+  }
+  emitFire(run, w, p.x, p.y, baseA);
+}
+
 // ───────────────────────── 持续弹体同步（灯笼、火环、纸扎仪仗）─────────────────────────
 
 function summonKey(run, w) {
@@ -1353,6 +1685,10 @@ const UPDATERS = {
   suohun_chain: updateSuohunChain,
   zhinian_kite: updateZhinianKite,
   nuo_drum: updateNuoDrum,
+  mourning_staff: updateMourningStaff,
+  sky_lantern: updateSkyLantern,
+  carpenter_line: updateCarpenterLine,
+  luopan_slip: updateLuopanSlip,
 };
 
 export function updateWeapons(run, dt) {

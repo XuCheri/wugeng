@@ -94,7 +94,7 @@ export function renderHub(root, ctx) {
       ctx.onStart({
         heroId: getActiveHero(),
         startWeapon: chosenStarter,
-        unlockedWeapons: getUnlockedWeaponList(),
+        unlockedWeapons: getRunWeaponPool(),
         nightLevel: n,
         charm,
       });
@@ -234,6 +234,22 @@ export function renderHub(root, ctx) {
       ? save.unlockedWeapons.filter((w) => WEAPON_IDS.includes(w))
       : [...DEFAULT_UNLOCKED_WEAPONS];
     return raw.length ? raw : [...DEFAULT_UNLOCKED_WEAPONS];
+  }
+
+  function getRunWeaponPool() {
+    const unlocked = getUnlockedWeaponList();
+    const lockedHeroSigs = new Set(
+      HERO_IDS.filter((h) => !save.unlockedHeroes.includes(h))
+        .map((h) => heroInfo(h).weapon)
+        .filter(Boolean),
+    );
+    const out = new Set(unlocked);
+    for (const wid of WEAPON_IDS) {
+      if (ACH_WEAPON_SET.has(wid) && !unlocked.includes(wid)) continue;
+      if (lockedHeroSigs.has(wid) && !unlocked.includes(wid)) continue;
+      out.add(wid);
+    }
+    return WEAPON_IDS.filter((wid) => out.has(wid));
   }
 
   // ───────── 原地刷新备战区与舞台铭牌（零画布重建，丝滑切换动画）─────────

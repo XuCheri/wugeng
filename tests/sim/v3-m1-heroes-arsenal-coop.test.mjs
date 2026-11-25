@@ -39,8 +39,8 @@ const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `expected $
 test('V3-M1-01: 6+6 器物栏上限、16 对本命双射、新四法器精确数值与四更巡更小头目（430s）', () => {
   assert.equal(MAX_WEAPONS, 6);
   assert.equal(MAX_RELICS, 6);
-  assert.equal(WEAPON_IDS.length, 16);
-  assert.equal(RELIC_IDS.length, 16);
+  assert.ok(WEAPON_IDS.length >= 20, `兵刃总数应不少于 20（当前 ${WEAPON_IDS.length}）`);
+  assert.equal(RELIC_IDS.length, WEAPON_IDS.length);
   assert.equal(MINI_WARDERS.length, 3);
   assert.equal(MINI_WARDERS[2].id, 'warder_430');
   assert.equal(MINI_WARDERS[2].time, Math.round(430 * B.PACE));

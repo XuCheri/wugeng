@@ -2396,6 +2396,38 @@ function drawNuoMaskTotemProj(g) {
   fs(g, PAPER, 0.8);
 }
 
+function drawSkyLanternProj(g, evo) {
+  poly(g, [[-9, -8], [0, -13], [9, -8], [7, 8], [-7, 8]]);
+  fs(g, evo ? VERM : PAPER, 1.3);
+  g.fillStyle = LANTERN;
+  circ(g, 0, 2, evo ? 4.2 : 3.2);
+  g.fill();
+  g.strokeStyle = INK;
+  g.lineWidth = 1.1;
+  g.beginPath();
+  g.moveTo(-7, 8);
+  g.lineTo(7, 8);
+  if (evo) {
+    g.moveTo(0, -13);
+    g.lineTo(0, 8);
+  }
+  g.stroke();
+}
+
+function drawLuopanSlipProj(g, evo) {
+  poly(g, [[-14, -2.5], [8, -3.2], [15, 0], [8, 3.2], [-14, 2.5]]);
+  fs(g, evo ? LANTERN : PAPER_SHADE, 1.1);
+  vfill(g, () => poly(g, [[4, -2.2], [13, 0], [4, 2.2]]));
+  if (evo) {
+    g.strokeStyle = VERM;
+    g.lineWidth = 1.1;
+    g.beginPath();
+    g.moveTo(-10, 0);
+    g.lineTo(5, 0);
+    g.stroke();
+  }
+}
+
 const PROJ_DEFS = {
   talisman: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, false) },
   talismanEvo: { w: 12, h: 24, ax: 6, ay: 12, draw: (g) => drawTalisman(g, true) },
@@ -2444,6 +2476,10 @@ const PROJ_DEFS = {
   nuoDrum: { w: 28, h: 28, ax: 14, ay: 14, draw: (g) => drawNuoDrumTotemProj(g, false) },
   nuoDrumEvo: { w: 32, h: 36, ax: 16, ay: 20, draw: (g) => drawNuoDrumTotemProj(g, true) },
   nuoMaskTotem: { w: 28, h: 30, ax: 14, ay: 15, draw: (g) => drawNuoMaskTotemProj(g) },
+  skyLantern: { w: 24, h: 30, ax: 12, ay: 15, draw: (g) => drawSkyLanternProj(g, false) },
+  skyLanternEvo: { w: 26, h: 32, ax: 13, ay: 16, draw: (g) => drawSkyLanternProj(g, true) },
+  luopanSlip: { w: 34, h: 10, ax: 17, ay: 5, draw: (g) => drawLuopanSlipProj(g, false) },
+  luopanSlipEvo: { w: 36, h: 12, ax: 18, ay: 6, draw: (g) => drawLuopanSlipProj(g, true) },
 };
 
 export function projSprite(name) {
