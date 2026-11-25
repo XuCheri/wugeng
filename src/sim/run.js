@@ -34,12 +34,25 @@ import {
   markPlayerDowned,
   areAllPlayersDowned,
   updateCoopRevives,
+  pickRecommendedChoiceIndex,
+  prepareCoopIndependentChoices,
+  submitCoopPlayerChoice,
   syncAlliesOnTeamProgress,
   buildSquadSummary,
 } from './coop.js';
 import { computeRunHash } from './hash.js';
 
-export { DT, getEvolutionRecipe, canEvolve, describeUpgrade, describeEvolution, WATCH_EVENT_KINDS, startWatchEvent, computeRunHash };
+export {
+  DT,
+  getEvolutionRecipe,
+  canEvolve,
+  describeUpgrade,
+  describeEvolution,
+  WATCH_EVENT_KINDS,
+  startWatchEvent,
+  computeRunHash,
+  pickRecommendedChoiceIndex,
+};
 
 /**
  * 创建一局（100% 向后兼容旧版单人参表，并支持自选初始武器、解锁池过滤与 2–4 人协同联机）。
@@ -365,14 +378,24 @@ function settleStatus(run) {
   if (run.chestChoices.length) run.chestChoices.length = 0;
   if (run._pendingBlessings > 0) {
     run.status = 'levelup';
-    if (!run.choices || run.choiceMode !== 'blessing' || run.choices[0]?.kind !== 'blessing') {
+    if (run._coopLockstep && coopPartySize(run) > 1) {
+      if (!Array.isArray(run.coopChoicesBySlot) || run.choiceMode !== 'blessing') {
+        run.choiceMode = 'blessing';
+        prepareCoopIndependentChoices(run, 'blessing');
+      }
+    } else if (!run.choices || run.choiceMode !== 'blessing' || run.choices[0]?.kind !== 'blessing') {
       generateBlessingChoices(run);
     } else {
       run.choiceMode = 'blessing';
     }
   } else if (run._pendingLevels > 0) {
     run.status = 'levelup';
-    if (!run.choices || run.choiceMode !== 'normal' || run.choices[0]?.kind === 'blessing') {
+    if (run._coopLockstep && coopPartySize(run) > 1) {
+      if (!Array.isArray(run.coopChoicesBySlot) || run.choiceMode !== 'normal') {
+        run.choiceMode = 'normal';
+        prepareCoopIndependentChoices(run, 'normal');
+      }
+    } else if (!run.choices || run.choiceMode !== 'normal' || run.choices[0]?.kind === 'blessing') {
       generateChoices(run);
     } else {
       run.choiceMode = 'normal';
@@ -526,6 +549,17 @@ export function chooseUpgrade(run, index) {
     run.choices = null;
     settleStatus(run);
     return true;
+  });
+}
+
+export function chooseCoopUpgrade(run, slot, index) {
+  if (!run || run.status !== 'levelup') return { ok: false, committed: false };
+  return outside(run, () => {
+    const res = submitCoopPlayerChoice(run, slot, index);
+    if (res.committed) {
+      settleStatus(run);
+    }
+    return res;
   });
 }
 

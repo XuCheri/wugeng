@@ -32,6 +32,7 @@ export function createGame({
   onStart = () => {},
   onClear = () => {},
   transformInput = null,
+  onStepCommitted = null,
   onAfterStep = null,
   shouldSkipAutoPause = null,
 } = {}) {
@@ -113,7 +114,14 @@ export function createGame({
       while (acc >= DT && steps < MAX_STEPS_PER_FRAME) {
         const sampled = input.sample();
         const stepInp = typeof transformInput === 'function' ? transformInput(sampled, run) : sampled;
+        if (stepInp && stepInp.holdStep) {
+          acc = Math.min(acc, DT);
+          break;
+        }
         stepRun(run, stepInp, DT);
+        if (typeof onStepCommitted === 'function') {
+          onStepCommitted(run);
+        }
         if (run.events.length) {
           renderer.consumeEvents(run.events);
           onEvents(run.events, run);
@@ -170,6 +178,10 @@ export function createGame({
     } = {}) {
       const s = seed ?? ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
       run = createRun({ seed: s, heroId, startWeapon, unlockedWeapons, nightLevel, meta, charm, coop, runRules });
+      if (coop && typeof coop === 'object') {
+        if (coop.lockstep) run._coopLockstep = true;
+        if (Number.isInteger(coop.mySlot) && coop.mySlot >= 0) run._localSlot = coop.mySlot;
+      }
       const eq = settings.cosmetics || {};
       const resolvedSkin = skinId || eq.heroSkins?.[run.heroId] || null;
       const resolvedVfx = attackVfx || eq.attackVfx || null;

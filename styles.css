@@ -3566,8 +3566,54 @@ p { margin: 0; }
   width: 100%;
 }
 
+.coop-entry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.coop-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.coop-entry-card__title {
+  font-size: 14px;
+  letter-spacing: .08em;
+  color: var(--ink);
+}
+.coop-entry-card__sub {
+  font-size: 10.5px;
+  color: rgba(28, 26, 23, .75);
+  line-height: 1.3;
+}
+.coop-entry-card__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+}
+.coop-wait-banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 54px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  letter-spacing: .08em;
+  color: var(--paper);
+  background: rgba(28, 26, 23, .92);
+  box-shadow: inset 0 0 0 1.5px var(--lantern);
+  pointer-events: none;
+}
+
 @media (max-width: 370px) {
   .coop-party-grid { grid-template-columns: 1fr; }
+  .coop-entry-grid { grid-template-columns: 1fr; }
   .dc-loadout { grid-template-columns: 1fr; }
   .hub-ribbon__btn { width: 36px; height: 36px; }
   .hub-ribbon { gap: 3px; top: 50%; transform: translateY(-50%); }

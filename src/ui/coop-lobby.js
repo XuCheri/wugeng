@@ -1,7 +1,9 @@
-// 同守五更 2–4 人联机大厅与 TapTap 好友邀请弹窗（F13 + F14）
-// 涵盖：创建房间（6 位 [data-room-code]）、输码进房 [data-action="coop-join"]、快速匹配 [data-action="coop-quick"]、
-// 添加智能道友 [data-action="coop-add-bot"]、邀请好友 [data-action="coop-invite-friend"]、打开好友列表 [data-action="open-friends"]、
-// 4 席位实时角色重彩皮肤预览与房主 [data-action="coop-start"] / 客机 [data-action="coop-ready"]。
+// 同守五更 2–4 人联机大厅与三入口组队弹窗（F13 + F14 + v4 M4.4）：
+// 三大清晰入口：
+// 1. 建房邀友：[data-action="coop-create"] 创建房间 + [data-action="coop-invite-friend"] TapTap 分享拉起
+// 2. 输入房号：6 位字母数字房号输入 [data-room-input="1"] + [data-action="coop-join"]
+// 3. 快速匹配：[data-action="coop-quick"] 云端匹配 wugeng_v4 房间，20 秒未满自动补齐智能道友
+// 彻底移除旧版手工复制粘贴 SDP 的无效 P2P 面板；无联机环境优雅提示「当前环境暂不支持联机」。
 
 import { h, clear, scroll, sealButton, veil, toast } from './dom.js';
 import { heroInfo, weaponName } from './copy.js';
@@ -18,8 +20,6 @@ export function openCoopLobbyModal(root, opts = {}) {
   const { coop, friends } = opts;
   let v = null;
   let closed = false;
-  let showP2pBox = false;
-  let p2pLocalCode = '';
   let joinInputVal = opts.autoJoinCode ? String(opts.autoJoinCode).toUpperCase() : '';
   let friendsExpanded = Boolean(opts.openFriendsFirst || friends?.isMockEnabled?.());
 
@@ -28,7 +28,6 @@ export function openCoopLobbyModal(root, opts = {}) {
   const partyGrid = h('div', { class: 'coop-party-grid', 'aria-label': '守夜队伍席位' });
   const controlBox = h('div', { class: 'coop-controls' });
   const friendsBox = h('div', { class: 'friends-panel coop-friends-panel' });
-  const p2pBox = h('div', { class: 'coop-p2p-box', hidden: true });
   const footBox = h('div', { class: 'coop-foot-actions' });
 
   const roomInput = h('input', {
@@ -68,12 +67,26 @@ export function openCoopLobbyModal(root, opts = {}) {
     return cvs;
   }
 
+  async function handleInviteShare(explicitCode = '') {
+    let code = explicitCode || coop.roomCode || '';
+    if (!code) {
+      const created = coop.createRoom();
+      code = created?.roomCode || coop.roomCode || '';
+    }
+    const res = await friends.inviteFriendToRoom({ roomCode: code });
+    if (res?.message) {
+      statusNoticeEl.textContent = res.message;
+      toast(res.message);
+    }
+    render();
+  }
+
   function render() {
     if (closed) return;
     const st = coop.getState();
     const activeCode = st.confirmedRoomCode || st.pendingRoomCode || '';
 
-    // 1. 顶部 6 位房号牌匾与快捷操作
+    // 1. 顶部房号横匾或三大组队入口（建房邀友 / 快速匹配 / 好友列表）
     clear(codeBannerBox);
     if (activeCode) {
       codeBannerBox.append(
@@ -84,14 +97,10 @@ export function openCoopLobbyModal(root, opts = {}) {
             dataset: { roomCode: activeCode },
           }, activeCode)),
         h('div', { class: 'coop-code-actions' },
-          sealButton('邀请好友', async () => {
-            const res = await friends.inviteFriendToRoom({ roomCode: activeCode });
-            if (res?.message) {
-              statusNoticeEl.textContent = res.message;
-              toast(res.message);
-            }
-            renderFriendsSection();
-          }, { kind: 'small', dataset: { action: 'coop-invite-friend' } }),
+          sealButton('邀请好友', () => handleInviteShare(activeCode), {
+            kind: 'small',
+            dataset: { action: 'coop-invite-friend' },
+          }),
           sealButton('离开房间', () => {
             coop.leave();
             render();
@@ -99,33 +108,51 @@ export function openCoopLobbyModal(root, opts = {}) {
       );
     } else {
       codeBannerBox.append(
-        h('div', { class: 'coop-quick-bar' },
-          sealButton('创建房间', () => {
-            coop.createRoom();
-            render();
-          }, { kind: 'small', dataset: { action: 'coop-create' } }),
-          sealButton('快速匹配', async () => {
-            await coop.quickMatch();
-            render();
-          }, { kind: 'small', dataset: { action: 'coop-quick' } }),
-          sealButton('好友列表', () => {
-            friendsExpanded = true;
-            const res = friends.openFriendList();
-            if (res?.message) {
-              statusNoticeEl.textContent = res.message;
-              toast(res.message);
-            }
-            renderFriendsSection();
-          }, { kind: 'ghost', cls: 'btn--small', dataset: { action: 'open-friends' } })),
+        h('div', { class: 'coop-entry-grid' },
+          h('div', { class: 'coop-entry-card' },
+            h('span', { class: 'coop-entry-card__title' }, '建房邀友'),
+            h('span', { class: 'coop-entry-card__sub' }, '生成 6 位房号 · 分享拉起好友'),
+            h('div', { class: 'coop-entry-card__acts' },
+              sealButton('创建房间', () => {
+                coop.createRoom();
+                render();
+              }, { kind: 'small', dataset: { action: 'coop-create' } }),
+              sealButton('邀请好友', () => handleInviteShare(), {
+                kind: 'ghost',
+                cls: 'btn--small',
+                dataset: { action: 'coop-invite-friend' },
+              }))),
+          h('div', { class: 'coop-entry-card' },
+            h('span', { class: 'coop-entry-card__title' }, '快速匹配'),
+            h('span', { class: 'coop-entry-card__sub' }, '自动寻访同更道友 · 20秒补齐'),
+            h('div', { class: 'coop-entry-card__acts' },
+              sealButton('快速匹配', async () => {
+                await coop.quickMatch();
+                render();
+              }, { kind: 'small', dataset: { action: 'coop-quick' } }),
+              sealButton('好友列表', () => {
+                friendsExpanded = true;
+                const res = friends.openFriendList();
+                if (res?.message) {
+                  statusNoticeEl.textContent = res.message;
+                  toast(res.message);
+                }
+                renderFriendsSection();
+              }, { kind: 'ghost', cls: 'btn--small', dataset: { action: 'open-friends' } })))),
       );
     }
 
-    // 2. 状态提示语
-    const statusMsg = st.lastError || st.statusText || '二至四人结伴巡街 · 队友倒地踏入朱砂八卦阵即可扶起救援';
+    // 2. 状态提示语（含无联机宿主环境优雅提示）
+    const defaultNotice = st.onlineSupported === false
+      ? '当前环境暂不支持联机，可添加道友 AI 单机同守'
+      : st.tapMode
+        ? '已就绪 TapTap 多人联机专线 · 二至四人同守五更'
+        : '二至四人结伴巡街 · 队友倒地踏入朱砂八卦阵即可扶起救援';
+    const statusMsg = st.lastError || st.statusText || defaultNotice;
     statusNoticeEl.textContent = statusMsg;
     statusNoticeEl.className = `coop-status${st.lastError ? ' is-error' : ''}`;
 
-    // 3. 输码进房与补位工具栏
+    // 3. 输入 6 位房号进房 + 智能道友补位工具栏
     clear(controlBox);
     const joinRow = h('div', { class: 'coop-join-row' },
       roomInput,
@@ -163,15 +190,9 @@ export function openCoopLobbyModal(root, opts = {}) {
         renderFriendsSection();
       }, { kind: 'ghost', cls: 'btn--small', dataset: { action: 'open-friends' } }));
     }
-    subTools.appendChild(h('button', {
-      type: 'button',
-      class: 'link-btn coop-p2p-toggle',
-      onClick: () => {
-        showP2pBox = !showP2pBox;
-        renderP2pSection();
-      },
-    }, showP2pBox ? '收起跨网口令直连' : '跨网 P2P 口令直连'));
-    controlBox.appendChild(subTools);
+    if (subTools.childNodes.length > 0) {
+      controlBox.appendChild(subTools);
+    }
 
     // 4. 2–4 人席位卡片（含角色皮肤缩略演武、起手兵刃与特效标签）
     clear(partyGrid);
@@ -203,7 +224,6 @@ export function openCoopLobbyModal(root, opts = {}) {
     }
 
     renderFriendsSection();
-    renderP2pSection();
 
     // 5. 底部主战按钮（房主开局 / 客机准备）
     clear(footBox);
@@ -280,52 +300,6 @@ export function openCoopLobbyModal(root, opts = {}) {
     friendsBox.appendChild(ul);
   }
 
-  function renderP2pSection() {
-    p2pBox.hidden = !showP2pBox;
-    if (!showP2pBox) return;
-    clear(p2pBox);
-    const p2pInput = h('input', {
-      type: 'text',
-      placeholder: '粘贴对方发来的 WG3O: 或 WG3A: 信令码',
-      class: 'coop-input',
-    });
-    const codeOut = p2pLocalCode
-      ? h('p', { class: 'coop-p2p-code' }, p2pLocalCode)
-      : null;
-    p2pBox.append(
-      h('p', { class: 'coop-sec-title' }, '无后端 WebRTC 点对点口令直连'),
-      h('div', { class: 'coop-p2p-btns' },
-        sealButton('生成建房码', async () => {
-          const code = await coop.createWebRtcOffer();
-          if (typeof code === 'string' && code) {
-            p2pLocalCode = code;
-            try { await navigator.clipboard?.writeText?.(code); } catch {}
-            toast('已生成 P2P 建房码');
-          }
-          renderP2pSection();
-        }, { kind: 'small' }),
-        sealButton('解析口令码', async () => {
-          const raw = (p2pInput.value || '').trim();
-          if (raw.startsWith('WG3A:')) {
-            const r = await coop.acceptWebRtcAnswer(raw);
-            toast(r.ok ? 'P2P 直连成功' : (r.message || '口令无效'));
-          } else {
-            const ans = await coop.acceptWebRtcOffer(raw);
-            if (typeof ans === 'string' && ans) {
-              p2pLocalCode = ans;
-              try { await navigator.clipboard?.writeText?.(ans); } catch {}
-              toast('已生成应答码，请发回给房主');
-            } else if (ans?.message) {
-              toast(ans.message);
-            }
-          }
-          render();
-        }, { kind: 'ghost', cls: 'btn--small' })),
-      p2pInput,
-      codeOut,
-    );
-  }
-
   const unsub = coop.subscribe((snap) => {
     if (snap.status === 'in_run') {
       closeModal(true);
@@ -345,35 +319,35 @@ export function openCoopLobbyModal(root, opts = {}) {
     opts.onClose?.();
   }
 
-  // 若携带分享房号拉起，自动发起进房
   if (opts.autoJoinCode) {
     coop.joinRoom(opts.autoJoinCode);
-  } else {
-    coop.syncLocalProfile();
-  }
-  if (opts.openFriendsFirst) {
-    const res = friends?.openFriendList?.();
-    if (res?.message) statusNoticeEl.textContent = res.message;
   }
 
   render();
 
-  v = veil(root, scroll({
+  const body = h('div', { class: 'coop-body' },
+    codeBannerBox,
+    statusNoticeEl,
+    controlBox,
+    partyGrid,
+    friendsBox);
+
+  const panel = scroll({
     title: '同守五更',
-    sub: '二至四人结伴巡街 · 朱砂八卦阵倒地互救',
-    cls: 'scroll--dialog scroll--tall coop-modal',
-    body: h('div', { class: 'coop-body' },
-      codeBannerBox,
-      statusNoticeEl,
-      partyGrid,
-      controlBox,
-      friendsBox,
-      p2pBox),
+    sub: '二至四人联机巡街 · 倒地入阵扶起 · 结算共评魁首',
+    cls: 'scroll--dialog scroll--tall coop-scroll',
+    body,
     footer: [footBox],
-  }), { cls: 'veil--top', onBackdrop: () => closeModal(false) });
+  });
+
+  v = veil(root, panel, {
+    cls: 'coop-modal coop-lobby',
+    onBackdrop: () => closeModal(),
+  });
 
   return {
+    el: v.el,
     close: () => closeModal(true),
-    refresh: render,
+    refresh: () => render(),
   };
 }

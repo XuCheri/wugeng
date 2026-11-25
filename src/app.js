@@ -89,7 +89,7 @@ export async function startApp(bootOpts = {}) {
 
   const coop = createCoopManager({
     getSave: () => save,
-    onStartCoopRun: ({ seed, nightLevel, party }) => {
+    onStartCoopRun: ({ seed, nightLevel, party, mySlot, lockstep }) => {
       activeCoopModal?.close?.();
       activeCoopModal = null;
       const p0 = party?.[0] || {};
@@ -98,9 +98,12 @@ export async function startApp(bootOpts = {}) {
         startWeapon: p0.startWeapon || null,
         nightLevel: nightLevel ?? save.selectedNight ?? 0,
         seed,
-        coop: { party },
+        coop: { party, mySlot: mySlot ?? 0, lockstep: Boolean(lockstep) },
       });
     },
+    onWaitPeerChange: (waiting, text) => runUI?.setCoopWaitBanner?.(waiting, text),
+    onCoopLevelSync: () => runUI?.syncCoopLevelUp?.(),
+    onAiTakeover: () => toast('同行道友信号中断，已转交智能道友接管'),
   });
 
   function openLeaderboard(initialCollectionOrOpts = 'public') {
@@ -198,6 +201,7 @@ export async function startApp(bootOpts = {}) {
     onAutoPause: () => runUI?.showPause(),
     onHudSync: (run) => runUI?.syncHud(run),
     transformInput: (sampled, run) => coop.buildStepInputs(sampled, run),
+    onStepCommitted: (run) => coop.onStepCommitted(run),
     onAfterStep: (run) => coop.broadcastRunSnapshot(run),
     shouldSkipAutoPause: (run) => coop.isActive() || (Array.isArray(run?.players) && run.players.length > 1),
     onStart: (run) => {
@@ -310,6 +314,8 @@ export async function startApp(bootOpts = {}) {
     game,
     sim: {
       chooseUpgrade: (r, i) => Run.chooseUpgrade(r, i),
+      chooseCoopUpgrade: (r, slot, i) => Run.chooseCoopUpgrade(r, slot, i),
+      pickRecommendedChoiceIndex: (heroId, choices) => Run.pickRecommendedChoiceIndex(heroId, choices),
       rerollChoices: (r) => Run.rerollChoices(r),
       banishChoice: (r, i) => Run.banishChoice(r, i),
       toggleLockChoice: (r, i) => Run.toggleLockChoice(r, i),
@@ -323,6 +329,7 @@ export async function startApp(bootOpts = {}) {
       getEvolutionRecipe: (r, w) => Run.getEvolutionRecipe(r, w),
       canEvolve: (r, w) => Run.canEvolve(r, w),
     },
+    onCoopChooseUpgrade: (slot, idx) => coop.submitLevelChoice(slot, idx),
     adsOn: () => adsEnabled(),
     runAd,
     getSettings: () => save.settings,

@@ -2080,18 +2080,28 @@ export function createRenderer(canvas, opts = {}) {
 
     const p = run.player;
     const ps = track('p', p.x, p.y, newStep);
-    const pxI = ps.px + (ps.x - ps.px) * al;
-    const pyI = ps.py + (ps.y - ps.py) * al;
+    const pred0X = (run._localSlot ?? 0) === 0 ? (run._predOffset?.x || 0) : 0;
+    const pred0Y = (run._localSlot ?? 0) === 0 ? (run._predOffset?.y || 0) : 0;
+    const pxI = ps.px + (ps.x - ps.px) * al + pred0X;
+    const pyI = ps.py + (ps.y - ps.py) * al + pred0Y;
 
-    // 镜头平滑跟随（暂停/零 dt 或大跳变时即时对齐玩家）
-    if (!cam.init || Math.hypot(cam.x - pxI, cam.y - pyI) > 500 || (dt === 0 && Math.hypot(cam.x - pxI, cam.y - pyI) > 1)) {
-      cam.x = pxI;
-      cam.y = pyI;
+    let camTargetX = pxI;
+    let camTargetY = pyI;
+    if (Array.isArray(run.players) && Number.isInteger(run._localSlot) && run._localSlot > 0 && run.players[run._localSlot]) {
+      const me = run.players[run._localSlot];
+      camTargetX = me.x + (run._predOffset?.x || 0);
+      camTargetY = me.y + (run._predOffset?.y || 0);
+    }
+
+    // 镜头平滑跟随（暂停/零 dt 或大跳变时即时对齐主控玩家）
+    if (!cam.init || Math.hypot(cam.x - camTargetX, cam.y - camTargetY) > 500 || (dt === 0 && Math.hypot(cam.x - camTargetX, cam.y - camTargetY) > 1)) {
+      cam.x = camTargetX;
+      cam.y = camTargetY;
       cam.init = true;
     } else {
       const k = 1 - Math.exp(-dt * 9);
-      cam.x += (pxI - cam.x) * k;
-      cam.y += (pyI - cam.y) * k;
+      cam.x += (camTargetX - cam.x) * k;
+      cam.y += (camTargetY - cam.y) * k;
     }
     const shake = fx.shakeOffset(settings.shake !== false);
     const ox = W / 2 - cam.x + shake.x;

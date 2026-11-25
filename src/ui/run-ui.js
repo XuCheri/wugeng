@@ -205,9 +205,10 @@ export function createRunUI(root, deps) {
   }
 
   /** 紧凑型已携 6 兵刃 + 6 法器缩略栏 + 「查看行囊」入口（F10） */
-  function buildSelectionOwnedBar(r) {
-    const weapons = Array.isArray(r?.weapons) ? r.weapons : [];
-    const relics = Array.isArray(r?.relics) ? r.relics : [];
+  function buildSelectionOwnedBar(r, ownerSource = null) {
+    const src = ownerSource || r;
+    const weapons = Array.isArray(src?.weapons) ? src.weapons : [];
+    const relics = Array.isArray(src?.relics) ? src.relics : [];
     const synCounts = r?.synergies?.counts || {};
 
     const activeSynBadges = SCHOOL_TAG_IDS
@@ -353,7 +354,17 @@ export function createRunUI(root, deps) {
     return v;
   }
 
+  let coopLevelTimer = 0;
+
+  function stopCoopLevelTimer() {
+    if (coopLevelTimer) {
+      clearInterval(coopLevelTimer);
+      coopLevelTimer = 0;
+    }
+  }
+
   function closeCurrent() {
+    stopCoopLevelTimer();
     closeInspector();
     current?.close();
     current = null;
@@ -391,8 +402,9 @@ export function createRunUI(root, deps) {
     }
   }
 
-  // ───────── 三选一（常规升级签 & 守夜命签 + 已携6+6栏 + 查看行囊）─────────
+  // ───────── 三选一（常规升级签 / 守夜命签 / 互联网联机全员 15s 独立三选一）─────────
   function showLevelUp() {
+    stopCoopLevelTimer();
     const initRun = run();
     const initMode = initRun?.choiceMode === 'blessing' ? 'blessing' : 'normal';
     const titleEl = h('h2', { class: 'levelup-title' }, initMode === 'blessing' ? '守夜命签' : '抽一支签');
@@ -406,10 +418,36 @@ export function createRunUI(root, deps) {
     const v = open('levelup', wrapEl, '', { dataset: { choiceMode: initMode } });
 
     let picked = false;
+    let remainSec = 15;
+    let trackedSeq = initRun?._coopLevelSeq || 0;
+
     const pick = (i) => {
-      if (picked || inspectorEl) return;
+      const rr = run();
+      if (!rr || picked || inspectorEl) return;
+      const isCoopIndep = Boolean(rr._coopLockstep && Array.isArray(rr.coopChoicesBySlot));
+      if (isCoopIndep) {
+        const mySlot = Number.isInteger(rr._localSlot) ? rr._localSlot : 0;
+        if (rr.coopPickedBySlot?.[mySlot] !== undefined) return;
+        picked = true;
+        deps.audio?.play('woodblock');
+        if (typeof deps.onCoopChooseUpgrade === 'function') {
+          deps.onCoopChooseUpgrade(mySlot, i);
+        } else {
+          sim.chooseCoopUpgrade?.(rr, mySlot, i);
+        }
+        deps.onCodexSync?.(run());
+        picked = false;
+        const afterRun = run();
+        if (afterRun?.status === 'levelup') {
+          render();
+        } else {
+          proceed();
+        }
+        return;
+      }
+
       picked = true;
-      sim.chooseUpgrade(run(), i);
+      sim.chooseUpgrade(rr, i);
       deps.onCodexSync?.(run());
       deps.audio?.play('woodblock');
       picked = false;
@@ -420,12 +458,33 @@ export function createRunUI(root, deps) {
     function render(isReroll = false) {
       const rr = run();
       if (!rr) return;
+      const isCoopIndep = Boolean(rr._coopLockstep && Array.isArray(rr.coopChoicesBySlot));
+      if (isCoopIndep && (rr._coopLevelSeq || 0) !== trackedSeq) {
+        trackedSeq = rr._coopLevelSeq || 0;
+        remainSec = 15;
+      }
+      const mySlot = isCoopIndep && Number.isInteger(rr._localSlot) ? rr._localSlot : 0;
+      const myPlayer = isCoopIndep && rr.players?.[mySlot] ? rr.players[mySlot] : rr.player;
+      const myPickedIdx = isCoopIndep ? rr.coopPickedBySlot?.[mySlot] : undefined;
+      const activeChoices = isCoopIndep
+        ? (rr.coopChoicesBySlot[mySlot] || [])
+        : (rr.choices || []);
+
       const mode = rr.choiceMode === 'blessing' ? 'blessing' : 'normal';
       v.el.dataset.choiceMode = mode;
       wrapEl.dataset.choiceMode = mode;
       v.el.classList.toggle('is-blessing-mode', mode === 'blessing');
 
-      if (mode === 'blessing') {
+      if (isCoopIndep) {
+        const pickedCnt = rr.coopPickedBySlot ? Object.keys(rr.coopPickedBySlot).length : 0;
+        const totalCnt = rr.players?.length || 2;
+        titleEl.textContent = mode === 'blessing' ? '同守命签' : '各自择签';
+        if (myPickedIdx !== undefined) {
+          sub.textContent = `已择签 · 静候同行道友确认（${pickedCnt}/${totalCnt} · ${remainSec}秒）`;
+        } else {
+          sub.textContent = `升到${cnNum(rr.player?.level ?? 1)}级 · 请在 ${remainSec} 秒内择定本命强化（${pickedCnt}/${totalCnt}）`;
+        }
+      } else if (mode === 'blessing') {
         titleEl.textContent = '守夜命签';
         sub.textContent = `${watchName(rr.watch)}交更 · 择一道命签（不占器物栏）`;
       } else {
@@ -434,14 +493,15 @@ export function createRunUI(root, deps) {
         sub.textContent = `升到${cnNum(rr.player?.level ?? 1)}级 · 留签下回保留 · 弃签本局封除（余${banishCnt}）`;
       }
 
-      clear(ownedHolder).appendChild(buildSelectionOwnedBar(rr));
+      clear(ownedHolder).appendChild(buildSelectionOwnedBar(rr, isCoopIndep ? myPlayer : rr));
 
       clear(cards);
-      (rr.choices || []).forEach((c, i) => {
+      activeChoices.forEach((c, i) => {
         const d = describeChoice(c);
         const isBlessing = mode === 'blessing' || d.kind === 'blessing';
         const isCursed = d.tier === 'cursed';
-        const isLocked = !isBlessing && !!c.locked;
+        const isLocked = !isBlessing && !isCoopIndep && !!c.locked;
+        const isChosenByMe = myPickedIdx === i;
         const glyph = KIND_GLYPH[d.kind] || (d.name || '？')[0];
         const hint = computeCardHint(rr, c, d);
 
@@ -450,6 +510,7 @@ export function createRunUI(root, deps) {
           d.isNew && !isBlessing ? 'is-new' : '',
           d.evolvable ? 'is-evo' : '',
           isLocked ? 'is-locked' : '',
+          isChosenByMe ? 'is-locked' : '',
           isBlessing ? 'qian--blessing' : '',
           isBlessing ? (isCursed ? 'qian--cursed' : 'qian--auspicious') : '',
         ].filter(Boolean).join(' ');
@@ -463,7 +524,7 @@ export function createRunUI(root, deps) {
         if (d.tier) cardDataset.tier = d.tier;
 
         let actsEl = null;
-        if (!isBlessing) {
+        if (!isBlessing && !isCoopIndep) {
           const banishCnt = rr.banishesLeft || 0;
           const canBanish = banishCnt > 0 && (c.kind === 'weapon' || c.kind === 'relic');
           actsEl = h('div', { class: 'qian__acts' },
@@ -513,11 +574,13 @@ export function createRunUI(root, deps) {
               ? h('span', { class: 'qian__lv' }, d.levelText)
               : null;
 
-        const rightStamp = isBlessing
-          ? h('i', { class: `stamp qian__new${isCursed ? ' stamp--ink' : ''}` }, isCursed ? '凶' : '吉')
-          : d.isNew
-            ? h('i', { class: 'stamp qian__new' }, '新')
-            : null;
+        const rightStamp = isChosenByMe
+          ? h('i', { class: 'stamp qian__new' }, '定')
+          : isBlessing
+            ? h('i', { class: `stamp qian__new${isCursed ? ' stamp--ink' : ''}` }, isCursed ? '凶' : '吉')
+            : d.isNew
+              ? h('i', { class: 'stamp qian__new' }, '新')
+              : null;
 
         const leftTag = isLocked
           ? h('i', { class: 'qian__evo is-lock-tag' }, '已留')
@@ -558,6 +621,9 @@ export function createRunUI(root, deps) {
       });
 
       clear(actions);
+      if (isCoopIndep) {
+        return;
+      }
       const left = (rr.rerolls?.free || 0) + (rr.rerolls?.ad || 0);
       actions.appendChild(sealButton(mode === 'blessing' ? '改命换签' : '换签', () => {
         if (!sim.rerollChoices(run())) { toast('签换完了'); return; }
@@ -581,6 +647,50 @@ export function createRunUI(root, deps) {
           }
         }));
       }
+    }
+
+    current.syncLevelUp = () => {
+      const rr = run();
+      if (!rr) return;
+      if (rr.status === 'levelup') render(false);
+      else proceed();
+    };
+
+    if (initRun?._coopLockstep && Array.isArray(initRun.coopChoicesBySlot)) {
+      coopLevelTimer = setInterval(() => {
+        const rr = run();
+        if (!rr || rr.status !== 'levelup' || !Array.isArray(rr.coopChoicesBySlot)) {
+          stopCoopLevelTimer();
+          return;
+        }
+        remainSec = Math.max(0, remainSec - 1);
+        const mySlot = Number.isInteger(rr._localSlot) ? rr._localSlot : 0;
+        if (remainSec <= 0) {
+          if (rr.coopPickedBySlot?.[mySlot] === undefined) {
+            const myChoices = rr.coopChoicesBySlot[mySlot] || [];
+            const recIdx = sim.pickRecommendedChoiceIndex
+              ? sim.pickRecommendedChoiceIndex(rr.players?.[mySlot]?.heroId || rr.heroId, myChoices)
+              : 0;
+            pick(recIdx);
+            return;
+          }
+          // 防死锁兜底：超时后再宽限 1 秒为仍未确认的挂起远端槽位补上确定性推荐签
+          for (let s = 0; s < (rr.players?.length || 0); s++) {
+            if (rr.coopPickedBySlot?.[s] === undefined) {
+              const sChoices = rr.coopChoicesBySlot[s] || [];
+              const sRec = sim.pickRecommendedChoiceIndex
+                ? sim.pickRecommendedChoiceIndex(rr.players[s]?.heroId || 'zhou', sChoices)
+                : 0;
+              sim.chooseCoopUpgrade?.(rr, s, sRec);
+            }
+          }
+          if (run()?.status !== 'levelup') {
+            proceed();
+            return;
+          }
+        }
+        render(false);
+      }, 1000);
     }
 
     render();
@@ -1105,7 +1215,35 @@ export function createRunUI(root, deps) {
     bossCardRmT = setTimeout(() => { bossCardEl?.remove(); bossCardEl = null; }, 1520);
   }
 
+  let coopWaitEl = null;
+
+  function setCoopWaitBanner(waiting, text = '等待道友信号……') {
+    if (!waiting) {
+      coopWaitEl?.remove();
+      coopWaitEl = null;
+      return;
+    }
+    if (!coopWaitEl) {
+      coopWaitEl = h('div', {
+        class: 'coop-wait-banner',
+        role: 'status',
+        'aria-live': 'polite',
+      });
+      root.appendChild(coopWaitEl);
+    }
+    coopWaitEl.textContent = text || '等待道友信号……';
+  }
+
+  function syncCoopLevelUp() {
+    if (current?.type === 'levelup' && typeof current.syncLevelUp === 'function') {
+      current.syncLevelUp();
+    } else if (run()?.status === 'levelup') {
+      handleStatus(run(), true);
+    }
+  }
+
   function teardown() {
+    setCoopWaitBanner(false);
     closeInspector();
     closeCurrent();
     unmountHud();
@@ -1122,6 +1260,8 @@ export function createRunUI(root, deps) {
     showPause,
     showFirstRunHint,
     showBossCard,
+    setCoopWaitBanner,
+    syncCoopLevelUp,
     openInspector,
     closeInspector,
     teardown,

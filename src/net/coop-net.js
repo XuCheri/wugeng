@@ -1,8 +1,7 @@
-// 多人「同守五更」房间管理与四通道自适应传输层（F14）
-// 1. TapTap 宿主联机动态桥接探测（tap.getMultiplayerManager / tap.coopBridge）
-// 2. 浏览器原生 BroadcastChannel（wugeng.coop.lobby.v3 + wugeng.coop.room.v3.<roomCode>，支持同源双开/多开标签页零延迟联机）
-// 3. Serverless WebRTC P2P（RTCPeerConnection + RTCDataChannel 无后端信令口令码互换直连）
-// 4. 智能道友 AI 补位与客机掉线平滑托管
+// 多人「同守五更」联机管理与双模传输层（F14 + v4 M4 真·互联网联机）：
+// 1. 优先通道：TapTap 官方多人联机 SDK（tap.getOnlineBattleManager + 100ms 确定性锁步 + 32 位状态哈希校准 + 独立三选一）
+// 2. 本地/测试回退通道：浏览器原生 BroadcastChannel（支持同源多标签页零延迟联机与自动化回归）
+// 3. 优雅降级：二者皆不可用时明确提示「当前环境暂不支持联机」，绝不抛错且保留智能道友 AI 协战
 // 铁律：使用 sessionStorage['wugeng.peerId'] 隔离同源标签页身份，严禁把 peerId 写入共享 localStorage！
 
 import { sanitizeRoomCode } from '../meta/friends.js';
@@ -15,10 +14,14 @@ import {
 } from '../meta/save.js';
 import { getEquippedAttackVfx, getEquippedHeroSkin } from '../meta/cosmetics.js';
 import { MAX_COOP_PLAYERS } from '../sim/coop.js';
+import { chooseCoopUpgrade } from '../sim/run.js';
+import { createTapBattleTransport, hasTapOnlineBattle } from './tap-battle-transport.js';
+import { createLockstepController } from './lockstep.js';
 
 export const PEER_STORAGE_KEY = 'wugeng.peerId';
 export const LOBBY_CHANNEL_NAME = 'wugeng.coop.lobby.v3';
 export const ROOM_CHANNEL_PREFIX = 'wugeng.coop.room.v3.';
+export const QUICK_MATCH_BOT_FILL_MS = 20_000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 const DAOIST_BOT_PROFILES = [
@@ -99,11 +102,32 @@ export function createCoopManager({
   win = typeof window !== 'undefined' ? window : null,
   getSave = () => null,
   onStartCoopRun = null,
+  onWaitPeerChange = null,
+  onCoopLevelSync = null,
+  onAiTakeover = null,
   onError = null,
 } = {}) {
   let memPeerId = ensureTabPeerId(win);
+  let tapPlayerId = '';
+  let clockOffsetMs = 0;
+
+  const nowMs = () => Date.now() + clockOffsetMs;
+
+  function isTapMode() {
+    return hasTapOnlineBattle(win);
+  }
+
+  function isBroadcastAvailable() {
+    const BC = win?.BroadcastChannel || globalThis.BroadcastChannel;
+    return typeof BC === 'function';
+  }
+
+  function isOnlineSupported() {
+    return isTapMode() || isBroadcastAvailable();
+  }
 
   function getPeerId() {
+    if (tapPlayerId) return tapPlayerId;
     memPeerId = ensureTabPeerId(win) || memPeerId;
     return memPeerId;
   }
@@ -111,24 +135,28 @@ export function createCoopManager({
   const listeners = new Set();
   let lobbyChannel = null;
   let roomChannel = null;
-  let tapRoomBridge = null;
+  let tapTransport = null;
+  let lockstep = null;
+  let lastCompletedTurn = -1;
   let rtcPeer = null;
   let rtcDataChannel = null;
   let joinTimer = 0;
   let joinRetryTimer = 0;
   let quickTimer = 0;
+  let quickBotFillTimer = 0;
   let botSeq = 1;
 
-  // 客机实时键盘监听（确保按键按下当帧零延迟推送到房主）
   const guestHeldKeys = new Set();
 
   const state = {
     role: 'idle',        // 'idle' | 'host' | 'guest'
-    status: 'idle',      // 'idle' | 'joining' | 'lobby' | 'in_run' | 'not_found' | 'rejected'
+    status: 'idle',      // 'idle' | 'joining' | 'lobby' | 'in_run' | 'not_found' | 'rejected' | 'unsupported'
+    transport: 'idle',   // 'idle' | 'tap' | 'local' | 'none'
     roomCode: '',
     pendingRoomCode: '',
     hostPeerId: '',
     quickMatchOpen: false,
+    waitingPeer: false,
     nightLevel: 0,
     mySlot: 0,
     party: [],
@@ -137,7 +165,7 @@ export function createCoopManager({
     webrtcConnected: false,
   };
 
-  // 房主维护的各槽位远端输入缓存
+  // 本地 BroadcastChannel 模式房主维护的各槽位远端输入缓存
   const remoteInputs = {};
   const remoteUltLatch = {};
   const remoteInteractLatch = {};
@@ -163,6 +191,11 @@ export function createCoopManager({
     if (joinTimer) { clearTimeout(joinTimer); joinTimer = 0; }
     if (joinRetryTimer) { clearTimeout(joinRetryTimer); joinRetryTimer = 0; }
     if (quickTimer) { clearTimeout(quickTimer); quickTimer = 0; }
+    if (quickBotFillTimer) { clearTimeout(quickBotFillTimer); quickBotFillTimer = 0; }
+  }
+
+  function getActiveRun() {
+    return win?.__wugeng?.game?.run || null;
   }
 
   function buildLocalProfile() {
@@ -203,6 +236,67 @@ export function createCoopManager({
     };
   }
 
+  function ensureTapTransport() {
+    if (tapTransport) return tapTransport;
+    if (!isTapMode()) return null;
+    tapTransport = createTapBattleTransport({
+      win,
+      nowFn: nowMs,
+      onMessage: (pkt) => handlePacket(pkt, 'tap'),
+      onPlayerEnter: ({ playerId, properties }) => {
+        if (state.role === 'host' && state.status === 'lobby') {
+          handlePacket({
+            type: 'join_req',
+            roomCode: state.roomCode,
+            peerId: playerId,
+            senderId: playerId,
+            profile: properties,
+          }, 'tap');
+        }
+      },
+      onPlayerLeave: ({ playerId }) => {
+        handlePacket({
+          type: 'peer_leave',
+          roomCode: state.roomCode,
+          peerId: playerId,
+          senderId: playerId,
+          explicitLeave: true,
+        }, 'tap');
+      },
+      onPlayerOffline: ({ playerId }) => {
+        // 掉线不主动销毁房间；锁步层等待 8s 未恢复则自动广播转交道友 AI
+        if (state.role === 'host' && state.status === 'lobby') {
+          handlePacket({
+            type: 'peer_leave',
+            roomCode: state.roomCode,
+            peerId: playerId,
+            senderId: playerId,
+            explicitLeave: false,
+          }, 'tap');
+        }
+      },
+      onRoomProperties: ({ properties, ownerId }) => {
+        if (ownerId) state.hostPeerId = ownerId;
+        if (properties && Array.isArray(properties.party) && state.role === 'guest' && state.status === 'lobby') {
+          handlePacket({
+            type: 'room_state',
+            roomCode: properties.roomCode || state.roomCode,
+            hostPeerId: ownerId || state.hostPeerId,
+            nightLevel: properties.nightLevel ?? state.nightLevel,
+            status: 'lobby',
+            party: properties.party,
+          }, 'tap');
+        }
+      },
+      onDisconnected: () => {
+        if (state.status === 'lobby') {
+          notifyError('多人联机服务连接已断开');
+        }
+      },
+    });
+    return tapTransport;
+  }
+
   function ensureLobbyChannel() {
     if (lobbyChannel) return lobbyChannel;
     const BC = win?.BroadcastChannel || globalThis.BroadcastChannel;
@@ -216,8 +310,8 @@ export function createCoopManager({
     return lobbyChannel;
   }
 
-  function openRoomTransports(code) {
-    closeRoomTransports();
+  function openLocalRoomTransports(code) {
+    closeLocalRoomTransports();
     ensureLobbyChannel();
     const BC = win?.BroadcastChannel || globalThis.BroadcastChannel;
     if (typeof BC === 'function') {
@@ -228,27 +322,13 @@ export function createCoopManager({
         roomChannel = null;
       }
     }
-    // TapTap 宿主联机桥接动态探测
-    try {
-      const bridgeFactory = win?.tap?.getMultiplayerManager || win?.tap?.getRoomManager;
-      if (typeof bridgeFactory === 'function') {
-        const mgr = bridgeFactory.call(win.tap);
-        if (mgr && typeof mgr.onMessage === 'function') {
-          tapRoomBridge = mgr;
-          mgr.onMessage((pkt) => handlePacket(pkt, 'tap'));
-        }
-      }
-    } catch {
-      tapRoomBridge = null;
-    }
   }
 
-  function closeRoomTransports() {
+  function closeLocalRoomTransports() {
     if (roomChannel) {
       try { roomChannel.close(); } catch {}
       roomChannel = null;
     }
-    tapRoomBridge = null;
   }
 
   function closeRtc() {
@@ -265,14 +345,15 @@ export function createCoopManager({
 
   function postRoom(packet) {
     const msg = { ...packet, senderId: getPeerId() };
+    if (state.transport === 'tap' && tapTransport) {
+      tapTransport.sendMessage(msg);
+      return;
+    }
     if (roomChannel) {
       try { roomChannel.postMessage(msg); } catch {}
     }
     if (rtcDataChannel && rtcDataChannel.readyState === 'open') {
       try { rtcDataChannel.send(JSON.stringify(msg)); } catch {}
-    }
-    if (tapRoomBridge && typeof tapRoomBridge.send === 'function') {
-      try { tapRoomBridge.send(msg); } catch {}
     }
   }
 
@@ -297,14 +378,23 @@ export function createCoopManager({
   function broadcastRoomState() {
     if (state.role !== 'host' || !state.roomCode) return;
     reindexParty();
-    postRoom({
+    const partySnap = state.party.map((m) => ({ ...m }));
+    const pkt = {
       type: 'room_state',
       roomCode: state.roomCode,
       hostPeerId: getPeerId(),
       nightLevel: state.nightLevel,
       status: state.status,
-      party: state.party.map((m) => ({ ...m })),
-    });
+      party: partySnap,
+    };
+    postRoom(pkt);
+    if (state.transport === 'tap' && tapTransport) {
+      tapTransport.updateRoomProperties({
+        roomCode: state.roomCode,
+        nightLevel: state.nightLevel,
+        party: partySnap,
+      }, state.roomCode);
+    }
     emitChange();
   }
 
@@ -318,12 +408,57 @@ export function createCoopManager({
     }
   }
 
+  function initLockstepForMatch(party, role, mySlot) {
+    lastCompletedTurn = -1;
+    state.waitingPeer = false;
+    onWaitPeerChange?.(false, '');
+    const hasRemoteHuman = party.some((m, idx) => idx !== mySlot && !m.isBot);
+    if (state.transport !== 'tap' || !hasRemoteHuman) {
+      lockstep = null;
+      return null;
+    }
+    lockstep = createLockstepController({
+      role,
+      mySlot,
+      party,
+      nowFn: nowMs,
+      sendPacket: (pkt) => postRoom(pkt),
+      onWaitChange: (waiting) => {
+        state.waitingPeer = waiting;
+        onWaitPeerChange?.(waiting, waiting ? '等待道友信号……' : '');
+        emitChange();
+      },
+      onAiTakeover: ({ slot }) => {
+        if (state.party[slot]) state.party[slot].isBot = true;
+        state.waitingPeer = false;
+        onWaitPeerChange?.(false, '');
+        onAiTakeover?.(slot);
+        emitChange();
+      },
+    });
+    return lockstep;
+  }
+
   function handlePacket(raw, channelKind) {
     if (!raw || typeof raw !== 'object') return;
     const myId = getPeerId();
     if (raw.senderId && raw.senderId === myId) return;
 
+    if (lockstep && typeof raw.type === 'string' && raw.type.startsWith('ls_') && raw.type !== 'ls_pick') {
+      lockstep.handlePacket(raw, getActiveRun());
+      return;
+    }
+
     switch (raw.type) {
+      case 'ls_pick': {
+        const activeRun = getActiveRun();
+        if (activeRun && activeRun.status === 'levelup' && Number.isInteger(raw.s)) {
+          chooseCoopUpgrade(activeRun, raw.s, raw.idx);
+          onCoopLevelSync?.(activeRun);
+        }
+        break;
+      }
+
       case 'quick_seek': {
         if (
           state.role === 'host' &&
@@ -342,7 +477,6 @@ export function createCoopManager({
       }
 
       case 'quick_host_ready': {
-        // 若两个标签页在同一毫秒点击快速匹配各自建了单人空房，按字典序确定性合并到同一房间
         if (
           state.role === 'host' &&
           state.status === 'lobby' &&
@@ -380,7 +514,7 @@ export function createCoopManager({
             existingIdx,
             existingIdx === 0,
           );
-          remoteLastSeen[existingIdx] = Date.now();
+          remoteLastSeen[existingIdx] = nowMs();
           broadcastRoomState();
           return;
         }
@@ -421,7 +555,6 @@ export function createCoopManager({
         );
         state.party.splice(insertIdx, 0, guestMember);
 
-        // 若此前召唤的智能道友与新入房真人角色撞车，自动为道友换上未占用的高辨识度角色皮肤
         const humanHeroes = new Set(state.party.filter((m) => !m.isBot).map((m) => m.heroId));
         const usedAll = new Set(humanHeroes);
         for (let i = 1; i < state.party.length; i++) {
@@ -440,10 +573,14 @@ export function createCoopManager({
           usedAll.add(m.heroId);
         }
 
-        const nowJoin = Date.now();
+        const joinStamp = nowMs();
         for (let i = 1; i < state.party.length; i++) {
-          if (!state.party[i].isBot) remoteLastSeen[i] = nowJoin;
+          if (!state.party[i].isBot) remoteLastSeen[i] = joinStamp;
           else delete remoteLastSeen[i];
+        }
+        if (state.party.filter((m) => !m.isBot).length >= MAX_COOP_PLAYERS && quickBotFillTimer) {
+          clearTimeout(quickBotFillTimer);
+          quickBotFillTimer = 0;
         }
         state.statusText = `${sanitizeDaoName(raw.profile?.name || '同行道友')} 已入房结伴（${state.party.length}/${MAX_COOP_PLAYERS}）`;
         broadcastRoomState();
@@ -459,7 +596,8 @@ export function createCoopManager({
         const msg = typeof raw.message === 'string' && raw.message
           ? raw.message
           : '房间人数已满或无法加入';
-        closeRoomTransports();
+        closeLocalRoomTransports();
+        tapTransport?.leaveRoom?.();
         notifyError(msg);
         settlePendingJoin({ ok: false, reason: raw.reason || 'rejected', message: msg });
         break;
@@ -498,7 +636,7 @@ export function createCoopManager({
             idx,
             false,
           );
-          remoteLastSeen[idx] = Date.now();
+          remoteLastSeen[idx] = nowMs();
           broadcastRoomState();
         }
         break;
@@ -513,18 +651,26 @@ export function createCoopManager({
               state.party.splice(idx, 1);
               broadcastRoomState();
             } else if (state.status === 'in_run') {
-              // 局内客机离开时平滑转为智能道友 AI 托管，绝不卡死房主模拟！
-              state.party[idx].isBot = true;
-              delete remoteInputs[idx];
-              const activeRun = win?.__wugeng?.game?.run;
-              if (activeRun?.players?.[idx]) {
-                activeRun.players[idx].isBot = true;
+              const activeRun = getActiveRun();
+              if (lockstep) {
+                lockstep.notifyPeerDisconnected(idx, activeRun);
+              } else {
+                state.party[idx].isBot = true;
+                delete remoteInputs[idx];
+                if (activeRun?.players?.[idx]) {
+                  activeRun.players[idx].isBot = true;
+                }
+              }
+              if (activeRun?.status === 'levelup') {
+                chooseCoopUpgrade(activeRun, idx, 0);
+                onCoopLevelSync?.(activeRun);
               }
             }
           }
         } else if (state.role === 'guest' && pid === state.hostPeerId && state.status === 'lobby') {
           clearTimers();
-          closeRoomTransports();
+          closeLocalRoomTransports();
+          tapTransport?.leaveRoom?.();
           state.role = 'idle';
           state.status = 'idle';
           state.roomCode = '';
@@ -545,6 +691,7 @@ export function createCoopManager({
         reindexParty();
         state.status = 'in_run';
         state.nightLevel = Number.isFinite(Number(raw.nightLevel)) ? Number(raw.nightLevel) : 0;
+        const ls = raw.lockstep ? initLockstepForMatch(party, 'guest', state.mySlot) : null;
         emitChange();
         if (typeof onStartCoopRun === 'function') {
           onStartCoopRun({
@@ -554,13 +701,14 @@ export function createCoopManager({
             party: party.map((m) => ({ ...m })),
             role: 'guest',
             mySlot: state.mySlot,
+            lockstep: Boolean(ls),
           });
         }
         break;
       }
 
       case 'guest_input': {
-        if (state.role !== 'host' || state.status !== 'in_run') return;
+        if (state.role !== 'host' || state.status !== 'in_run' || lockstep) return;
         const pid = raw.peerId || raw.senderId;
         let slot = Number.isInteger(raw.slot) ? raw.slot : -1;
         const byPeer = state.party.findIndex((m) => m.peerId === pid);
@@ -575,13 +723,13 @@ export function createCoopManager({
         };
         if (remoteInputs[slot].ultimate) remoteUltLatch[slot] = true;
         if (remoteInputs[slot].interact) remoteInteractLatch[slot] = true;
-        remoteLastSeen[slot] = Date.now();
+        remoteLastSeen[slot] = nowMs();
         break;
       }
 
       case 'state_snap': {
-        if (state.role !== 'guest' || state.status !== 'in_run') return;
-        const activeRun = win?.__wugeng?.game?.run;
+        if (state.role !== 'guest' || state.status !== 'in_run' || lockstep) return;
+        const activeRun = getActiveRun();
         if (activeRun) {
           applyHostSnapshot(activeRun, raw);
         }
@@ -591,6 +739,40 @@ export function createCoopManager({
       default:
         break;
     }
+  }
+
+  function partyFromTapRoom(room, localId, localProf) {
+    const out = [];
+    const sorted = [...(room.players || [])].sort((a, b) => {
+      if (a.id === room.ownerId) return -1;
+      if (b.id === room.ownerId) return 1;
+      return 0;
+    });
+    for (let i = 0; i < sorted.length && out.length < MAX_COOP_PLAYERS; i++) {
+      const tp = sorted[i];
+      const baseProps = tp.id === localId ? { ...tp.properties, ...localProf } : tp.properties;
+      out.push(sanitizeMemberProfile(
+        { ...baseProps, peerId: tp.id, isBot: false, ready: true },
+        out.length,
+        tp.id === room.ownerId || out.length === 0,
+      ));
+    }
+    if (out.length === 0) {
+      out.push(sanitizeMemberProfile({ ...localProf, peerId: localId, isBot: false, ready: true }, 0, true));
+    }
+    return out;
+  }
+
+  function scheduleQuickMatchBotFill(fillMs = QUICK_MATCH_BOT_FILL_MS) {
+    if (quickBotFillTimer) clearTimeout(quickBotFillTimer);
+    quickBotFillTimer = setTimeout(() => {
+      quickBotFillTimer = 0;
+      if (state.role === 'host' && state.status === 'lobby' && state.quickMatchOpen && state.party.length < MAX_COOP_PLAYERS) {
+        fillWithDaoistBots(MAX_COOP_PLAYERS);
+        state.statusText = `已自动召齐智能道友补位（${state.party.length}/${MAX_COOP_PLAYERS}），可即刻敲锣起更`;
+        emitChange();
+      }
+    }, Math.max(50, fillMs));
   }
 
   function createRoom(opts = {}) {
@@ -607,14 +789,51 @@ export function createCoopManager({
     state.mySlot = 0;
     state.lastError = '';
     state.party = [sanitizeMemberProfile({ ...prof, isBot: false, ready: true }, 0, true)];
-    state.statusText = `守夜房 ${code} 已开启，可邀好友或召唤道友同守`;
 
-    openRoomTransports(code);
+    if (isTapMode()) {
+      state.transport = 'tap';
+      state.statusText = `正在开启守夜房 ${code}……`;
+      const tr = ensureTapTransport();
+      const readyPromise = tr.createRoom({
+        roomCode: code,
+        maxPlayerCount: MAX_COOP_PLAYERS,
+        roomProps: { roomCode: code, nightLevel: state.nightLevel },
+        playerProps: prof,
+      }).then((res) => {
+        if (!res.ok || state.role !== 'host' || state.status !== 'lobby') {
+          if (!res.ok && state.status === 'lobby') {
+            notifyError('连接多人联机服务失败，请稍后再试');
+          }
+          return { ok: Boolean(res.ok), roomCode: state.roomCode, party: getParty() };
+        }
+        tapPlayerId = res.playerId;
+        state.hostPeerId = res.playerId;
+        state.roomCode = res.room.roomCode || code;
+        if (state.party[0]) state.party[0].peerId = res.playerId;
+        reindexParty();
+        state.statusText = `守夜房 ${state.roomCode} 已连通云端，可邀好友或召唤道友同守`;
+        broadcastRoomState();
+        return { ok: true, roomCode: state.roomCode, party: getParty() };
+      });
+      emitChange();
+      return { ok: true, roomCode: code, party: getParty(), ready: readyPromise };
+    }
+
+    if (!isBroadcastAvailable()) {
+      state.transport = 'none';
+      state.statusText = '当前环境暂不支持联机，可添加道友 AI 并肩守夜';
+      emitChange();
+      return { ok: true, offlineOnly: true, roomCode: code, party: getParty(), ready: Promise.resolve({ ok: true }) };
+    }
+
+    state.transport = 'local';
+    state.statusText = `守夜房 ${code} 已开启，可邀好友或召唤道友同守`;
+    openLocalRoomTransports(code);
     if (state.quickMatchOpen) {
       postLobby({ type: 'quick_host_ready', roomCode: code, hostPeerId: prof.peerId });
     }
     emitChange();
-    return { ok: true, roomCode: code, party: getParty() };
+    return { ok: true, roomCode: code, party: getParty(), ready: Promise.resolve({ ok: true, roomCode: code }) };
   }
 
   function joinRoom(rawCode) {
@@ -629,7 +848,62 @@ export function createCoopManager({
     }
 
     leave({ silent: true });
+    if (isTapMode()) {
+      state.transport = 'tap';
+      state.role = 'guest';
+      state.status = 'joining';
+      state.roomCode = '';
+      state.pendingRoomCode = code;
+      state.party = [];
+      state.mySlot = 1;
+      state.lastError = '';
+      state.statusText = `正在寻访守夜房号 ${code}……`;
+      emitChange();
+
+      const tr = ensureTapTransport();
+      const prof = buildLocalProfile();
+      return tr.joinRoomByCode({ roomCode: code, playerProps: prof }).then((res) => {
+        if (!res.ok) {
+          state.status = res.reason === 'full' ? 'rejected' : 'not_found';
+          const msg = res.reason === 'full'
+            ? `守夜房间人数已满（上限 ${MAX_COOP_PLAYERS} 人），无法加入`
+            : `未找到房号 ${code}（该守夜房间不存在、未开启或已过期）`;
+          notifyError(msg);
+          return { ok: false, reason: res.reason || 'not_found', roomCode: code, message: msg };
+        }
+        tapPlayerId = res.playerId;
+        const finalProf = { ...prof, peerId: res.playerId };
+        state.roomCode = res.room.roomCode || code;
+        state.pendingRoomCode = '';
+        state.hostPeerId = res.room.ownerId || '';
+        state.role = res.room.ownerId === res.playerId ? 'host' : 'guest';
+        state.status = 'lobby';
+        state.party = partyFromTapRoom(res.room, res.playerId, finalProf);
+        reindexParty();
+        state.statusText = `已连入守夜房 ${state.roomCode}（${state.party.length}/${MAX_COOP_PLAYERS} 人就绪）`;
+        if (state.role === 'guest') {
+          postRoom({
+            type: 'join_req',
+            roomCode: state.roomCode,
+            peerId: res.playerId,
+            profile: finalProf,
+          });
+        }
+        emitChange();
+        return { ok: true, roomCode: state.roomCode, party: getParty() };
+      });
+    }
+
+    if (!isBroadcastAvailable()) {
+      state.transport = 'none';
+      state.status = 'unsupported';
+      const msg = '当前环境暂不支持联机';
+      notifyError(msg);
+      return Promise.resolve({ ok: false, reason: 'unsupported', message: msg });
+    }
+
     const prof = buildLocalProfile();
+    state.transport = 'local';
     state.role = 'guest';
     state.status = 'joining';
     state.roomCode = '';
@@ -639,7 +913,7 @@ export function createCoopManager({
     state.lastError = '';
     state.statusText = `正在寻访守夜房号 ${code}……`;
 
-    openRoomTransports(code);
+    openLocalRoomTransports(code);
     emitChange();
 
     const sendReq = () => {
@@ -664,7 +938,7 @@ export function createCoopManager({
           state.status = 'not_found';
           state.party = [];
           const msg = `未找到房号 ${code}（该守夜房间不存在、未开启或已过期）`;
-          closeRoomTransports();
+          closeLocalRoomTransports();
           notifyError(msg);
           settlePendingJoin({ ok: false, reason: 'not_found', roomCode: code, message: msg });
         }
@@ -672,8 +946,68 @@ export function createCoopManager({
     });
   }
 
-  function quickMatch() {
+  function quickMatch(opts = {}) {
     leave({ silent: true });
+    if (isTapMode()) {
+      state.transport = 'tap';
+      state.status = 'joining';
+      state.statusText = '正在匹配同行守夜道友……';
+      emitChange();
+
+      const tr = ensureTapTransport();
+      const prof = buildLocalProfile();
+      return tr.matchRoom({
+        maxPlayerCount: MAX_COOP_PLAYERS,
+        playerProps: prof,
+        roomProps: { nightLevel: prof.nightLevel },
+      }).then((res) => {
+        if (!res.ok) {
+          const msg = '快速匹配暂忙，请稍后重试或创建房间';
+          notifyError(msg);
+          return { ok: false, reason: res.reason || 'match_failed', message: msg };
+        }
+        tapPlayerId = res.playerId;
+        const finalProf = { ...prof, peerId: res.playerId };
+        const isOwner = !res.room.ownerId || res.room.ownerId === res.playerId;
+        state.role = isOwner ? 'host' : 'guest';
+        state.status = 'lobby';
+        state.roomCode = res.room.roomCode;
+        state.pendingRoomCode = '';
+        state.hostPeerId = res.room.ownerId || res.playerId;
+        state.quickMatchOpen = isOwner;
+        state.nightLevel = prof.nightLevel;
+        state.party = partyFromTapRoom(res.room, res.playerId, finalProf);
+        reindexParty();
+
+        if (isOwner) {
+          state.statusText = `已开启匹配房 ${state.roomCode}（${state.party.length}/${MAX_COOP_PLAYERS}），20 秒未满自动补齐道友`;
+          broadcastRoomState();
+          if (state.party.length < MAX_COOP_PLAYERS) {
+            scheduleQuickMatchBotFill(opts.autoFillMs ?? QUICK_MATCH_BOT_FILL_MS);
+          }
+        } else {
+          state.statusText = `已匹配进入守夜房 ${state.roomCode}（${state.party.length}/${MAX_COOP_PLAYERS} 人就绪）`;
+          postRoom({
+            type: 'join_req',
+            roomCode: state.roomCode,
+            peerId: res.playerId,
+            profile: finalProf,
+          });
+        }
+        emitChange();
+        return { ok: true, roomCode: state.roomCode, party: getParty() };
+      });
+    }
+
+    if (!isBroadcastAvailable()) {
+      state.transport = 'none';
+      state.status = 'unsupported';
+      const msg = '当前环境暂不支持联机';
+      notifyError(msg);
+      return Promise.resolve({ ok: false, reason: 'unsupported', message: msg });
+    }
+
+    state.transport = 'local';
     ensureLobbyChannel();
     state.status = 'joining';
     state.statusText = '正在寻访同行守夜道友……';
@@ -690,6 +1024,9 @@ export function createCoopManager({
         if (state.status === 'joining' && !state.roomCode) {
           const created = createRoom({ quickMatchOpen: true });
           state.statusText = `已开启快速匹配守夜房 ${created.roomCode}，静候道友或点添加道友即刻起更`;
+          if (opts.autoFillMs !== undefined) {
+            scheduleQuickMatchBotFill(opts.autoFillMs);
+          }
           emitChange();
           resolve(created);
         } else {
@@ -798,6 +1135,7 @@ export function createCoopManager({
     if (state.status !== 'lobby' || !state.roomCode) {
       createRoom();
     }
+    clearTimers();
     syncLocalProfile();
     if (state.party.length < 2) {
       addBot();
@@ -807,15 +1145,17 @@ export function createCoopManager({
     for (const k of Object.keys(remoteUltLatch)) delete remoteUltLatch[k];
     for (const k of Object.keys(remoteInteractLatch)) delete remoteInteractLatch[k];
 
-    const seed = opts.seed ?? ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+    const seed = opts.seed ?? ((nowMs() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     const nightLevel = opts.nightLevel ?? state.nightLevel ?? 0;
     const partyCopy = state.party.slice(0, MAX_COOP_PLAYERS).map((m, idx) => sanitizeMemberProfile(m, idx, idx === 0));
     state.party = partyCopy;
     state.status = 'in_run';
-    const nowTs = Date.now();
+    const ts = nowMs();
     for (let i = 1; i < partyCopy.length; i++) {
-      if (!partyCopy[i].isBot) remoteLastSeen[i] = nowTs;
+      if (!partyCopy[i].isBot) remoteLastSeen[i] = ts;
     }
+
+    const ls = initLockstepForMatch(partyCopy, 'host', 0);
 
     postRoom({
       type: 'run_start',
@@ -823,6 +1163,7 @@ export function createCoopManager({
       seed,
       nightLevel,
       party: partyCopy,
+      lockstep: Boolean(ls),
     });
     emitChange();
 
@@ -834,12 +1175,29 @@ export function createCoopManager({
         party: partyCopy,
         role: 'host',
         mySlot: 0,
+        lockstep: Boolean(ls),
       });
     }
-    return { ok: true, roomCode: state.roomCode, seed, party: partyCopy };
+    return { ok: true, roomCode: state.roomCode, seed, party: partyCopy, lockstep: Boolean(ls) };
   }
 
-  // ───────── 无后端 WebRTC P2P 口令直连（RTCPeerConnection + RTCDataChannel）─────────
+  function submitLevelChoice(slot, choiceIndex) {
+    const activeRun = getActiveRun();
+    if (!activeRun || activeRun.status !== 'levelup') {
+      return { ok: false, committed: false };
+    }
+    postRoom({
+      type: 'ls_pick',
+      seq: activeRun._coopLevelSeq || 0,
+      s: slot,
+      idx: choiceIndex,
+    });
+    const res = chooseCoopUpgrade(activeRun, slot, choiceIndex);
+    onCoopLevelSync?.(activeRun);
+    return res;
+  }
+
+  // ───────── 兼容编程接口：无后端 WebRTC P2P 信令辅助（保留供 F14 测试契约调用）─────────
   function attachDataChannel(dc) {
     rtcDataChannel = dc;
     dc.onopen = () => {
@@ -910,7 +1268,6 @@ export function createCoopManager({
         p: getPeerId(),
         sdp: localDesc.sdp,
       });
-      state.statusText = '已生成 P2P 建房信令码，发给道友粘贴即可跨网直连';
       emitChange();
       return code;
     } catch {
@@ -921,19 +1278,19 @@ export function createCoopManager({
 
   async function acceptWebRtcOffer(offerCode) {
     if (typeof offerCode !== 'string' || !offerCode.trim().startsWith('WG3O:')) {
-      const msg = 'P2P 邀请口令码格式无效，请确认完整复制后再试';
+      const msg = '邀请口令格式无效，请确认完整复制后再试';
       notifyError(msg);
       return { ok: false, reason: 'invalid_sdp', message: msg };
     }
     const payload = decodeBase64Json(offerCode.trim().slice(5));
     if (!payload || payload.t !== 'offer' || typeof payload.sdp !== 'string' || !payload.sdp.includes('v=0')) {
-      const msg = 'P2P 邀请口令码已损坏或无效';
+      const msg = '邀请口令已损坏或无效';
       notifyError(msg);
       return { ok: false, reason: 'invalid_sdp', message: msg };
     }
     const RTCPC = win?.RTCPeerConnection || globalThis.RTCPeerConnection;
     if (typeof RTCPC !== 'function') {
-      return { ok: false, reason: 'unsupported', message: '当前浏览器不支持 WebRTC 直连' };
+      return { ok: false, reason: 'unsupported', message: '当前环境暂不支持联机' };
     }
 
     const roomCode = sanitizeRoomCode(payload.r) || randomRoomCode();
@@ -950,6 +1307,7 @@ export function createCoopManager({
       await pc.setLocalDescription(answer);
       await waitIceGathering(pc, 150);
 
+      state.transport = 'local';
       state.role = 'guest';
       state.status = 'lobby';
       state.roomCode = roomCode;
@@ -959,7 +1317,7 @@ export function createCoopManager({
         sanitizeMemberProfile({ ...buildLocalProfile(), ready: true }, 1, false),
       ];
       reindexParty();
-      openRoomTransports(roomCode);
+      openLocalRoomTransports(roomCode);
 
       const localDesc = pc.localDescription || answer;
       const ansCode = 'WG3A:' + encodeBase64Json({
@@ -969,12 +1327,11 @@ export function createCoopManager({
         p: getPeerId(),
         sdp: localDesc.sdp,
       });
-      state.statusText = '已生成 P2P 应答口令码，发回给房主即可完成直连握手';
       emitChange();
       return ansCode;
     } catch {
       closeRtc();
-      const msg = '解析 P2P 邀请口令失败，请重新生成信令码';
+      const msg = '解析口令失败，请重新生成';
       notifyError(msg);
       return { ok: false, reason: 'invalid_sdp', message: msg };
     }
@@ -982,25 +1339,24 @@ export function createCoopManager({
 
   async function acceptWebRtcAnswer(answerCode) {
     if (typeof answerCode !== 'string' || !answerCode.trim().startsWith('WG3A:')) {
-      return { ok: false, reason: 'invalid_sdp', message: '应答口令码格式无效' };
+      return { ok: false, reason: 'invalid_sdp', message: '应答口令格式无效' };
     }
     const payload = decodeBase64Json(answerCode.trim().slice(5));
     if (!payload || payload.t !== 'answer' || typeof payload.sdp !== 'string' || !payload.sdp.includes('v=0') || !rtcPeer) {
-      return { ok: false, reason: 'invalid_sdp', message: '应答口令码无效或当前无待配对房间' };
+      return { ok: false, reason: 'invalid_sdp', message: '应答口令无效或当前无待配对房间' };
     }
     try {
       await rtcPeer.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
-      state.statusText = 'P2P 直连握手完成，道友可并肩起更！';
       emitChange();
       return { ok: true, roomCode: state.roomCode };
     } catch {
-      return { ok: false, reason: 'invalid_sdp', message: '应答口令码握手失败' };
+      return { ok: false, reason: 'invalid_sdp', message: '应答口令握手失败' };
     }
   }
 
-  // ───────── 局内帧级同步钩子（供 game.js 调用）─────────
+  // ───────── 局内同步钩子（锁步模式 vs 本地 BroadcastChannel 模式）─────────
   function sendLocalInput(inp) {
-    if (state.role !== 'guest' || state.status !== 'in_run') return;
+    if (state.role !== 'guest' || state.status !== 'in_run' || lockstep) return;
     postRoom({
       type: 'guest_input',
       roomCode: state.roomCode,
@@ -1019,6 +1375,18 @@ export function createCoopManager({
     if (state.status !== 'in_run' || !run || !Array.isArray(run.players) || run.players.length <= 1) {
       return localInput;
     }
+
+    // 1. TapTap 确定性锁步模式
+    if (lockstep) {
+      const res = lockstep.pollStep(localInput, run);
+      if (!res.ready) {
+        return { holdStep: true };
+      }
+      lastCompletedTurn = res.completedTurn;
+      return res.stepInput;
+    }
+
+    // 2. 本地 BroadcastChannel 低延迟直通模式
     if (state.role === 'guest') {
       sendLocalInput(localInput);
       const slots = {};
@@ -1032,13 +1400,12 @@ export function createCoopManager({
       return { slots };
     }
 
-    // Host 合并本地输入与各客机最新输入（若客机超过 6s 完全失联则平滑转交道友 AI 托管）
-    const nowTs = Date.now();
+    const ts = nowMs();
     const slots = { 0: localInput };
     for (let i = 1; i < run.players.length; i++) {
       const pl = run.players[i];
       if (!pl || pl.isBot) continue;
-      if (remoteLastSeen[i] && nowTs - remoteLastSeen[i] > 6000) {
+      if (remoteLastSeen[i] && ts - remoteLastSeen[i] > 6000) {
         pl.isBot = true;
         continue;
       }
@@ -1059,7 +1426,16 @@ export function createCoopManager({
     return { slots };
   }
 
+  function onStepCommitted(run) {
+    if (lockstep && lastCompletedTurn >= 0) {
+      const doneTurn = lastCompletedTurn;
+      lastCompletedTurn = -1;
+      lockstep.afterStep(run, doneTurn);
+    }
+  }
+
   function broadcastRunSnapshot(run) {
+    if (lockstep) return; // 锁步模式下不广播逐帧全量快照，仅发 10Hz 输入包与 0.5Hz 状态哈希
     if (state.role !== 'host' || state.status !== 'in_run' || !run || !Array.isArray(run.players)) return;
     postRoom({
       type: 'state_snap',
@@ -1146,9 +1522,8 @@ export function createCoopManager({
     }
   }
 
-  // 客机即时按键转发（消除双页步进首帧输入延迟）
   function onGuestKeyEvent(ev) {
-    if (state.role !== 'guest' || state.status !== 'in_run') return;
+    if (state.role !== 'guest' || state.status !== 'in_run' || lockstep) return;
     const k = (ev.key || '').toLowerCase();
     if (ev.type === 'keydown') guestHeldKeys.add(k);
     else guestHeldKeys.delete(k);
@@ -1183,17 +1558,27 @@ export function createCoopManager({
     clearTimers();
     guestHeldKeys.clear();
     settlePendingJoin({ ok: false, reason: 'left' });
-    if (state.roomCode && (state.status === 'lobby' || state.status === 'in_run')) {
+    if (state.roomCode && (state.status === 'lobby' || state.status === 'in_run') && state.transport === 'local') {
       postRoom({ type: 'peer_leave', roomCode: state.roomCode, peerId: getPeerId() });
     }
-    closeRoomTransports();
+    closeLocalRoomTransports();
     closeRtc();
+    if (tapTransport) {
+      tapTransport.leaveRoom();
+    }
     if (lobbyChannel) {
       try { lobbyChannel.close(); } catch {}
       lobbyChannel = null;
     }
+    lockstep = null;
+    lastCompletedTurn = -1;
+    if (state.waitingPeer) {
+      state.waitingPeer = false;
+      onWaitPeerChange?.(false, '');
+    }
     state.role = 'idle';
     state.status = 'idle';
+    state.transport = 'idle';
     state.roomCode = '';
     state.pendingRoomCode = '';
     state.hostPeerId = '';
@@ -1223,6 +1608,9 @@ export function createCoopManager({
     const pid = getPeerId();
     return {
       peerId: pid,
+      onlineSupported: isOnlineSupported(),
+      tapMode: isTapMode(),
+      transport: state.transport,
       active: state.status === 'lobby' || state.status === 'joining' || state.status === 'in_run',
       role: state.role,
       status: state.status,
@@ -1230,6 +1618,14 @@ export function createCoopManager({
       confirmedRoomCode: state.roomCode || '',
       pendingRoomCode: state.pendingRoomCode || '',
       mySlot: state.mySlot,
+      waitingPeer: state.waitingPeer,
+      lockstepActive: Boolean(lockstep),
+      lockstepStats: lockstep ? {
+        turn: lockstep.currentTurn,
+        frameIndex: lockstep.frameIndex,
+        desyncCount: lockstep.desyncCount,
+        recoveredCount: lockstep.recoveredCount,
+      } : null,
       nightLevel: state.nightLevel,
       party: getParty(),
       statusText: state.statusText,
@@ -1246,6 +1642,10 @@ export function createCoopManager({
 
   function destroy() {
     leave({ silent: true });
+    if (tapTransport) {
+      tapTransport.destroy();
+      tapTransport = null;
+    }
     if (lobbyChannel) {
       try { lobbyChannel.close(); } catch {}
       lobbyChannel = null;
@@ -1264,10 +1664,14 @@ export function createCoopManager({
     get roomCode() { return state.roomCode || state.pendingRoomCode || ''; },
     get party() { return getParty(); },
     get state() { return getState(); },
+    get lockstep() { return lockstep; },
     getState,
     getParty,
+    isOnlineSupported,
+    isTapMode,
     isActive: () => state.status === 'lobby' || state.status === 'joining' || state.status === 'in_run',
     isInRun: () => state.status === 'in_run',
+    advanceClock: (ms) => { clockOffsetMs += Math.max(0, Number(ms) || 0); },
     subscribe,
     createRoom,
     joinRoom,
@@ -1277,11 +1681,13 @@ export function createCoopManager({
     toggleReady,
     syncLocalProfile,
     startMatch,
+    submitLevelChoice,
     createWebRtcOffer,
     acceptWebRtcOffer,
     acceptWebRtcAnswer,
     sendLocalInput,
     buildStepInputs,
+    onStepCommitted,
     broadcastRunSnapshot,
     applyHostSnapshot,
     onRunFinished,

@@ -11,7 +11,8 @@ import { Rng, mixSeed } from '../core/rng.js';
 import { createPlayer, recomputeMods, updatePlayer, hurtPlayer } from './player.js';
 import { addOrUpgradeWeapon } from './weapons.js';
 import { addOrUpgradeRelic } from './relics.js';
-import { candidateChoices, applyChoice } from './levelup.js';
+import { candidateChoices, generateChoices, applyChoice } from './levelup.js';
+import { generateBlessingChoices } from './blessings.js';
 import { resolveChest } from './evolutions.js';
 import { knockback } from './combat.js';
 
@@ -673,6 +674,144 @@ export function computeDaoistBotInput(run, bot) {
     ultimate: wantUlt,
     interact: false,
   };
+}
+
+export function pickRecommendedChoiceIndex(heroId, choices) {
+  if (!Array.isArray(choices) || choices.length === 0) return 0;
+  let bestIdx = 0;
+  let bestScore = -Infinity;
+  for (let i = 0; i < choices.length; i++) {
+    const c = choices[i];
+    if (!c) continue;
+    let sc = 0;
+    if (c.evolvable) sc += 100;
+    if (c.kind === 'weapon' && isHeroSignatureWeapon(heroId, c.id)) sc += 40;
+    if (c.kind === 'weapon') sc += (c.isNew ? 12 : 20 + (c.level || 0) * 2);
+    else if (c.kind === 'relic') sc += (c.isNew ? 10 : 16 + (c.level || 0) * 2);
+    else if (c.kind === 'blessing') sc += (c.tier === 'cursed' ? 5 : 25);
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+/**
+ * 互联网联机锁步模式下，当队伍进入升级/命签选签时，为每位守夜人用各自确定性 buildRng 独立抽出 3 张签；
+ * 道友 AI（isBot）立即自动锁定推荐签，真人槽位等待各自确认（或 15s 倒计时自动确认）。
+ */
+export function prepareCoopIndependentChoices(run, mode = 'normal') {
+  if (!run || coopPartySize(run) <= 1) return null;
+  const pls = run.players;
+  const bySlot = new Array(pls.length);
+  const picked = {};
+  const savedRng = run.rng;
+  const savedLocked = run.lockedChoice;
+  const savedChoices = run.choices;
+  const savedMode = run.choiceMode;
+
+  try {
+    for (let i = 0; i < pls.length; i++) {
+      const p = pls[i];
+      const rt = ensurePlayerRt(run, p);
+      withPlayerContext(run, p, () => {
+        run.rng = rt.buildRng;
+        run.lockedChoice = i === 0 ? savedLocked : null;
+        if (mode === 'blessing') {
+          generateBlessingChoices(run);
+        } else {
+          generateChoices(run);
+        }
+        bySlot[i] = Array.isArray(run.choices) ? run.choices.map((c) => ({ ...c })) : [];
+      });
+      if (p.isBot) {
+        picked[i] = pickRecommendedChoiceIndex(p.heroId, bySlot[i]);
+      }
+    }
+  } finally {
+    run.rng = savedRng;
+    run.lockedChoice = savedLocked;
+    run.choiceMode = mode === 'blessing' ? 'blessing' : savedMode;
+    run.choices = bySlot[0] || savedChoices;
+  }
+
+  run._coopLevelSeq = (run._coopLevelSeq || 0) + 1;
+  run.coopChoicesBySlot = bySlot;
+  run.coopPickedBySlot = picked;
+  return {
+    seq: run._coopLevelSeq,
+    bySlot,
+    picked,
+  };
+}
+
+/**
+ * 记录某个槽位的选签索引；若全员（含 AI）均已选完，按 0..N-1 槽位顺序确定性结算所有人的构筑升级。
+ */
+export function submitCoopPlayerChoice(run, slot, choiceIndex) {
+  if (!run || run.status !== 'levelup' || !Array.isArray(run.coopChoicesBySlot)) {
+    return { ok: false, committed: false };
+  }
+  const pls = run.players;
+  if (!Array.isArray(pls) || slot < 0 || slot >= pls.length) {
+    return { ok: false, committed: false };
+  }
+  const slotChoices = run.coopChoicesBySlot[slot] || [];
+  const clamped = Math.max(0, Math.min(Math.max(0, slotChoices.length - 1), Number(choiceIndex) | 0));
+  if (!run.coopPickedBySlot) run.coopPickedBySlot = {};
+  run.coopPickedBySlot[slot] = clamped;
+
+  // 若中途有真人掉线转 AI，自动为其补齐推荐签
+  for (let i = 0; i < pls.length; i++) {
+    if (pls[i].isBot && run.coopPickedBySlot[i] === undefined) {
+      run.coopPickedBySlot[i] = pickRecommendedChoiceIndex(pls[i].heroId, run.coopChoicesBySlot[i] || []);
+    }
+  }
+
+  const allPicked = pls.every((_, i) => run.coopPickedBySlot[i] !== undefined);
+  if (!allPicked) {
+    return { ok: true, committed: false, pickedCount: Object.keys(run.coopPickedBySlot).length, total: pls.length };
+  }
+
+  const isBlessing = run.choiceMode === 'blessing';
+  const p0 = pls[0];
+  for (let i = 0; i < pls.length; i++) {
+    const p = pls[i];
+    if (i > 0) {
+      p.level = p0.level;
+      p.xp = p0.xp;
+      p.xpNext = p0.xpNext;
+    }
+    const list = run.coopChoicesBySlot[i] || [];
+    const chosen = list[run.coopPickedBySlot[i]] || list[0];
+    if (!chosen) continue;
+    if (i === 0 && isBlessing) {
+      // 命签为全队气运签，由队长槽位结算一次避免重复叠层
+      applyChoice(run, chosen);
+    } else if (!isBlessing) {
+      withPlayerContext(run, p, () => {
+        applyChoice(run, chosen);
+      });
+      if (i === 0 && run.lockedChoice && run.lockedChoice.kind === chosen.kind && run.lockedChoice.id === chosen.id) {
+        run.lockedChoice = null;
+      }
+    } else {
+      withPlayerContext(run, p, () => {
+        recomputeMods(run, { emit: false });
+      });
+    }
+  }
+
+  if (isBlessing) {
+    run._pendingBlessings = Math.max(0, (run._pendingBlessings || 0) - 1);
+  } else {
+    run._pendingLevels = Math.max(0, (run._pendingLevels || 0) - 1);
+  }
+  run.coopChoicesBySlot = null;
+  run.coopPickedBySlot = null;
+  run.choices = null;
+  return { ok: true, committed: true };
 }
 
 /**
