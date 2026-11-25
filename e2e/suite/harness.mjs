@@ -532,6 +532,15 @@ export const APPLY_SAVE_PATCH_IN_PAGE = (target, patch) => {
   if (patch.stats && typeof patch.stats === 'object') {
     target.stats = Object.assign({}, target.stats || {}, patch.stats);
   }
+  if (patch.daily && typeof patch.daily === 'object') {
+    target.daily = Object.assign({}, target.daily || {}, structuredClone(patch.daily));
+  }
+  if (patch.dailyChallenge && typeof patch.dailyChallenge === 'object') {
+    target.dailyChallenge = Object.assign({}, target.dailyChallenge || {}, structuredClone(patch.dailyChallenge));
+  }
+  if (patch.season && typeof patch.season === 'object') {
+    target.season = Object.assign({}, target.season || {}, structuredClone(patch.season));
+  }
 };
 
 /**

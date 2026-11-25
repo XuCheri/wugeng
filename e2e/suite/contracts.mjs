@@ -5,7 +5,7 @@ export const FEATURE_IDS = [
   'F1', 'F2', 'F3', 'F4', 'F5',
   'F6', 'F7', 'F8', 'F9', 'F10',
   'F11', 'F12', 'F13', 'F14', 'F15',
-  'F16', 'F17',
+  'F16', 'F17', 'F18',
 ];
 
 export const FEATURE_TITLES = {
@@ -26,6 +26,7 @@ export const FEATURE_TITLES = {
   F15: '分模块中文 Git 合入 main、实机预览图、零缺字打包与 TapTap 测试包二维码',
   F16: 'v4 M1 体验基础（7 分钟节奏、震动、情境旁白与更房渐进开放、Boss 演出配乐、结算页亮点与一键再守）',
   F17: 'v4 M2 局内玩法（4 种新邪祟、每更随机异事、20 对兵刃法器开光、留签弃签强化）',
+  F18: 'v4 M3 留存系统（每日差事与周赏供盒、每日异事挑战、血月守夜令 30 档与副榜回退）',
 };
 
 export const MAX_WEAPONS = 6;

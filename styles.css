@@ -815,13 +815,14 @@ p { margin: 0; }
 /* 右侧竖排功能浮栏：圆形墨玉灯牌，竖向居中悬于舞台右缘，避开 TapTap 右上角胶囊菜单 */
 .hub-ribbon {
   position: absolute;
-  top: max(10px, calc(50% - 118px));
+  top: 50%;
+  transform: translateY(-50%);
   right: 10px;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 .hub-ribbon::before {
   content: "";
@@ -859,7 +860,7 @@ p { margin: 0; }
 .hub-ribbon__btn:nth-child(4) { animation-delay: 150ms; }
 .hub-ribbon__btn:nth-child(5) { animation-delay: 200ms; }
 @keyframes rail-float-in {
-  from { opacity: .86; transform: translateX(18px) scale(.86); }
+  from { opacity: .86; transform: translateX(6px) scale(.88); }
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 .hub-ribbon__btn:active {
@@ -3568,12 +3569,12 @@ p { margin: 0; }
 @media (max-width: 370px) {
   .coop-party-grid { grid-template-columns: 1fr; }
   .dc-loadout { grid-template-columns: 1fr; }
-  .hub-ribbon__btn { width: 40px; height: 40px; }
-  .hub-ribbon { gap: 5px; top: max(8px, calc(50% - 110px)); }
+  .hub-ribbon__btn { width: 36px; height: 36px; }
+  .hub-ribbon { gap: 3px; top: 50%; transform: translateY(-50%); }
 }
-@media (max-height: 700px) {
-  .hub-ribbon__btn { width: 40px; height: 40px; }
-  .hub-ribbon { gap: 5px; top: max(6px, calc(50% - 110px)); }
+@media (max-height: 800px) {
+  .hub-ribbon__btn { width: 36px; height: 36px; }
+  .hub-ribbon { gap: 3px; top: 50%; transform: translateY(-50%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
