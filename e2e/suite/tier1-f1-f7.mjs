@@ -202,13 +202,13 @@ export const TIER1_F1_F7 = [
     id: 'T1-F1-01',
     tier: 1,
     feature: 'F1',
-    name: 'Cold boot (/index.html without ?skipIntro=1) runs loading -> studio logo -> .screen--title in < 2.5s without pointer block',
+    name: 'Cold boot (/index.html without ?skipIntro=1) runs loading -> studio logo (lingers >= 3s) -> .screen--title in 3.0s..6.5s without pointer block',
     async run({ browser, baseUrl }) {
       const s = await bootColdIntro(browser, baseUrl);
       try {
         assert.ok(
-          s.elapsedMs < 2500,
-          `Expected cold-boot intro to reach .screen--title in < 2500ms (PROJECT.md §F1), took ${Math.round(s.elapsedMs)}ms`,
+          s.elapsedMs >= 3000 && s.elapsedMs < 6500,
+          `Expected cold-boot studio intro to linger >= 3000ms and reach .screen--title in < 6500ms (PROJECT.md §F1), took ${Math.round(s.elapsedMs)}ms`,
         );
         const postIntro = await s.page.evaluate(() => {
           const trace = window.__e2eIntroTrace || { phases: [], mountedCount: 0 };

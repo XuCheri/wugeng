@@ -18,6 +18,10 @@ import { DEFAULT_DAO_NAME, HERO_IDS, sanitizeDaoName, saveSave } from './save.js
 
 const PERMISSION_ERROR_CODES = new Set([1025, 103, 104, '1025', '103', '104']);
 const NOT_FOUND_ERROR_CODES = new Set([500001, '500001']);
+// 确定性配置类错误（榜单 ID 不存在 / 与游戏不匹配 / ID 为空 / maxSize 非法）：重试无意义
+const CONFIG_ERROR_CODES = new Set([500001, 500002, 500198, 500201, '500001', '500002', '500198', '500201']);
+const SDK_TIMEOUT_MS = 8000;
+const RETRY_DELAY_MS = 900;
 const MOCK_PUBLIC_SEEDS = [
   { name: '镇岳老更夫', heroId: 'zhou', score: 46800 },
   { name: '太乙观星客', heroId: 'yinyang', score: 39200 },
@@ -291,6 +295,10 @@ export function createLeaderboard({
 
   let cachedMockKey = null;
   let cachedMockMgr = null;
+  let cachedNativeMgr = null;
+  let cachedTapRef = null;
+  let knownPeriodToken = '';
+  let lastDiagnostics = null;
 
   function resolveManager() {
     const q = readQueryParams(win);
@@ -305,7 +313,10 @@ export function createLeaderboard({
     }
     try {
       if (win?.tap && typeof win.tap.getLeaderboardManager === 'function') {
-        const nativeMgr = win.tap.getLeaderboardManager();
+        // 宿主 LeaderboardManager 为单例：缓存后复用，避免反复创建桥接对象
+        if (cachedTapRef !== win.tap) { cachedTapRef = win.tap; cachedNativeMgr = null; }
+        const nativeMgr = cachedNativeMgr || win.tap.getLeaderboardManager();
+        if (nativeMgr && typeof nativeMgr === 'object') cachedNativeMgr = nativeMgr;
         if (nativeMgr && typeof nativeMgr === 'object') {
           return { mgr: nativeMgr, mode: 'tap' };
         }
@@ -448,6 +459,56 @@ export function createLeaderboard({
     return { ok: false, flushed: false, score: pending, reason: res.reason };
   }
 
+  // 单次 SDK 回调调用：带超时守护，防止宿主桥接永不回调导致界面一直「展卷中」
+  function callSdk(mgr, method, req, timeoutMs = SDK_TIMEOUT_MS) {
+    return new Promise((resolve) => {
+      let done = false;
+      let timer = null;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        resolve(v);
+      };
+      try {
+        timer = setTimeout(() => finish({ ok: false, err: { code: 'timeout', rawMessage: '' } }), timeoutMs);
+        mgr[method]({
+          ...req,
+          callback: {
+            onSuccess: (data) => finish({ ok: true, data }),
+            onFailure: (a1, a2) => finish({ ok: false, err: parseFailureArgs(a1, a2) }),
+          },
+        });
+      } catch {
+        finish({ ok: false, err: { code: 'exception', rawMessage: '' } });
+      }
+    });
+  }
+
+  function rememberPeriod(rawRes) {
+    const tok = rawRes?.leaderboard?.period?.periodToken;
+    if (typeof tok === 'string' && tok.trim()) knownPeriodToken = tok.trim();
+  }
+
+  function buildFailureNotice(code, col) {
+    if (isPermissionCode(code)) {
+      return '暂未开通或未获得 TapTap 好友关系权限授权，好友榜暂不可用，已为你回退展示本机荣誉榜记录。';
+    }
+    if (code === 500000 || code === '500000') {
+      return '本期天榜已结算，新一期开榜后自动同步，先为你展示本机荣誉榜。';
+    }
+    if (CONFIG_ERROR_CODES.has(code)) {
+      return `天榜尚未向当前账号开放（码 ${code}），先为你展示本机荣誉榜，榜单发布后自动同步。`;
+    }
+    if (code === 'timeout') {
+      return '天榜回信稍慢，先为你展示本机荣誉榜，可点「重新展卷」再试。';
+    }
+    const codeTxt = code !== undefined && code !== null && code !== -1 && code !== 'exception' ? `（码 ${code}）` : '';
+    return col === LEADERBOARD_COLLECTIONS.FRIENDS
+      ? `好友榜暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`
+      : `天榜暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`;
+  }
+
   async function fetchBoard({
     collection = LEADERBOARD_COLLECTIONS.PUBLIC,
     maxSize = LEADERBOARD_DEFAULT_PAGE_SIZE,
@@ -463,8 +524,6 @@ export function createLeaderboard({
     const localCurrent = bestLocal > 0
       ? { rank: 1, score: bestLocal, name: daoName, isLocal: true }
       : { rank: null, score: 0, name: daoName, isLocal: true };
-
-    await flushPendingScore(save);
 
     const { mgr } = resolveManager();
     if (!mgr || typeof mgr.loadLeaderboardScores !== 'function') {
@@ -482,79 +541,62 @@ export function createLeaderboard({
       };
     }
 
-    const scoresPromise = new Promise((resolve) => {
-      let done = false;
-      const finish = (v) => { if (!done) { done = true; resolve(v); } };
-      try {
-        const req = {
-          leaderboardId: PRIMARY_LEADERBOARD_ID,
-          collection: col,
-          maxSize: safeMaxSize,
-          callback: {
-            onSuccess: (data) => finish({ ok: true, data }),
-            onFailure: (a1, a2) => finish({ ok: false, err: parseFailureArgs(a1, a2) }),
-          },
-        };
-        if (typeof continuationToken === 'string' && continuationToken) {
-          req.continuationToken = continuationToken;
-        }
-        mgr.loadLeaderboardScores(req);
-      } catch {
-        finish({ ok: false, err: { code: -1, rawMessage: '' } });
-      }
-    });
+    // 待重传成绩不阻塞读榜：失败也只是继续排队
+    if (sanitizeLeaderboardScore(save?.leaderboard?.pendingScore) > 0) {
+      await flushPendingScore(save).catch(() => null);
+    }
 
-    const currentPromise = typeof mgr.loadCurrentPlayerLeaderboardScore === 'function'
-      ? new Promise((resolve) => {
-        let done = false;
-        const finish = (v) => { if (!done) { done = true; resolve(v); } };
-        try {
-          mgr.loadCurrentPlayerLeaderboardScore({
-            leaderboardId: PRIMARY_LEADERBOARD_ID,
-            collection: col,
-            callback: {
-              onSuccess: (data) => finish({ ok: true, data }),
-              onFailure: () => finish({ ok: false }),
-            },
-          });
-        } catch {
-          finish({ ok: false });
-        }
-      })
-      : Promise.resolve({ ok: false });
+    const buildScoresReq = (withPeriod) => {
+      const req = { leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col, maxSize: safeMaxSize };
+      if (typeof continuationToken === 'string' && continuationToken) req.continuationToken = continuationToken;
+      if (withPeriod && knownPeriodToken) req.periodToken = knownPeriodToken;
+      return req;
+    };
 
-    const [scoresRes, curRes] = await Promise.all([scoresPromise, currentPromise]);
+    // 顺序调用（部分宿主桥接不支持同时挂起多个排行榜回调）
+    const periodBefore = knownPeriodToken;
+    let scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
+    let curRes = { ok: false };
+    if (typeof mgr.loadCurrentPlayerLeaderboardScore === 'function') {
+      const curReq = { leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col };
+      if (knownPeriodToken) curReq.periodToken = knownPeriodToken;
+      curRes = await callSdk(mgr, 'loadCurrentPlayerLeaderboardScore', curReq);
+      if (curRes.ok) rememberPeriod(curRes.data);
+    }
+
+    // 有重置周期的榜单：借「我的排名」返回的当期 periodToken 重拉一次
+    if (!scoresRes.ok && !isPermissionCode(scoresRes.err?.code) && knownPeriodToken && knownPeriodToken !== periodBefore) {
+      scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
+    }
+    // 偶发网络错误 / 超时：静默退避重试一次（确定性的配置错误与权限错误不重试）
+    if (!scoresRes.ok && !isPermissionCode(scoresRes.err?.code) && !CONFIG_ERROR_CODES.has(scoresRes.err?.code)) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
+    }
+    if (scoresRes.ok) rememberPeriod(scoresRes.data);
+
+    const remoteCurrent = curRes.ok ? normalizeCurrentPlayer(curRes.data, daoName) : null;
 
     if (!scoresRes.ok) {
       const code = scoresRes.err?.code;
-      if (isPermissionCode(code)) {
-        return {
-          ok: false,
-          source: 'permission_fallback',
-          code,
-          collection: col,
-          leaderboardId: PRIMARY_LEADERBOARD_ID,
-          notice: '暂未开通或未获得 TapTap 好友关系权限授权，好友榜暂不可用，已为你回退展示本机荣誉榜记录。',
-          entries: localEntries,
-          currentPlayer: localCurrent,
-          nextContinuationToken: null,
-        };
-      }
+      lastDiagnostics = { at: Date.now(), collection: col, code, message: scoresRes.err?.rawMessage || '' };
+      try { console.info?.('[wugeng] leaderboard fallback', col, code); } catch { /* noop */ }
       return {
         ok: false,
-        source: 'error_fallback',
+        source: isPermissionCode(code) ? 'permission_fallback' : 'error_fallback',
         code,
+        retryable: !isPermissionCode(code) && !CONFIG_ERROR_CODES.has(code),
         collection: col,
         leaderboardId: PRIMARY_LEADERBOARD_ID,
-        notice: '云端榜单暂忙，当前回退展示本机五更守夜荣誉榜。',
+        notice: buildFailureNotice(code, col),
         entries: localEntries,
-        currentPlayer: localCurrent,
+        currentPlayer: remoteCurrent || localCurrent,
         nextContinuationToken: null,
       };
     }
 
+    lastDiagnostics = { at: Date.now(), collection: col, code: 0, message: 'ok' };
     const norm = normalizeRemoteScores(scoresRes.data);
-    const remoteCurrent = curRes.ok ? normalizeCurrentPlayer(curRes.data, daoName) : null;
     const effectiveCurrent = remoteCurrent || (bestLocal > 0 ? { rank: null, score: bestLocal, name: daoName } : null);
     const entries = norm.entries.length > 0 ? norm.entries : localEntries;
 
@@ -563,8 +605,8 @@ export function createLeaderboard({
       source: norm.entries.length > 0 ? 'tap' : 'tap_empty_local',
       collection: col,
       leaderboardId: PRIMARY_LEADERBOARD_ID,
-      notice: norm.entries.length === 0 && localEntries.length > 0
-        ? '云端暂无上榜记录，以下展示本机历史荣誉战绩。'
+      notice: norm.entries.length === 0
+        ? (localEntries.length > 0 ? '天榜已连通，本期尚无人登榜，以下先展示本机历史战绩。' : '天榜已连通，本期虚位以待，守完一局即可登榜。')
         : '',
       entries,
       currentPlayer: effectiveCurrent,
@@ -620,5 +662,6 @@ export function createLeaderboard({
     loadScores: fetchBoard,
     openNativeLeaderboard,
     openLeaderboard: openNativeLeaderboard,
+    getLastDiagnostics: () => (lastDiagnostics ? { ...lastDiagnostics } : null),
   };
 }

@@ -8,6 +8,7 @@ import {
   PRIMARY_LEADERBOARD_NAME,
   PRIMARY_LEADERBOARD_UNIT,
 } from '../meta/leaderboard-config.js';
+import { buildLocalHonorEntries } from '../meta/leaderboard.js';
 
 const RANK_SEALS = ['魁', '贰', '叁'];
 
@@ -25,7 +26,16 @@ export function openLeaderboardModal(root, opts = {}) {
 
   const tabBar = h('div', { class: 'seg pause-tabs lb-tabs', role: 'tablist', 'aria-label': '榜单范围切换' });
   const meBox = h('div', { class: 'lb-me-card' });
-  const noticeBox = h('p', { class: 'lb-notice', hidden: true });
+  const noticeText = h('span', { class: 'lb-notice__text' });
+  const refreshBtn = h('button', {
+    type: 'button',
+    class: 'lb-refresh',
+    dataset: { action: 'refresh-leaderboard' },
+    hidden: true,
+    onClick: () => loadCurrentTab({ manual: true }),
+  }, '重新展卷');
+  const noticeBox = h('div', { class: 'lb-notice', hidden: true }, noticeText, refreshBtn);
+  const statusLine = h('p', { class: 'lb-status' }, '正在连通 TapTap 天榜');
   const listBox = h('div', { class: 'lb-list' });
 
   function renderTabs() {
@@ -71,13 +81,29 @@ export function openLeaderboardModal(root, opts = {}) {
     );
   }
 
+  function renderStatus(res, pending = false) {
+    statusLine.classList.toggle('is-pending', pending);
+    statusLine.classList.toggle('is-live', !pending && Boolean(res?.ok));
+    if (pending) {
+      statusLine.textContent = '正在连通 TapTap 天榜……';
+    } else if (res?.ok) {
+      statusLine.textContent = activeCol === LEADERBOARD_COLLECTIONS.FRIENDS ? '已连通 TapTap 好友榜' : '已连通 TapTap 全服天榜';
+    } else if (res?.source === 'local') {
+      statusLine.textContent = '本机荣誉榜';
+    } else {
+      statusLine.textContent = '本机荣誉榜 · 天榜稍后同步';
+    }
+  }
+
   function renderRows(res) {
     if (res?.notice) {
       noticeBox.hidden = false;
-      noticeBox.textContent = res.notice;
+      noticeText.textContent = res.notice;
+      refreshBtn.hidden = !(res.source === 'error_fallback' || res.retryable);
     } else {
       noticeBox.hidden = true;
-      noticeBox.textContent = '';
+      noticeText.textContent = '';
+      refreshBtn.hidden = true;
     }
 
     clear(listBox);
@@ -123,11 +149,15 @@ export function openLeaderboardModal(root, opts = {}) {
     applyStagger(listBox, '.lb-row', 8);
   }
 
-  async function loadCurrentTab() {
+  async function loadCurrentTab({ manual = false } = {}) {
     const seq = ++reqSeq;
-    if (!listBox.children.length) {
-      clear(listBox).appendChild(h('p', { class: 'lb-empty muted' }, '正在展卷查阅天榜名录……'));
+    // 先即刻铺开本机荣誉榜，云端回信后再无缝替换，避免空等与误报
+    if (!listBox.children.length || manual) {
+      const localEntries = buildLocalHonorEntries(save);
+      renderRows({ entries: localEntries, notice: '' });
     }
+    renderStatus(null, true);
+    if (manual) refreshBtn.disabled = true;
     const res = leaderboard
       ? await leaderboard.fetchBoard({ collection: activeCol, maxSize: 20, save })
       : {
@@ -139,8 +169,11 @@ export function openLeaderboardModal(root, opts = {}) {
         currentPlayer: { rank: null, score: save?.leaderboard?.bestScore || 0 },
       };
     if (seq !== reqSeq) return;
+    refreshBtn.disabled = false;
+    renderStatus(res, false);
     renderMyCard(res);
     renderRows(res);
+    if (manual && res?.ok) toast('天榜已刷新');
   }
 
   async function handleOpenNative() {
@@ -181,7 +214,7 @@ export function openLeaderboardModal(root, opts = {}) {
     title: PRIMARY_LEADERBOARD_NAME,
     sub: `总榜编号 ${PRIMARY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
     cls: 'scroll--dialog scroll--tall leaderboard-modal',
-    body: h('div', { class: 'lb-body' }, tabBar, meBox, noticeBox, listBox),
+    body: h('div', { class: 'lb-body' }, tabBar, statusLine, meBox, noticeBox, listBox),
     footer: [nativeBtn, closeBtn],
   }), { cls: 'veil--top', onBackdrop: closeModal });
 

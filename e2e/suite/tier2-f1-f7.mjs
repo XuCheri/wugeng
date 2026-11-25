@@ -133,10 +133,10 @@ export const TIER2_F1_F7 = [
     feature: 'F1',
     name: 'Invalid query ?introHold=__invalid__ falls through safely to .screen--title without hanging forever',
     async run({ browser, baseUrl }) {
-      const s = await bootColdIntro(browser, baseUrl, { query: 'introHold=__invalid__', titleTimeoutMs: 3000 });
+      const s = await bootColdIntro(browser, baseUrl, { query: 'introHold=__invalid__', titleTimeoutMs: 8000 });
       try {
         await requireOpenSelector(s.page, '.screen--title');
-        assert.ok(s.elapsedMs < 3000);
+        assert.ok(s.elapsedMs < 7000);
         s.assertNoErrors('T2-F1-04');
       } finally {
         await s.close();

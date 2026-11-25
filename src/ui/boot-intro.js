@@ -7,9 +7,9 @@ import { INK, PAPER, PAPER_SHADE, VERM, VERM_DARK, LANTERN, FONT_CN, paperA, ver
 import { brushStroke, makeRng, splatter } from '../render/ink.js';
 
 const TAU = Math.PI * 2;
-const LOADING_DUR = 0.44;
-const LOGO_DUR = 0.88;
-const FADEOUT_DUR = 0.12;
+const LOADING_DUR = 0.9;
+const LOGO_DUR = 2.4;
+const FADEOUT_DUR = 0.26;
 const WATCH_LABELS = ['一更', '二更', '三更', '四更', '五更'];
 
 let activeIntro = null;

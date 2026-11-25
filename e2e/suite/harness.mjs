@@ -1027,7 +1027,7 @@ export async function bootColdIntro(browser, baseUrl, opts = {}) {
     }
 
     if (opts.waitForTitle !== false) {
-      await s.page.waitForSelector('.screen--title', { timeout: opts.titleTimeoutMs ?? 4500 });
+      await s.page.waitForSelector('.screen--title', { timeout: opts.titleTimeoutMs ?? 8000 });
       const elapsedMs = performance.now() - t0;
       await s.page.evaluate(() => document.fonts.ready);
       await s.page.waitForFunction(() => Boolean(window.__wugeng && window.__wugeng.game));

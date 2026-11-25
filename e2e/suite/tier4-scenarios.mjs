@@ -62,7 +62,7 @@ export const TIER4_TESTS = [
     async run({ browser, baseUrl }) {
       const s = await bootColdIntro(browser, baseUrl, { query: 'mockLeaderboard=1' });
       try {
-        assert.ok(s.elapsedMs < 2500, `Expected cold splash < 2500ms, got ${Math.round(s.elapsedMs)}ms`);
+        assert.ok(s.elapsedMs >= 3000 && s.elapsedMs < 6500, `Expected cold splash to linger 3000..6500ms, got ${Math.round(s.elapsedMs)}ms`);
 
         await fastClick(s.page, '.age-badge');
         await fastClick(s.page, '#ui .veil .btn--seal');

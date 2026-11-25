@@ -946,14 +946,14 @@ export const TIER3_TESTS = [
     tier: 3,
     feature: 'F1',
     features: ['F1', 'F13', 'F14'],
-    name: '[F1+F13+F14] Cold-boot ?room=AB23CD deep-link through studio splash into Hub .coop-modal in <= 2.5s',
+    name: '[F1+F13+F14] Cold-boot ?room=AB23CD deep-link through studio splash into Hub .coop-modal right after the >= 3s studio splash',
     async run({ browser, baseUrl }) {
       const s = await bootColdIntro(browser, baseUrl, { query: 'mockTap=1&room=AB23CD', waitForTitle: false });
       try {
         const t0 = performance.now();
-        await s.page.waitForSelector('.coop-modal', { timeout: 3500 });
+        await s.page.waitForSelector('.coop-modal', { timeout: 8000 });
         const totalElapsed = s.elapsedMs + (performance.now() - t0);
-        assert.ok(totalElapsed < 2800, `Expected cold-boot ?room=AB23CD deep-link into .coop-modal in < 2.8s, got ${Math.round(totalElapsed)}ms`);
+        assert.ok(totalElapsed < 7000, `Expected cold-boot ?room=AB23CD deep-link into .coop-modal in < 7s, got ${Math.round(totalElapsed)}ms`);
         const txt = (await s.page.textContent('.coop-modal')) || '';
         assert.ok(txt.toUpperCase().includes('AB23CD'), `Expected .coop-modal joined to AB23CD, got '${txt}'`);
         s.assertNoErrors('T3-C15');
