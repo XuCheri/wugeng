@@ -334,7 +334,7 @@ export function openCoopLobbyModal(root, opts = {}) {
 
   const panel = scroll({
     title: '同守五更',
-    sub: '二至四人联机巡街 · 倒地入阵扶起 · 结算共评魁首',
+    sub: '二至四人联机巡街 · 倒地入阵扶起 · 结算敕封魁首',
     cls: 'scroll--dialog scroll--tall coop-scroll',
     body,
     footer: [footBox],
