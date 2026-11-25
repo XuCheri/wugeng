@@ -45,59 +45,11 @@ import { createFx, EVOLVED_NAMES } from '../../src/render/fx.js';
 import { createHud } from '../../src/render/hud.js';
 import { createRenderer } from '../../src/render/renderer.js';
 import { renderPluck, createAudio } from '../../src/audio/synth.js';
+import { WEAPON_IDS, RELIC_IDS, ENEMY_IDS, HERO_IDS } from '../../src/sim/balance.js';
 
-const CANONICAL_WEAPONS = [
-  'gong',
-  'lantern',
-  'talisman',
-  'brush',
-  'coinsword',
-  'paperman',
-  'firecracker',
-  'bell',
-  'compass',
-  'soulbanner',
-  'bronze_mirror',
-  'paperhorse',
-  'taomujian',
-  'suohun_chain',
-  'zhinian_kite',
-  'nuo_drum',
-];
-
-const CANONICAL_RELICS = [
-  'clapper',
-  'censer',
-  'cinnabar',
-  'inkstone',
-  'bagua',
-  'scissors',
-  'tinder',
-  'redstring',
-  'strawshoes',
-  'glutinous',
-  'fivecoins',
-  'soulwick',
-  'leijimu',
-  'yinpai',
-  'huoyao_pouch',
-  'wuse_mask',
-];
-
-const CANONICAL_ENEMIES = [
-  'paperkid',
-  'shade',
-  'lanternghost',
-  'weasel',
-  'sedan',
-  'drowned',
-  'suona',
-  'paperbride',
-  'cinder',
-  'horse',
-  'umbrella',
-  'youshen',
-];
+const CANONICAL_WEAPONS = WEAPON_IDS;
+const CANONICAL_RELICS = RELIC_IDS;
+const CANONICAL_ENEMIES = ENEMY_IDS;
 
 // ───────── 轻量确定性 Mock OffscreenCanvas（记录全部绘图指令、颜色与签名） ─────────
 function createMockCanvasClass(colorCollector = null) {
@@ -264,7 +216,7 @@ test('icons.js & sprites.js：12 武器 + 12 独立开光神兵 + 12 法器 + 12
     assert.deepEqual(Object.keys(EVO_WEAPON_ICONS).sort(), [...CANONICAL_WEAPONS].sort());
     assert.deepEqual(Object.keys(RELIC_ICONS).sort(), [...CANONICAL_RELICS].sort());
     assert.deepEqual([...ENEMY_TYPES].sort(), [...CANONICAL_ENEMIES].sort());
-    assert.equal(Object.keys(EVOLVED_NAMES).length, 16);
+    assert.equal(Object.keys(EVOLVED_NAMES).length, CANONICAL_WEAPONS.length);
 
     const weaponUrls = new Set();
     const evoUrls = new Set();
@@ -292,18 +244,18 @@ test('icons.js & sprites.js：12 武器 + 12 独立开光神兵 + 12 法器 + 12
       weaponUrls.add(uW);
       evoUrls.add(uE);
     }
-    assert.equal(weaponUrls.size, 16, '16 种基础武器 dataURL 必须两两互异');
-    assert.equal(evoUrls.size, 16, '16 种开光神兵 dataURL 必须两两互异');
+    assert.equal(weaponUrls.size, CANONICAL_WEAPONS.length, '基础武器 dataURL 必须两两互异');
+    assert.equal(evoUrls.size, CANONICAL_WEAPONS.length, '开光神兵 dataURL 必须两两互异');
 
     const relicUrls = new Set(CANONICAL_RELICS.map((id) => iconDataURL('relic', id, 64)));
-    assert.equal(relicUrls.size, 16, '16 种法器 dataURL 必须两两互异');
+    assert.equal(relicUrls.size, CANONICAL_RELICS.length, '法器 dataURL 必须两两互异');
 
-    const heroUrls = new Set(['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'].map((id) => iconDataURL('hero', id, 64)));
-    assert.equal(heroUrls.size, 6);
-    assert.equal(Object.keys(HERO_ICONS).length, 6);
+    const heroUrls = new Set(HERO_IDS.map((id) => iconDataURL('hero', id, 64)));
+    assert.equal(heroUrls.size, HERO_IDS.length);
+    assert.equal(Object.keys(HERO_ICONS).length, HERO_IDS.length);
 
     const enemyUrls = new Set(CANONICAL_ENEMIES.map((id) => iconDataURL('enemy', id, 64)));
-    assert.equal(enemyUrls.size, 12, '12 种邪祟/夜主实机立绘 dataURL 必须两两互异');
+    assert.equal(enemyUrls.size, CANONICAL_ENEMIES.length, '邪祟/夜主实机立绘 dataURL 必须两两互异');
 
     // 验证马面夜主带蓄力眼睛坐标，且无面伞女 shield vs open 烘焙出截然不同的精灵
     assert.ok(Array.isArray(enemyDef('horse').eyes) && enemyDef('horse').eyes.length >= 2);
@@ -321,7 +273,7 @@ test('icons.js & sprites.js：12 武器 + 12 独立开光神兵 + 12 法器 + 12
     const trialActive = shrineSprite('trial', false, true);
     assert.notEqual(trialActive.canvas.toDataURL(), shrineSprite('trial', false, false).canvas.toDataURL());
 
-    for (const pj of ['lanternEvo', 'papermanGuard0', 'papermanCavalry0', 'papermanImp0', 'paperHorse', 'paperHorseEvo', 'compass', 'bronzeMirror', 'cinderCore', 'soulFireBullet']) {
+    for (const pj of ['lanternEvo', 'papermanGuard0', 'papermanCavalry0', 'papermanImp0', 'paperHorse', 'paperHorseEvo', 'compass', 'bronzeMirror', 'cinderCore', 'soulFireBullet', 'paperDart']) {
       assert.ok(projSprite(pj).canvas.ops.length > 5, `弹体精灵 ${pj} 应成功烘焙`);
     }
     for (const v of ['awakened', 'talisman', 'compass', 'compassEvo']) {

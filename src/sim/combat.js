@@ -413,6 +413,29 @@ export function killEnemy(run, e, opts) {
     }
   }
 
+  // 剪纸双生：死亡分裂成 2 个小体，小体再分裂一次（最多 2 层）
+  if (e.type === 'twin_paper') {
+    const tp = ENEMY_AI.twin_paper;
+    const nextDepth = (e.splitDepth || 0) + 1;
+    if (nextDepth <= tp.maxDepth) {
+      const baseA = run.rng.range(0, Math.PI * 2);
+      for (let i = 0; i < tp.splitCount; i++) {
+        const a = baseA + i * Math.PI + run.rng.range(-0.22, 0.22);
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        queueSpawn(run, 'twin_paper', e.x + ca * tp.spread, e.y + sa * tp.spread, {
+          splitDepth: nextDepth,
+          mirrorClone: true,
+          hpMul: tp.hpMulByDepth[nextDepth] || 0.25,
+          rMul: tp.rMulByDepth[nextDepth] || 0.6,
+          atkT: tp.grace,
+          kbx: ca * tp.impulse,
+          kby: sa * tp.impulse,
+        });
+      }
+    }
+  }
+
   // 阴火骷髅：死亡留下延时爆裂阴火核（敌我皆伤，可引爆周围鬼群）
   if (e.type === 'cinder') {
     const C = ENEMY_AI.cinder;

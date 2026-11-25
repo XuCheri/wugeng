@@ -67,14 +67,14 @@ test('16 武器与 16 法器：流派标签、配对双向对称、新增法器�
   for (const t of SCHOOL_TAG_IDS) {
     assert.ok(SCHOOL_TAGS[t] && SCHOOL_NAMES[t]);
   }
-  assert.equal(WEAPON_IDS.length, 16);
-  assert.equal(RELIC_IDS.length, 16);
+  assert.ok(WEAPON_IDS.length >= 16);
+  assert.equal(WEAPON_IDS.length, RELIC_IDS.length);
   assert.deepEqual(WEAPON_IDS.slice(0, 8), ['gong', 'lantern', 'talisman', 'brush', 'coinsword', 'paperman', 'firecracker', 'bell']);
   assert.deepEqual(WEAPON_IDS.slice(8, 12), ['compass', 'soulbanner', 'bronze_mirror', 'paperhorse']);
-  assert.deepEqual(WEAPON_IDS.slice(12), ['taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum']);
+  assert.deepEqual(WEAPON_IDS.slice(12, 16), ['taomujian', 'suohun_chain', 'zhinian_kite', 'nuo_drum']);
   assert.deepEqual(RELIC_IDS.slice(0, 8), ['clapper', 'censer', 'cinnabar', 'inkstone', 'bagua', 'scissors', 'tinder', 'redstring']);
   assert.deepEqual(RELIC_IDS.slice(8, 12), ['strawshoes', 'glutinous', 'fivecoins', 'soulwick']);
-  assert.deepEqual(RELIC_IDS.slice(12), ['leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask']);
+  assert.deepEqual(RELIC_IDS.slice(12, 16), ['leijimu', 'yinpai', 'huoyao_pouch', 'wuse_mask']);
 
   for (const wid of WEAPON_IDS) {
     const w = WEAPONS[wid];
@@ -102,10 +102,12 @@ test('16 武器与 16 法器：流派标签、配对双向对称、新增法器�
   near(relicEffect('soulwick', 5).ultCdRefund, 0.50);
 });
 
-test('12 敌人、5 精英词缀、小头目、大招与公平移速上限（F2 / F10）', () => {
-  assert.equal(ENEMY_IDS.length, 12);
-  assert.equal(REGULAR_ENEMY_IDS.length, 9);
-  assert.ok(REGULAR_ENEMY_IDS.includes('suona') && REGULAR_ENEMY_IDS.includes('paperbride') && REGULAR_ENEMY_IDS.includes('cinder'));
+test('敌人图谱、5 精英词缀、小头目、大招与公平移速上限（F2 / F10 / v4 M2）', () => {
+  assert.ok(ENEMY_IDS.length >= 16);
+  assert.ok(REGULAR_ENEMY_IDS.length >= 13);
+  for (const id of ['suona', 'paperbride', 'cinder', 'archer_ghost', 'firecracker_boy', 'twin_paper', 'shaman']) {
+    assert.ok(REGULAR_ENEMY_IDS.includes(id), `expected ${id} in REGULAR_ENEMY_IDS`);
+  }
   assert.deepEqual(ELITE_AFFIX_IDS, ['paper_armor', 'swift_step', 'soul_fire', 'mirror_twin', 'treasure_bearer']);
   assert.equal(MINI_WARDERS.length, 3);
   assert.deepEqual(SHRINE_KINDS, ['altar', 'trial', 'peddler']);

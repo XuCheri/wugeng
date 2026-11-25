@@ -110,6 +110,10 @@ export const ENEMIES = {
   suona: { name: '吹鼓鬼', hp: 48, speed: 44, dmg: 8, r: 14, xp: 1.7 },
   paperbride: { name: '红衣纸新娘', hp: 68, speed: 56, dmg: 11, r: 13, xp: 1.6 },
   cinder: { name: '阴火骷髅', hp: 29, speed: 64, dmg: 8, r: 12, xp: 0.95 },
+  archer_ghost: { name: '纸射手', hp: 34, speed: 46, dmg: 9, r: 12, xp: 1.9 },
+  firecracker_boy: { name: '爆竹童子', hp: 28, speed: 82, dmg: 8, r: 11, xp: 1.8 },
+  twin_paper: { name: '剪纸双生', hp: 52, speed: 54, dmg: 9, r: 15, xp: 2.3 },
+  shaman: { name: '纸钱妖师', hp: 74, speed: 44, dmg: 10, r: 14, xp: 2.6 },
   horse: { name: '纸马将军', hp: 2800, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
   umbrella: { name: '无面伞女', hp: 58000, speed: 52, dmg: 38, r: 28, xp: 75, boss: true },
   youshen: { name: '夜游神', hp: 176000, speed: 58, dmg: 79, r: 40, xp: 0, boss: true },
@@ -143,6 +147,26 @@ export const ENEMY_AI = {
   },
   // 阴火骷髅：毙命后留阴火核延时爆裂（敌我皆伤）
   cinder: { fuseTime: 0.90, blastRadius: 68, enemyBlastMul: 1.5, playerBlastDmg: 17 },
+  // 纸射手：停在中距，0.8s 朱砂准线预警后射出 3 连纸镖逼玩家横移
+  archer_ghost: {
+    preferMin: 155, preferMax: 235, fireCd: 2.35, firstFireMin: 0.75, firstFireMax: 1.35,
+    windup: 0.80, shots: 3, spread: 0.16, fireRange: 365, telegraphLen: 305, telegraphWidth: 14,
+    bulletSpeed: 280, bulletDmg: 16, bulletR: 6, bulletLife: 2.4, bulletStyle: 'paperDart',
+  },
+  // 爆竹童子：疾奔至近身后定身 1.0s 引信灼亮再范围自爆，同时炸伤周围其他邪祟
+  firecracker_boy: {
+    triggerDist: 56, fuseTime: 1.0, blastRadius: 74, enemyBlastMul: 1.85, playerBlastDmg: 20,
+  },
+  // 剪纸双生：死亡分裂成 2 个小体，小体死亡再分裂一次（最多 2 层）
+  twin_paper: {
+    maxDepth: 2, splitCount: 2, spread: 20, grace: 0.36, impulse: 120,
+    hpMulByDepth: [1, 0.45, 0.25], rMulByDepth: [1, 0.78, 0.60],
+  },
+  // 纸钱妖师：远离玩家游走，每 6 秒召唤 4 只纸扎童子并给周围普通敌人套上纸甲护盾
+  shaman: {
+    retreatDist: 190, holdDist: 265, castCd: 6.0, firstCastMin: 2.2, firstCastMax: 3.8,
+    summonCount: 4, summonDist: 34, shieldRadius: 145, maxShieldTargets: 8,
+  },
 };
 
 export const BOSS_AI = {
@@ -220,8 +244,8 @@ export const SPAWN = {
   rateMul: 0.805,
   hpMul: 1.92,
   watch1LateAt: Math.round(52 * PACE), // 一更后半（36s）灯笼鬼开始从巷口飘出
-  watch2LateAt: Math.round(202 * PACE), // 二更后半（141s）纸轿与黄皮子先遣队入场
-  watch3LateAt: Math.round(300 * PACE), // 三更后半（210s）红衣纸新娘与水鬼冥婚仪仗入场
+  watch2LateAt: Math.round(202 * PACE), // 二更后半（141s）纸轿、黄皮子与纸射手入场
+  watch3LateAt: Math.round(300 * PACE), // 三更后半（210s）红衣纸新娘、剪纸双生与水鬼入场
   // 平滑移速成长曲线：杜绝后期全屏超速粘死
   minuteSpeedGrowth: 0.032,
   speedGrowthCap: 1.35,
@@ -267,11 +291,11 @@ export const ROSTER = {
   1: { paperkid: 70, shade: 30 },
   '1b': { paperkid: 32, shade: 18, lanternghost: 50 },
   2: { paperkid: 24, shade: 18, lanternghost: 43, cinder: 8, suona: 7 },
-  '2b': { paperkid: 19, shade: 17, lanternghost: 33, weasel: 6, sedan: 12, cinder: 6, suona: 7 },
-  3: { paperkid: 17, shade: 20, lanternghost: 25, weasel: 9, sedan: 12, cinder: 8, suona: 6, paperbride: 3 },
-  '3b': { paperkid: 5, shade: 10, lanternghost: 11, weasel: 16, sedan: 12, drowned: 11, cinder: 10, suona: 6, paperbride: 19 },
-  4: { paperkid: 5, shade: 10, lanternghost: 10, weasel: 18, sedan: 11, drowned: 14, cinder: 10, suona: 6, paperbride: 16 },
-  5: { paperkid: 7, shade: 13, lanternghost: 12, weasel: 16, sedan: 9, drowned: 18, cinder: 10, suona: 6, paperbride: 9 },
+  '2b': { paperkid: 17, shade: 15, lanternghost: 28, weasel: 6, sedan: 12, cinder: 6, suona: 7, archer_ghost: 9 },
+  3: { paperkid: 14, shade: 16, lanternghost: 20, weasel: 9, sedan: 10, cinder: 8, suona: 6, paperbride: 3, archer_ghost: 7, firecracker_boy: 7 },
+  '3b': { paperkid: 4, shade: 8, lanternghost: 8, weasel: 13, sedan: 10, drowned: 9, cinder: 8, suona: 6, paperbride: 14, archer_ghost: 7, firecracker_boy: 6, twin_paper: 7 },
+  4: { paperkid: 4, shade: 8, lanternghost: 7, weasel: 13, sedan: 9, drowned: 11, cinder: 8, suona: 5, paperbride: 12, archer_ghost: 6, firecracker_boy: 6, twin_paper: 6, shaman: 5 },
+  5: { paperkid: 5, shade: 10, lanternghost: 8, weasel: 12, sedan: 7, drowned: 13, cinder: 8, suona: 5, paperbride: 8, archer_ghost: 6, firecracker_boy: 6, twin_paper: 6, shaman: 6 },
 };
 
 // Boss 时间轴（按 7 分钟主线比例落在 2:48 / 5:36 / 7:00）

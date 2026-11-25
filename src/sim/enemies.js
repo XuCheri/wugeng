@@ -47,7 +47,7 @@ export function clearTelegraph(e) {
 
 /**
  * 创建一个敌人并加入 run.enemies。
- * opts: { elite, affix, summoned, hpMul, rMul, fixedHp, warder, warderName, chest, mirrorClone, atkT, kbx, kby }
+ * opts: { elite, affix, summoned, hpMul, rMul, fixedHp, warder, warderName, chest, mirrorClone, splitDepth, atkT, kbx, kby }
  */
 export function spawnEnemy(run, type, x, y, opts = {}) {
   const def = ENEMIES[type];
@@ -88,6 +88,14 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
   hp = Math.max(1, Math.round(hp));
   const sx = Number.isFinite(x) ? x : 0;
   const sy = Number.isFinite(y) ? y : 0;
+  const initFireT = type === 'paperbride'
+    ? run.rng.range(ENEMY_AI.paperbride.firstFireMin, ENEMY_AI.paperbride.firstFireMax)
+    : type === 'archer_ghost'
+      ? run.rng.range(ENEMY_AI.archer_ghost.firstFireMin, ENEMY_AI.archer_ghost.firstFireMax)
+      : 0;
+  const initSummonT = type === 'shaman'
+    ? run.rng.range(ENEMY_AI.shaman.firstCastMin, ENEMY_AI.shaman.firstCastMax)
+    : 0;
   const e = {
     id: run._nextId++,
     type,
@@ -128,6 +136,9 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     telegraphProgress: 0,
     telegraphLen: 0,
     telegraphWidth: 0,
+    splitDepth: opts.splitDepth || 0,
+    fuseRadius: type === 'firecracker_boy' ? ENEMY_AI.firecracker_boy.blastRadius : 0,
+    fuseTotal: type === 'firecracker_boy' ? ENEMY_AI.firecracker_boy.fuseTime : 0,
     // ↓ 内部字段
     speed,
     dmg,
@@ -143,9 +154,9 @@ export function spawnEnemy(run, type, x, y, opts = {}) {
     kbResist: affix === 'paper_armor' ? ELITE_AFFIXES.paper_armor.kbResist : 0,
     mirrorClone: !!opts.mirrorClone,
     _mirrored: !!opts.mirrorClone,
-    _fireT: type === 'paperbride' ? run.rng.range(ENEMY_AI.paperbride.firstFireMin, ENEMY_AI.paperbride.firstFireMax) : 0,
+    _fireT: initFireT,
     _affixT: affix === 'soul_fire' ? run.rng.range(1.0, ELITE_AFFIXES.soul_fire.fireInterval) : 0,
-    _summonT: 0,
+    _summonT: initSummonT,
     _spiralA: 0,
     _charges: 0,
     _windupTotal: 0,
@@ -354,6 +365,11 @@ export function updateEnemies(run, dt) {
       if (e.type === 'weasel' && e.state === 'pause') {
         e.state = 'move';
         e.stateT = ai.weasel.recover * 0.5;
+      } else if (e.type === 'archer_ghost' && e.state === 'aim') {
+        e.state = 'move';
+        e._fireT = 0.6;
+      } else if (e.type === 'firecracker_boy' && e.state === 'fuse') {
+        e.stateT += dt;
       }
       clearTelegraph(e);
     } else {
@@ -443,6 +459,120 @@ export function updateEnemies(run, dt) {
             dmg: bdmg,
           });
         }
+      } else if (e.type === 'archer_ghost') {
+        const AG = ai.archer_ghost;
+        const sign = e.id & 1 ? 1 : -1;
+        if (e.state === 'aim') {
+          spd = 0;
+          setTelegraph(e, AG.telegraphLen, AG.telegraphWidth, clamp(1 - Math.max(0, e.stateT) / AG.windup, 0.02, 1));
+          if (e.stateT <= 0) {
+            clearTelegraph(e);
+            e.state = 'move';
+            e._fireT = AG.fireCd;
+            const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
+            const bdmg = Math.max(2, Math.round(AG.bulletDmg * run.night.contactDmgMul * enemyDmgScale(m) * (e.elite ? 1.25 : 1)));
+            for (let b = 0; b < AG.shots; b++) {
+              const a = e.angle + (b - (AG.shots - 1) / 2) * AG.spread;
+              run.projectiles.push({
+                id: run._nextId++,
+                kind: 'enemyBullet',
+                source: 'archer_ghost',
+                x: e.x,
+                y: e.y,
+                r: AG.bulletR,
+                angle: a,
+                t: 0,
+                life: AG.bulletLife,
+                vx: Math.cos(a) * AG.bulletSpeed,
+                vy: Math.sin(a) * AG.bulletSpeed,
+                style: AG.bulletStyle,
+                dmg: bdmg,
+              });
+            }
+          }
+        } else {
+          if (d < AG.preferMin) {
+            moveX = -tx;
+            moveY = -ty;
+            spd *= 0.72;
+          } else if (d <= AG.preferMax) {
+            moveX = -ty * sign;
+            moveY = tx * sign;
+            spd *= 0.45;
+          }
+          e._fireT -= dt;
+          if (e._fireT <= 0 && d <= AG.fireRange) {
+            e.state = 'aim';
+            e.stateT = AG.windup;
+            e.dx = tx;
+            e.dy = ty;
+            e.angle = Math.atan2(ty, tx);
+            setTelegraph(e, AG.telegraphLen, AG.telegraphWidth, 0.02);
+            spd = 0;
+          }
+        }
+      } else if (e.type === 'firecracker_boy') {
+        const FC = ai.firecracker_boy;
+        if (e.state === 'fuse') {
+          spd = 0;
+          e.kbx *= 0.2;
+          e.kby *= 0.2;
+          if (e.stateT <= 0) {
+            e.dead = true;
+            e.hp = 0;
+            const m = run.mode === 'endless' ? designMinutes(resolveEndlessStartSec(run)) : designMinutes(run.time);
+            run._scheduled.push({
+              delay: 0,
+              type: 'cinderBlast',
+              x: e.x,
+              y: e.y,
+              radius: FC.blastRadius,
+              enemyDmg: Math.max(16, Math.round(ENEMIES.firecracker_boy.hp * currentHpScale(run) * FC.enemyBlastMul)),
+              playerDmg: Math.max(5, Math.round(FC.playerBlastDmg * run.night.contactDmgMul * enemyDmgScale(m) * (e.elite ? 1.3 : 1))),
+            });
+            continue;
+          }
+        } else if (d <= FC.triggerDist + p.r) {
+          e.state = 'fuse';
+          e.stateT = FC.fuseTime;
+          e.fuseTotal = FC.fuseTime;
+          e.fuseRadius = FC.blastRadius;
+          spd = 0;
+        }
+      } else if (e.type === 'shaman') {
+        const SH = ai.shaman;
+        const sign = e.id & 1 ? 1 : -1;
+        if (d < SH.retreatDist) {
+          moveX = -tx;
+          moveY = -ty;
+          spd *= 0.80;
+        } else if (d <= SH.holdDist) {
+          moveX = -ty * sign;
+          moveY = tx * sign;
+          spd *= 0.48;
+        }
+        e._summonT -= dt;
+        if (e._summonT <= 0) {
+          e._summonT = SH.castCd;
+          const baseA = run.rng.range(0, Math.PI * 2);
+          for (let sIdx = 0; sIdx < SH.summonCount; sIdx++) {
+            const sa = baseA + (sIdx / SH.summonCount) * Math.PI * 2;
+            queueSpawn(run, 'paperkid', e.x + Math.cos(sa) * SH.summonDist, e.y + Math.sin(sa) * SH.summonDist, {
+              summoned: true,
+              mirrorClone: true,
+              atkT: 0.35,
+            });
+          }
+          sepHash.queryCircle(e.x, e.y, SH.shieldRadius, scratchAura, maxPad);
+          let shielded = 0;
+          for (let j = 0; j < scratchAura.length && shielded < SH.maxShieldTargets; j++) {
+            const ally = scratchAura[j];
+            if (ally !== e && !ally.dead && !ally.boss) {
+              ally.paperArmor = Math.max(ally.paperArmor || 0, 1);
+              shielded++;
+            }
+          }
+        }
       }
 
       if (e.affix === 'soul_fire') {
@@ -476,7 +606,9 @@ export function updateEnemies(run, dt) {
 
       vx = moveX * spd;
       vy = moveY * spd;
-      if (e.type === 'weasel' && spd > 0 && e.state !== 'dash') e.angle = Math.atan2(ty, tx);
+      if ((e.type === 'weasel' || e.type === 'archer_ghost') && spd > 0 && e.state !== 'dash' && e.state !== 'aim') {
+        e.angle = Math.atan2(ty, tx);
+      }
     }
 
     // 软分离：被重叠的邻居推开（Boss 不被推，普通怪直接扫描细网格桶，零数组分配）

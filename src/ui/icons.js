@@ -24,7 +24,8 @@ function hashId(s) {
 
 const KNOWN_ENEMY_SPRITES = new Set([
   'paperkid', 'shade', 'lanternghost', 'weasel', 'sedan', 'drowned',
-  'suona', 'paperbride', 'cinder', 'horse', 'umbrella', 'youshen',
+  'suona', 'paperbride', 'cinder', 'archer_ghost', 'firecracker_boy', 'twin_paper', 'shaman',
+  'horse', 'umbrella', 'youshen',
 ]);
 
 function isSilentPlaceholder(kind, id) {

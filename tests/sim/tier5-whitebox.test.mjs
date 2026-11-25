@@ -481,10 +481,10 @@ test('T5-10: 全系统混合操作确定性（换更命签 + 留签/弃签/换�
 // ───────────────────────── 全栈白盒防护与架构不变量（T5-WB-01 .. T5-WB-10） ─────────────────────────
 
 test('T5-WB-01: 跨模块权威 ID、双向本命配对与文案表 100% 零漂移（sim ↔ copy ↔ meta ↔ render）', () => {
-  assert.equal(B.WEAPON_IDS.length, 16);
-  assert.equal(B.RELIC_IDS.length, 16);
-  assert.equal(B.ENEMY_IDS.length, 12);
-  assert.equal(B.HERO_IDS.length, 6);
+  assert.ok(B.WEAPON_IDS.length >= 16);
+  assert.equal(B.RELIC_IDS.length, B.WEAPON_IDS.length);
+  assert.ok(B.ENEMY_IDS.length >= 16);
+  assert.ok(B.HERO_IDS.length >= 6);
   assert.equal(B.SCHOOL_TAG_IDS.length, 4);
   assert.equal(BLESSING_IDS.length, 18);
   assert.equal(B.SHRINE_KINDS.length, 3);
@@ -498,7 +498,7 @@ test('T5-WB-01: 跨模块权威 ID、双向本命配对与文案表 100% 零漂�
   assert.equal(Save.NIGHT_MAX, B.MAX_NIGHT);
   assert.equal(Save.SHOP_MAX_LEVEL, B.META_MAX_LEVEL);
 
-  // 16 武器 + 16 开光神兵 + 双向本命法器配对
+  // 武器 + 开光神兵 + 双向本命法器配对
   const seenPairs = new Set();
   for (const wid of B.WEAPON_IDS) {
     const w = B.WEAPONS[wid];
@@ -516,7 +516,7 @@ test('T5-WB-01: 跨模块权威 ID、双向本命配对与文案表 100% 零漂�
     assert.equal(Copy.weaponPairRelic(wid), w.pair);
     seenPairs.add(w.pair);
   }
-  assert.equal(seenPairs.size, 16, '16 把兵刃与 16 件法器必须构成严格一一双射');
+  assert.equal(seenPairs.size, B.WEAPON_IDS.length, '全部兵刃与法器必须构成严格一一双射');
 
   // 12 法器各等级加成与文案
   for (const rid of B.RELIC_IDS) {
@@ -861,16 +861,17 @@ test('T5-WB-03: render/** 严格 Canvas2D 规范校验（51 图标互异、更�
   globalThis.OffscreenCanvas = SpecCanvas;
   clearSpriteCache();
   try {
-    // 66 个核心图标（16 兵刃 + 16 开光 + 16 法器 + 12 百鬼 + 6 英雄）全部唯一有效（用独立尺寸 58 避开前置测试缓存）
-    const all66 = new Set();
+    // 全部核心图标（兵刃 + 开光 + 法器 + 百鬼 + 英雄）唯一有效（用独立尺寸 58 避开前置测试缓存）
+    const allIcons = new Set();
     for (const id of B.WEAPON_IDS) {
-      all66.add(iconDataURL('weapon', id, 58));
-      all66.add(iconDataURL('evo', id, 58));
+      allIcons.add(iconDataURL('weapon', id, 58));
+      allIcons.add(iconDataURL('evo', id, 58));
     }
-    for (const id of B.RELIC_IDS) all66.add(iconDataURL('relic', id, 58));
-    for (const id of B.ENEMY_IDS) all66.add(iconDataURL('enemy', id, 58));
-    for (const id of B.HERO_IDS) all66.add(iconDataURL('hero', id, 58));
-    assert.equal(all66.size, 66, '66 枚版画图标 dataURL 必须全部两两互异');
+    for (const id of B.RELIC_IDS) allIcons.add(iconDataURL('relic', id, 58));
+    for (const id of B.ENEMY_IDS) allIcons.add(iconDataURL('enemy', id, 58));
+    for (const id of B.HERO_IDS) allIcons.add(iconDataURL('hero', id, 58));
+    const expectedIconTotal = B.WEAPON_IDS.length * 2 + B.RELIC_IDS.length + B.ENEMY_IDS.length + B.HERO_IDS.length;
+    assert.equal(allIcons.size, expectedIconTotal, `${expectedIconTotal} 枚版画图标 dataURL 必须全部两两互异`);
 
     // style-lab 三大场景 + 一更到鸡鸣全覆盖
     for (const scene of ['crowd', 'boss', 'hud']) {

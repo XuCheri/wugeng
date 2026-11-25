@@ -995,6 +995,138 @@ function drawCinder(g, rng, f) {
   g.fill();
 }
 
+function drawArcherGhost(g, rng, f) {
+  // 纸射手：折纸号衣配背后箭筒，双手挽竹弧朝右引弦
+  const sw = [0, 1, 0, -1][f] * 1.2;
+  poly(g, [[-10, -28], [-5, -29], [-2, -14], [-7, -13]]);
+  fs(g, VERM_DARK, 1.1);
+  line(g, -9, -29, -11, -34, 1.3, PAPER);
+  line(g, -6.5, -29.5, -7.5, -35, 1.3, VERM);
+  poly(g, [[-7, -19], [6, -19], [8 + sw * 0.4, -3], [-8 - sw * 0.4, -3]]);
+  fs(g, PAPER, 1.3);
+  vfill(g, () => poly(g, [[-6.5, -18.5], [5.5, -18.5], [4, -12], [-5, -12]]));
+  line(g, -3.5, -3, -4.5 + sw, 0, 2, INK);
+  line(g, 3.5, -3, 4.5 - sw, 0, 2, INK);
+  circ(g, 0, -24.5, 5.2);
+  fs(g, PAPER, 1.2);
+  g.fillStyle = INK;
+  circ(g, 2.2, -24.5, 1.0);
+  g.fill();
+  vfill(g, () => circ(g, 1.8, -22.2, 1.2));
+  poly(g, [[-9.5, -27], [0, -33.5], [9.5, -27]]);
+  fs(g, INK, 1.1);
+  g.beginPath();
+  g.arc(4, -16.5, 10.5, -Math.PI * 0.46, Math.PI * 0.46);
+  ink(g, 1.8, INK);
+  g.stroke();
+  line(g, 4, -26.5, 1.5, -16.5, 1, PAPER_SHADE);
+  line(g, 4, -6.5, 1.5, -16.5, 1, PAPER_SHADE);
+  line(g, 1, -16.5, 15.5, -16.5, 1.6, VERM);
+  poly(g, [[15, -19], [19, -16.5], [15, -14]]);
+  fs(g, VERM, 0.9);
+}
+
+function drawFirecrackerBoy(g, rng, f) {
+  // 爆竹童子：红肚兜总角纸童，怀抱巨型朱红二踢脚，头顶引信火星迸跳
+  const hop = (f % 2) * 1.8;
+  const spark = [0, 1.6, -1.2, 1.2][f];
+  line(g, -3.5, -4, -4.5, -0.5 + hop * 0.4, 2.2, INK);
+  line(g, 3.5, -4, 4.5, -0.5 - hop * 0.4, 2.2, INK);
+  ell(g, 0, -12.5 - hop, 7.6, 8.5);
+  fs(g, PAPER, 1.3);
+  vfill(g, () => poly(g, [[-5.5, -16 - hop], [5.5, -16 - hop], [6.5, -7.5 - hop], [0, -5.5 - hop], [-6.5, -7.5 - hop]]));
+  circ(g, 0, -23.5 - hop, 5.6);
+  fs(g, PAPER, 1.2);
+  circ(g, -5.5, -27.5 - hop, 2.3);
+  fs(g, INK, 1);
+  circ(g, 5.5, -27.5 - hop, 2.3);
+  fs(g, INK, 1);
+  g.fillStyle = INK;
+  circ(g, -2, -23.8 - hop, 0.95);
+  g.fill();
+  circ(g, 2, -23.8 - hop, 0.95);
+  g.fill();
+  vfill(g, () => circ(g, -3.4, -22 - hop, 1.2));
+  vfill(g, () => circ(g, 3.4, -22 - hop, 1.2));
+  g.save();
+  g.translate(3.5, -14 - hop);
+  g.rotate(-0.35);
+  poly(g, [[-4, -9], [4, -9], [4, 8], [-4, 8]]);
+  fs(g, VERM, 1.2);
+  line(g, -4, -5, 4, -5, 1.5, LANTERN);
+  line(g, -4, 4, 4, 4, 1.5, LANTERN);
+  g.beginPath();
+  g.moveTo(0, -9);
+  g.quadraticCurveTo(3, -13, 1 + spark, -16);
+  ink(g, 1.2, INK);
+  g.stroke();
+  circ(g, 1 + spark, -16.5, 2.5);
+  g.fillStyle = LANTERN;
+  g.fill();
+  circ(g, 1 + spark, -16.5, 1.2);
+  g.fillStyle = VERM;
+  g.fill();
+  g.restore();
+}
+
+function drawTwinPaper(g, rng, f) {
+  // 剪纸双生：一朱一墨对称折纸连体双人，中轴剪纸镂空菱纹相连
+  const sw = [0, 1.2, 0, -1.2][f];
+  poly(g, [[-13, -6 + sw * 0.4], [-9.5, -20], [-1.5, -19], [-1.5, -5]]);
+  fs(g, PAPER, 1.2);
+  poly(g, [[1.5, -5], [1.5, -19], [9.5, -20], [13, -6 - sw * 0.4]]);
+  fs(g, VERM, 1.2);
+  poly(g, [[-5, -16], [5, -16], [4, -9], [-4, -9]]);
+  fs(g, PAPER_SHADE, 1.1);
+  cut(g, () => poly(g, [[0, -14.8], [2.2, -12.5], [0, -10.2], [-2.2, -12.5]]));
+  circ(g, -6, -24.5 + sw * 0.3, 4.8);
+  fs(g, PAPER, 1.2);
+  circ(g, 6, -24.5 - sw * 0.3, 4.8);
+  fs(g, PAPER_SHADE, 1.2);
+  g.fillStyle = INK;
+  circ(g, -7.3, -24.8, 0.85);
+  g.fill();
+  circ(g, -4.5, -24.8, 0.85);
+  g.fill();
+  g.fillStyle = VERM_DARK;
+  circ(g, 4.5, -24.8, 0.85);
+  g.fill();
+  circ(g, 7.3, -24.8, 0.85);
+  g.fill();
+  poly(g, [[-9.5, -28], [-6, -33.5], [-2.5, -28]]);
+  fs(g, INK, 1);
+  poly(g, [[2.5, -28], [6, -33.5], [9.5, -28]]);
+  fs(g, VERM_DARK, 1);
+}
+
+function drawShaman(g, rng, f) {
+  // 纸钱妖师：头戴高耸纸道冠，身披墨氅挂铜钱串，手持挂满冥钱串的招魂竹杖
+  const fl = [0, 1.4, 0, -1.4][f];
+  poly(g, [[-11, -3], [-8.5, -23], [8.5, -23], [11, -3]]);
+  fs(g, INK, 1.3);
+  poly(g, [[-5.5, -3], [-3.8, -21], [3.8, -21], [5.5, -3]]);
+  fs(g, PAPER_SHADE, 1);
+  line(g, -6, -21, 5.5, -8, 2.2, VERM);
+  for (const [cx, cy] of [[-3.5, -18], [0, -14], [3.5, -10]]) {
+    circ(g, cx, cy, 2.3);
+    fs(g, LANTERN, 0.9);
+  }
+  circ(g, 0, -27.5, 5.2);
+  fs(g, PAPER, 1.2);
+  g.fillStyle = LANTERN;
+  circ(g, -2, -27.8, 1.0);
+  g.fill();
+  circ(g, 2, -27.8, 1.0);
+  g.fill();
+  poly(g, [[-5.5, -31.5], [-3.5, -40], [0, -37.5], [3.5, -40], [5.5, -31.5]]);
+  fs(g, INK, 1.1);
+  vfill(g, () => circ(g, 0, -35, 1.8));
+  line(g, 9.5, -2, 11.5, -37, 1.9, INK);
+  poly(g, [[11.5, -37], [18.5, -34 + fl * 0.5], [16.5, -22 + fl], [11, -25]]);
+  fs(g, PAPER, 1.1);
+  line(g, 14, -33 + fl * 0.3, 14, -25 + fl * 0.7, 1.2, VERM);
+}
+
 /* ------------------------------------------------------------------ */
 /* Boss                                                                */
 /* ------------------------------------------------------------------ */
@@ -1409,6 +1541,10 @@ const ENEMY_DEFS = {
   suona: { w: 42, h: 42, ax: 18, ay: 38, r: 14, frames: 4, draw: drawSuona, eyes: [[2.8, -25.6]] },
   paperbride: { w: 38, h: 48, ax: 19, ay: 44, r: 13, frames: 4, draw: drawPaperbride, eyes: [[-2.2, -29.2], [2.2, -29.2]] },
   cinder: { w: 34, h: 42, ax: 17, ay: 38, r: 12, frames: 4, draw: drawCinder, eyes: [[-2.3, -24.6], [2.3, -24.6]] },
+  archer_ghost: { w: 42, h: 42, ax: 18, ay: 38, r: 12, frames: 4, draw: drawArcherGhost, eyes: [[2.2, -24.5]] },
+  firecracker_boy: { w: 36, h: 42, ax: 17, ay: 38, r: 11, frames: 4, draw: drawFirecrackerBoy, eyes: [[-2, -23.8], [2, -23.8]] },
+  twin_paper: { w: 38, h: 40, ax: 19, ay: 36, r: 15, frames: 4, draw: drawTwinPaper, eyes: [[-6, -24.8], [6, -24.8]] },
+  shaman: { w: 44, h: 48, ax: 20, ay: 44, r: 14, frames: 4, draw: drawShaman, eyes: [[-2, -27.8], [2, -27.8]] },
   horse: { w: 112, h: 124, ax: 50, ay: 118, r: 30, frames: 4, draw: drawHorse, eyes: [[37.6, -64.6], [-2.1, -78.6], [2.1, -78.6]], lw: 2 },
   umbrella: { w: 100, h: 116, ax: 50, ay: 110, r: 28, frames: 4, draw: drawUmbrella, eyes: null },
   youshen: { w: 104, h: 160, ax: 50, ay: 154, r: 40, frames: 4, draw: drawYoushen, eyes: [[-4, -104], [4.8, -104]] },
@@ -2197,6 +2333,14 @@ function drawSoulFireBullet(g) {
   g.fill();
 }
 
+function drawPaperDartProj(g) {
+  // 敌方纸镖：恒守朱砂红 #C23B26 警示色与折纸尾翼
+  poly(g, [[-9, -3.5], [2, -2], [9.5, 0], [2, 2], [-9, 3.5], [-6.5, 0]]);
+  fs(g, VERM, 1);
+  poly(g, [[1.5, -1.8], [9.5, 0], [1.5, 1.8]]);
+  fs(g, PAPER, 0.8);
+}
+
 function drawTaomujianProj(g, evo) {
   poly(g, [[-10, -2.5], [10, -3], [17, 0], [10, 3], [-10, 2.5]]);
   fs(g, evo ? LANTERN : PAPER_SHADE, 1.1);
@@ -2288,6 +2432,7 @@ const PROJ_DEFS = {
   paperMoney: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawPaperMoney(g) },
   inkBullet: { w: 16, h: 16, ax: 8, ay: 8, draw: (g) => drawInkBullet(g) },
   soulFireBullet: { w: 18, h: 16, ax: 9, ay: 8, draw: (g) => drawSoulFireBullet(g) },
+  paperDart: { w: 22, h: 12, ax: 11, ay: 6, draw: (g) => drawPaperDartProj(g) },
   taomujian: { w: 38, h: 14, ax: 19, ay: 7, draw: (g) => drawTaomujianProj(g, false) },
   taomujianEvo: { w: 42, h: 16, ax: 21, ay: 8, draw: (g) => drawTaomujianProj(g, true) },
   soulHook: { w: 24, h: 22, ax: 12, ay: 11, draw: (g) => drawSoulHookProj(g, false) },

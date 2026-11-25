@@ -100,8 +100,8 @@ const GROUND_KINDS = new Set([
 ]);
 
 // 精灵朝右绘制、需要随朝向翻转的敌人
-const FLIP_TYPES = new Set(['weasel', 'drowned', 'suona', 'horse', 'umbrella', 'shade', 'youshen', 'sedan']);
-const FLOAT_TYPES = new Set(['shade', 'lanternghost', 'paperbride', 'sedan', 'drowned', 'umbrella']);
+const FLIP_TYPES = new Set(['weasel', 'drowned', 'suona', 'archer_ghost', 'shaman', 'horse', 'umbrella', 'shade', 'youshen', 'sedan']);
+const FLOAT_TYPES = new Set(['shade', 'lanternghost', 'paperbride', 'shaman', 'sedan', 'drowned', 'umbrella']);
 const LANTERN_R = 118; // 基础灯笼光圈半径（CSS px）
 const SHRINE_GLYPH = { altar: '香', trial: '碑', peddler: '货' };
 const SHRINE_TITLE = { altar: '土地香案', trial: '镇邪试炼碑', peddler: '鬼市货郎' };
@@ -114,7 +114,7 @@ function smooth01(a, b, x) {
 function isTelegraphing(e) {
   if (!e || e.dead) return false;
   if (e.telegraphProgress > 0 && e.telegraphLen > 0) return true;
-  if (e.state === 'windup' || e.state === 'telegraph' || e.windupT > 0) return true;
+  if (e.state === 'windup' || e.state === 'telegraph' || e.state === 'aim' || e.windupT > 0) return true;
   if (e.type === 'weasel' && e.state === 'pause') return true;
   return false;
 }
@@ -362,25 +362,45 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
-    const flash = e.hitT > 0;
+    const flash = e.hitT > 0 || (e.type === 'firecracker_boy' && e.state === 'fuse' && Math.sin(clock * 32 + id) > 0);
+    if (e.type === 'firecracker_boy' && e.state === 'fuse') {
+      const fR = e.fuseRadius || 74;
+      const tot = e.fuseTotal > 0 ? e.fuseTotal : 1;
+      const prog = Math.max(0, Math.min(1, 1 - (e.stateT || 0) / tot));
+      ctx.save();
+      ctx.strokeStyle = vermA(0.36 + 0.48 * prog);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, fR, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = vermA(0.08 + 0.14 * prog);
+      ctx.fill();
+      ctx.strokeStyle = LANTERN;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(8, fR * (1 - prog * 0.85)), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
     const stateVariant = e.type === 'umbrella' ? (e.state === 'shield' ? 'shield' : 'open') : '';
     blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
 
-    // 词缀前景标记（纸甲、阴火、藏宝）
+    // 纸甲护盾（含精英纸甲词缀与纸钱妖师赋予的纸甲）及阴火、藏宝前景标记
+    if ((e.paperArmor || 0) > 0 && (e.affix === 'paper_armor' || !e.affix)) {
+      const cnt = Math.min(4, Math.max(1, e.paperArmor || 1));
+      for (let i = 0; i < cnt; i++) {
+        const a0 = clock * 2.6 + (i / cnt) * TAU;
+        const px0 = x + Math.cos(a0) * (er + 5);
+        const py0 = y - 6 + Math.sin(a0) * (er * 0.55);
+        ctx.fillStyle = PAPER;
+        ctx.fillRect(px0 - 2.5, py0 - 4, 5, 8);
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 0.9;
+        ctx.strokeRect(px0 - 2.5, py0 - 4, 5, 8);
+      }
+    }
     if (e.affix) {
-      if (e.affix === 'paper_armor' && (e.paperArmor ?? 1) > 0) {
-        const cnt = Math.min(4, Math.max(1, e.paperArmor || 2));
-        for (let i = 0; i < cnt; i++) {
-          const a0 = clock * 2.6 + (i / cnt) * TAU;
-          const px0 = x + Math.cos(a0) * (er + 5);
-          const py0 = y - 6 + Math.sin(a0) * (er * 0.55);
-          ctx.fillStyle = PAPER;
-          ctx.fillRect(px0 - 2.5, py0 - 4, 5, 8);
-          ctx.strokeStyle = VERM;
-          ctx.lineWidth = 0.9;
-          ctx.strokeRect(px0 - 2.5, py0 - 4, 5, 8);
-        }
-      } else if (e.affix === 'soul_fire') {
+      if (e.affix === 'soul_fire') {
         for (let i = 0; i < 2; i++) {
           const a0 = clock * 3.4 + i * Math.PI;
           blit(ctx, pickupSprite('xp', 1), x + Math.cos(a0) * (er + 5), y - 8 + Math.sin(a0) * 5, 0.75, 0.75);
@@ -1362,6 +1382,9 @@ export function createRenderer(canvas, opts = {}) {
       case 'enemyBullet': {
         if (p.style === 'ink') {
           blit(ctx, projSprite('inkBullet'), p.x, p.y, 1, 1, clock * 3 + id);
+        } else if (p.source === 'archer_ghost' || p.style === 'paperDart') {
+          const ang = Math.atan2(p.vy || 0, p.vx || 1);
+          blit(ctx, projSprite('paperDart'), p.x, p.y, 1.05, 1.05, ang);
         } else if (p.source === 'paperbride' || p.source === 'soul_fire' || p.style === 'soulFire') {
           const ang = Math.atan2(p.vy || 0, p.vx || 1);
           blit(ctx, projSprite('soulFireBullet'), p.x, p.y, 1.05, 1.05, ang);
