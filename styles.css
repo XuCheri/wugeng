@@ -815,13 +815,13 @@ p { margin: 0; }
 /* 右侧竖排功能浮栏：圆形墨玉灯牌，竖向居中悬于舞台右缘，避开 TapTap 右上角胶囊菜单 */
 .hub-ribbon {
   position: absolute;
-  top: max(64px, calc(50% - 118px));
+  top: max(10px, calc(50% - 118px));
   right: 10px;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 7px;
 }
 .hub-ribbon::before {
   content: "";
@@ -840,8 +840,8 @@ p { margin: 0; }
   align-items: center;
   justify-content: center;
   gap: 0;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -854,9 +854,10 @@ p { margin: 0; }
   animation: rail-float-in 420ms cubic-bezier(.22, 1.2, .36, 1) backwards;
   transition: transform 160ms cubic-bezier(.22, 1.35, .36, 1), background-color 140ms, box-shadow 140ms;
 }
-.hub-ribbon__btn:nth-child(2) { animation-delay: 60ms; }
-.hub-ribbon__btn:nth-child(3) { animation-delay: 120ms; }
-.hub-ribbon__btn:nth-child(4) { animation-delay: 180ms; }
+.hub-ribbon__btn:nth-child(2) { animation-delay: 50ms; }
+.hub-ribbon__btn:nth-child(3) { animation-delay: 100ms; }
+.hub-ribbon__btn:nth-child(4) { animation-delay: 150ms; }
+.hub-ribbon__btn:nth-child(5) { animation-delay: 200ms; }
 @keyframes rail-float-in {
   from { opacity: .86; transform: translateX(18px) scale(.86); }
   to { opacity: 1; transform: translateX(0) scale(1); }
@@ -3093,12 +3094,171 @@ p { margin: 0; }
   to { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
 }
 
+/* ───────── 每日差事与周赏供盒（v4 M3.1 · 6色木版规范） ───────── */
+.daily-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.daily-jump-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+  border-radius: 6px;
+}
+.daily-jump-bar__txt {
+  font-size: 11.5px;
+  color: var(--ink);
+  letter-spacing: .04em;
+}
+.daily-jump-bar__btn {
+  font-size: 12px;
+  color: var(--verm-dark);
+}
+.daily-date-line {
+  margin: 0;
+  font-size: 11.5px;
+  text-align: center;
+}
+.daily-weekly {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1.2px var(--ink);
+  border-radius: 8px;
+}
+.daily-weekly__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.daily-weekly__title {
+  font-size: 14px;
+  letter-spacing: .08em;
+  color: var(--ink);
+}
+.daily-weekly__pts {
+  font-size: 11px;
+  color: var(--verm-dark);
+}
+.weekly-chest-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.weekly-chest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 6px 4px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+  border-radius: 6px;
+  text-align: center;
+}
+.weekly-chest.is-ready {
+  box-shadow: inset 0 0 0 1.6px var(--verm);
+  background: var(--lantern-14);
+}
+.weekly-chest.is-claimed {
+  opacity: .76;
+}
+.weekly-chest__title {
+  font-size: 11px;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.weekly-chest__gift {
+  font-size: 9.5px;
+  color: var(--verm-dark);
+  line-height: 1.15;
+}
+.weekly-chest__need {
+  font-size: 10.5px;
+  color: var(--ink);
+  opacity: .68;
+}
+.weekly-chest__btn {
+  min-height: 24px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.daily-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.daily-task.is-ready {
+  box-shadow: inset 0 0 0 1.6px var(--verm);
+}
+.daily-task.is-claimed {
+  opacity: .74;
+}
+.daily-task__rewards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+.daily-reward-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  color: var(--ink);
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+  border-radius: 999px;
+}
+.daily-reward-chip b {
+  font-weight: 400;
+}
+.daily-task__bar {
+  margin-top: 5px;
+}
+.daily-task__act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.daily-task__prog-tag {
+  font-size: 12px;
+  color: var(--verm-dark);
+  letter-spacing: .04em;
+}
+.daily-ad-btn {
+  min-height: 26px;
+  padding: 2px 8px 2px 28px;
+  font-size: 11.5px;
+}
+
 @media (max-width: 370px) {
   .coop-party-grid { grid-template-columns: 1fr; }
+  .hub-ribbon__btn { width: 40px; height: 40px; }
+  .hub-ribbon { gap: 5px; top: max(8px, calc(50% - 110px)); }
+}
+@media (max-height: 700px) {
+  .hub-ribbon__btn { width: 40px; height: 40px; }
+  .hub-ribbon { gap: 5px; top: max(6px, calc(50% - 110px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
 
 

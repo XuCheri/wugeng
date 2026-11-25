@@ -31,9 +31,9 @@ export function getHubFeatureLock(save, feature) {
   const ownedCos = Array.isArray(save?.cosmetics?.owned) ? save.cosmetics.owned.length : 0;
   const claimedAch = Array.isArray(save?.achievementClaims) ? save.achievementClaims.length : 0;
 
-  if (feature === 'shop' || feature === 'codex') {
+  if (feature === 'shop' || feature === 'codex' || feature === 'daily') {
     if (runs >= 1 || clears >= 1 || coins > 0) return { locked: false, label: '', toast: '' };
-    const name = feature === 'shop' ? '加点' : '图鉴';
+    const name = feature === 'shop' ? '加点' : feature === 'codex' ? '图鉴' : '差事';
     return { locked: true, label: '1夜开', toast: `先出门守过 1 夜，即刻开放「${name}」` };
   }
 

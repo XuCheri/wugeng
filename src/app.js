@@ -14,6 +14,12 @@ import {
   getAchievementStates,
   reconcileAchievements,
 } from './meta/achievements.js';
+import {
+  claimDailyTask,
+  claimWeeklyChest,
+  getDailyState,
+  recordDailyRun,
+} from './meta/daily.js';
 import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
 import { createLeaderboard } from './meta/leaderboard.js';
@@ -431,7 +437,9 @@ export async function startApp(bootOpts = {}) {
     if (finished || !summary) return;
     finished = true;
     coop.onRunFinished();
-    const recorded = recordRun(save, summary, Date.now());
+    const nowTs = Date.now();
+    const recorded = recordRun(save, summary, nowTs);
+    recordDailyRun(save, summary, nowTs);
     persist(true);
     leaderboard.submitScore(summary.score, save);
     coach.reset();
@@ -481,6 +489,26 @@ export async function startApp(bootOpts = {}) {
       getStates: (cat = 'all') => getAchievementStates(save, cat),
       claim: (id) => {
         const res = claimAchievement(save, id);
+        if (res.ok) {
+          applySettings(save.settings);
+          persist(true);
+          hub?.refresh?.();
+        }
+        return res;
+      },
+    },
+    daily: {
+      getState: (nowVal = new Date()) => getDailyState(save, nowVal),
+      claimTask: (taskId, nowVal = new Date(), opts = {}) => {
+        const res = claimDailyTask(save, taskId, nowVal, opts);
+        if (res.ok) {
+          persist(true);
+          hub?.refresh?.();
+        }
+        return res;
+      },
+      claimWeeklyChest: (pts, nowVal = new Date(), opts = {}) => {
+        const res = claimWeeklyChest(save, pts, nowVal, opts);
         if (res.ok) {
           applySettings(save.settings);
           persist(true);

@@ -25,6 +25,8 @@ import { createHeroStage } from '../render/menu-scene.js';
 import { openCodex } from './codex.js';
 import { openCosmeticShop } from './cosmetic-shop.js';
 import { openAchievementsModal } from './achievements.js';
+import { openDailyModal } from './daily.js';
+import { getUnclaimedDailyCount } from '../meta/daily.js';
 import { getHubFeatureLock } from './coach.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
@@ -195,11 +197,18 @@ export function renderHub(root, ctx) {
     cloudBtn.textContent = cloudLabelText();
 
     clear(ribbonBox);
+    const lkDaily = getHubFeatureLock(save, 'daily');
+    const unclaimedDaily = lkDaily.locked ? 0 : getUnclaimedDailyCount(save, ctx.now());
     const unclaimedAch = getUnclaimedAchievementCount(save);
     const lkMarket = getHubFeatureLock(save, 'market');
     const lkAch = getHubFeatureLock(save, 'achievements');
     const lkLb = getHubFeatureLock(save, 'leaderboard');
     const lkCoop = getHubFeatureLock(save, 'coop');
+    if (!lkDaily.locked) {
+      ribbonBox.appendChild(
+        ribbonItem('差事', unclaimedDaily > 0 ? `领${unclaimedDaily}` : '周赏', 'open-daily', () => openDaily(), unclaimedDaily, false),
+      );
+    }
     ribbonBox.append(
       ribbonItem('鬼市', lkMarket.locked ? lkMarket.label : '衣冠', 'open-market', () => guardFeature('market', () => openMarket(getActiveHero())), 0, lkMarket.locked),
       ribbonItem('功绩', lkAch.locked ? lkAch.label : (unclaimedAch > 0 ? `领${unclaimedAch}` : '秘器'), 'open-achievements', () => guardFeature('achievements', () => openAchievements()), lkAch.locked ? 0 : unclaimedAch, lkAch.locked),
@@ -475,6 +484,25 @@ export function renderHub(root, ctx) {
     });
   }
 
+  // ───────── 每日差事与周赏供盒 ─────────
+  function openDaily() {
+    return openDailyModal(root, {
+      save,
+      now: () => ctx.now(),
+      adsOn: () => ctx.adsOn(),
+      runAd: (placement) => ctx.runAd(placement),
+      persist: (syncCloud) => {
+        ctx.persist(syncCloud);
+        refresh();
+      },
+      onRewardClaimed: () => {
+        ctx.onCosmeticChange?.();
+        refresh();
+      },
+      onOpenChallenge: ctx.onOpenDailyChallenge ? () => ctx.onOpenDailyChallenge() : null,
+    });
+  }
+
   // ───────── 五更守夜总榜本地荣誉榜（兜底）─────────
   function openLocalLeaderboardFallback() {
     let v;
@@ -728,6 +756,7 @@ export function renderHub(root, ctx) {
     openShop,
     openMarket,
     openAchievements,
+    openDaily,
     openCodex: () => openCodex(root, save),
   };
 }

@@ -117,6 +117,19 @@ export function defaultCoach() {
   };
 }
 
+export function defaultDaily() {
+  return {
+    date: null,
+    progress: {},
+    claimed: [],
+    weekKey: null,
+    weeklyPoints: 0,
+    weeklyClaimed: [],
+    totalTaskClaims: 0,
+    totalWeeklyClaims: 0,
+  };
+}
+
 export function defaultSave() {
   const shop = {};
   for (const id of SHOP_IDS) shop[id] = 0;
@@ -147,6 +160,7 @@ export function defaultSave() {
     charms: [],           // 护身符：[{ relicId }]，开局带一枚，用掉即消耗
     leaderboard: defaultLeaderboard(),
     coach: defaultCoach(),
+    daily: defaultDaily(),
     stats: {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
@@ -515,6 +529,39 @@ export function migrateSave(raw) {
     runsPlayed: Math.max(out.stats.runs, rawCoachRuns, out.stats.firstRunDone ? 1 : 0),
   };
 
+  if (isObj(src.daily)) {
+    const d = src.daily;
+    out.daily.date = isValidDateStr(d.date) ? d.date : null;
+    if (isObj(d.progress)) {
+      const pOut = {};
+      for (const [k, v] of Object.entries(d.progress)) {
+        if (typeof k !== 'string' || !k || k.length >= 40 || FORBIDDEN_KEYS.has(k)) continue;
+        const n = int(v, 0, 0, 1e9);
+        if (n > 0) pOut[k] = n;
+      }
+      out.daily.progress = pOut;
+    }
+    if (Array.isArray(d.claimed)) {
+      const cSet = new Set();
+      for (const id of d.claimed) {
+        if (typeof id === 'string' && id.length > 0 && id.length < 40 && !FORBIDDEN_KEYS.has(id)) cSet.add(id);
+      }
+      out.daily.claimed = [...cSet];
+    }
+    out.daily.weekKey = isValidDateStr(d.weekKey) ? d.weekKey : null;
+    out.daily.weeklyPoints = int(d.weeklyPoints, 0, 0, 99999);
+    if (Array.isArray(d.weeklyClaimed)) {
+      const wSet = new Set();
+      for (const pts of d.weeklyClaimed) {
+        const pn = int(pts, -1, 0, 99999);
+        if ([30, 60, 100, 150].includes(pn)) wSet.add(pn);
+      }
+      out.daily.weeklyClaimed = [...wSet].sort((x, y) => x - y);
+    }
+    out.daily.totalTaskClaims = int(d.totalTaskClaims, 0, 0, 1e9);
+    out.daily.totalWeeklyClaims = int(d.totalWeeklyClaims, 0, 0, 1e9);
+  }
+
   out.version = SAVE_VERSION;
   return out;
 }
@@ -542,6 +589,9 @@ export function isFreshSave(s) {
     && int(s.coins, 0, 0, 1e12) === 0
     && shopSpent(s.shop) === 0
     && int(s.checkin?.totalClaims, 0, 0, 1e9) === 0
+    && int(s.daily?.totalTaskClaims, 0, 0, 1e9) === 0
+    && int(s.daily?.totalWeeklyClaims, 0, 0, 1e9) === 0
+    && int(s.daily?.weeklyPoints, 0, 0, 99999) === 0
     && onlyDefaultHero
     && !extraUnlockedWeapon
     && (Array.isArray(s.charms) ? s.charms.length : 0) === 0
@@ -567,6 +617,8 @@ export function saveProgressScore(s) {
     + (s?.stats?.clears || 0) * 500
     + (s?.stats?.runs || 0) * 25
     + (s?.checkin?.totalClaims || 0) * 60
+    + (s?.daily?.totalTaskClaims || 0) * 80
+    + (s?.daily?.totalWeeklyClaims || 0) * 140
     + Math.floor(s?.stats?.totalPlaySec || 0);
 }
 
@@ -712,6 +764,38 @@ export function mergeSaves(localRaw, remoteRaw) {
   merged.coach = {
     seen: coachSeen,
     runsPlayed: Math.max(a.coach?.runsPlayed || 0, b.coach?.runsPlayed || 0, merged.stats.runs),
+  };
+
+  // 每日差事与周赏供盒合并：按最新日期/周次对齐，同日进度取较大，已领标记并集防重领
+  const da = a.daily || defaultDaily();
+  const db = b.daily || defaultDaily();
+  const newerDaily = (!db.date || (da.date && da.date > db.date)) ? da
+    : (!da.date || (db.date && db.date > da.date)) ? db : null;
+  let dailyDate = newerDaily ? newerDaily.date : da.date;
+  let dailyProg = {};
+  let dailyClaimed = [];
+  if (newerDaily) {
+    dailyProg = { ...newerDaily.progress };
+    dailyClaimed = [...newerDaily.claimed];
+  } else if (dailyDate) {
+    for (const k of new Set([...Object.keys(da.progress || {}), ...Object.keys(db.progress || {})])) {
+      dailyProg[k] = Math.max(da.progress?.[k] || 0, db.progress?.[k] || 0);
+    }
+    dailyClaimed = [...new Set([...(da.claimed || []), ...(db.claimed || [])])];
+  }
+  const newerWeek = (!db.weekKey || (da.weekKey && da.weekKey > db.weekKey)) ? da
+    : (!da.weekKey || (db.weekKey && db.weekKey > da.weekKey)) ? db : null;
+  merged.daily = {
+    date: dailyDate,
+    progress: dailyProg,
+    claimed: dailyClaimed,
+    weekKey: newerWeek ? newerWeek.weekKey : da.weekKey,
+    weeklyPoints: newerWeek ? newerWeek.weeklyPoints : Math.max(da.weeklyPoints || 0, db.weeklyPoints || 0),
+    weeklyClaimed: newerWeek
+      ? [...(newerWeek.weeklyClaimed || [])]
+      : [...new Set([...(da.weeklyClaimed || []), ...(db.weeklyClaimed || [])])].sort((x, y) => x - y),
+    totalTaskClaims: Math.max(da.totalTaskClaims || 0, db.totalTaskClaims || 0),
+    totalWeeklyClaims: Math.max(da.totalWeeklyClaims || 0, db.totalWeeklyClaims || 0),
   };
 
   const histMap = new Map();
