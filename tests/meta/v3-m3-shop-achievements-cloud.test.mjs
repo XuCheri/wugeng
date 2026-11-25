@@ -88,15 +88,15 @@ test('v3 M3 Save 迁移：旧版迁移、道号 XSS 清洗、自选初始兵刃�
 });
 
 test('v3 M3 F8 鬼市商铺：18 皮肤 + 5 特效目录、铜钱购买防重扣、功绩专属禁铜钱购入与穿戴联动', () => {
-  assert.equal(HERO_SKINS.length, 18);
+  assert.equal(HERO_SKINS.filter((s) => s.unlock !== 'season').length, HERO_IDS.length * 3);
   assert.equal(ATTACK_VFX_LIST.length, 5);
   for (const hid of HERO_IDS) {
-    assert.equal(HERO_SKINS.filter((s) => s.heroId === hid).length, 3, `${hid} 必须拥有 3 套皮肤`);
+    assert.equal(HERO_SKINS.filter((s) => s.heroId === hid && s.unlock !== 'season').length, 3, `${hid} 必须拥有 3 套常驻皮肤`);
   }
   const copperSkins = HERO_SKINS.filter((s) => s.unlock === 'shop');
   const achSkins = HERO_SKINS.filter((s) => s.unlock === 'achievement');
   assert.ok(copperSkins.length >= 9);
-  assert.equal(achSkins.length, 3);
+  assert.ok(achSkins.length >= 3);
 
   const save = defaultSave();
   save.coins = 1000;

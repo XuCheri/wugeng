@@ -2153,9 +2153,9 @@ export async function shopBuyAndEquipInModal(page, opts = {}) {
 
     const isAchOnlyCard = (el) => {
       if (!el) return false;
-      if (el.dataset?.unlock === 'achievement' || el.dataset?.source === 'achievement') return true;
+      if (el.dataset?.unlock === 'achievement' || el.dataset?.source === 'achievement' || el.dataset?.unlock === 'season') return true;
       const clean = (el.textContent || '').replace(/,/g, '');
-      return /功绩|成就/.test(clean) && !/铜钱/.test(clean);
+      return /功绩|成就|守夜令得/.test(clean) && !/铜钱/.test(clean);
     };
 
     const isDefaultCard = (el) => {

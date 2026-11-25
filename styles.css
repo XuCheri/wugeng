@@ -3416,6 +3416,155 @@ p { margin: 0; }
   color: var(--ink);
 }
 
+/* ───────── 守夜令 30 档通行证与血月守夜（v4 M3.3 · 6色木版规范） ───────── */
+.season-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.season-head-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 11px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1.4px var(--verm);
+  border-radius: 8px;
+}
+.season-head-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.season-badge {
+  display: inline-block;
+  font-size: 15px;
+  letter-spacing: .1em;
+  color: var(--lantern);
+}
+.season-sub {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--paper-shade);
+  opacity: .88;
+}
+.season-tier-num {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.season-tier-num b {
+  font-weight: 400;
+  font-size: 24px;
+  color: var(--paper);
+  line-height: 1;
+}
+.season-tier-num small {
+  font-size: 11px;
+  color: var(--lantern);
+}
+.season-xp-bar {
+  background: rgba(239, 230, 210, .18);
+  height: 6px;
+}
+.season-head-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--paper-shade);
+}
+.season-head-card__foot .link-btn {
+  color: var(--lantern);
+  font-size: 11.5px;
+}
+.season-final-hint {
+  color: var(--lantern);
+}
+.season-rule-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1.2px var(--ink);
+  border-radius: 8px;
+}
+.season-rule-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.season-rule-card__title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--verm-dark);
+}
+.season-rule-card__desc {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink);
+  opacity: .85;
+  line-height: 1.35;
+}
+.season-rule-toggle {
+  flex-shrink: 0;
+}
+.season-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 2px;
+}
+.season-title-bar[hidden] {
+  display: none;
+}
+.season-title-bar__label {
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.season-title-chip {
+  min-height: 30px;
+  padding: 3px 9px;
+  flex: 0 0 auto;
+}
+.season-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.season-tier.is-milestone {
+  background: var(--lantern-14);
+  box-shadow: inset 0 0 0 1.3px var(--verm-dark);
+}
+.season-tier.is-ready {
+  box-shadow: inset 0 0 0 1.7px var(--verm);
+}
+.season-tier.is-claimed {
+  opacity: .72;
+}
+.season-tier__lock {
+  font-size: 11px;
+  color: var(--ink);
+  opacity: .66;
+  white-space: nowrap;
+}
+.season-foot-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
 @media (max-width: 370px) {
   .coop-party-grid { grid-template-columns: 1fr; }
   .dc-loadout { grid-template-columns: 1fr; }
@@ -3430,6 +3579,7 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
 
 
 

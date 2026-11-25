@@ -308,6 +308,40 @@ function drawZhouImperialBell(g, f) {
   return { handX: 9.8, handY: -12.5 };
 }
 
+function drawZhouBloodmoon(g, f) {
+  // 脑后高悬巨型蚀日血月弯轮 + 金芒外环
+  circ(g, 0, -31, 14.2);
+  fillStroke(g, VERM, 1.4, INK);
+  circ(g, 3.2, -32.2, 9.6);
+  fillStroke(g, INK, 1.0, MINERAL.goldLight);
+
+  // 对称张开的锯齿燕尾朱墨血月大氅（双翼垂落至 x=±20, y=+2）
+  poly(g, [[-8, -20], [8, -20], [20, -2], [13, 2.2], [7, -2.5], [0, 2.4], [-7, -2.5], [-13, 2.2], [-20, -2]]);
+  fillStroke(g, INK, 1.3, VERM);
+  poly(g, [[-6.2, -19], [6.2, -19], [13.5, -5], [0, -2], [-13.5, -5]]);
+  fillStroke(g, VERM_DARK, 1.0, MINERAL.gold);
+
+  drawLegs(g, f, INK, 3.0);
+
+  // 胸前赤月镇夜铜镜护心与金束带
+  poly(g, [[-8.5, -12.2], [8.5, -12.2], [9, -9.6], [-9, -9.6]]);
+  fillStroke(g, MINERAL.gold, 1.0, INK);
+  circ(g, 0, -14.2, 3.1);
+  fillStroke(g, VERM, 1.0, MINERAL.goldLight);
+  line(g, 5, -17.5, 11.2, -12.8, 2.7, INK);
+
+  drawFace(g, -23, 3.8, PAPER, VERM);
+
+  // 玄铁血月双弯角压檐斗笠
+  poly(g, [[-15.5, -24.2], [0, -35.8], [15.5, -24.2], [0, -22.2]]);
+  fillStroke(g, INK, 1.3, VERM);
+  poly(g, [[-5, -31], [-11, -42], [-1.8, -33.5]]);
+  fillStroke(g, VERM, 1.0, MINERAL.goldLight);
+  poly(g, [[5, -31], [11, -42], [1.8, -33.5]]);
+  fillStroke(g, VERM, 1.0, MINERAL.goldLight);
+  return { handX: 11.2, handY: -12.8 };
+}
+
 /* ------------------------------------------------------------------ */
 /* 2. 巧手阿绵 (mian) 三套皮肤                                          */
 /* ------------------------------------------------------------------ */
@@ -841,6 +875,7 @@ const SKIN_DRAWERS = {
   zhou_default: (g, f, outfit) => drawZhouDefault(g, f, outfit),
   zhou_jade_watch: (g, f) => drawZhouJadeWatch(g, f),
   zhou_imperial_bell: (g, f) => drawZhouImperialBell(g, f),
+  zhou_bloodmoon: (g, f) => drawZhouBloodmoon(g, f),
 
   mian_default: (g, f, outfit) => drawMianDefault(g, f, outfit),
   mian_azure_bride: (g, f) => drawMianAzureBride(g, f),
@@ -902,7 +937,15 @@ function drawSkinLantern(g, normSkinId, legacyStyle) {
   }
 
   // 矿物重彩异形宝灯
-  if (normSkinId.includes('jade')) {
+  if (normSkinId.includes('bloodmoon')) {
+    // 蚀日赤月琉璃灯
+    circ(g, 0, 8, 5.8);
+    fillStroke(g, VERM, 1.2, INK);
+    circ(g, 1.5, 7.4, 3.4);
+    fillStroke(g, INK, 0.8, MINERAL.goldLight);
+    poly(g, [[-1.6, 13.6], [1.6, 13.6], [2.4, 18.2], [-2.4, 18.2]]);
+    fillStroke(g, MINERAL.gold, 0.8, INK);
+  } else if (normSkinId.includes('jade')) {
     // 六棱青铜幽火方鼎灯
     poly(g, [[-4.8, 3.2], [4.8, 3.2], [6.2, 7.5], [4.2, 12.2], [-4.2, 12.2], [-6.2, 7.5]]);
     fillStroke(g, MINERAL.jadeLight, 1.1, INK);
@@ -952,7 +995,19 @@ export function skinFootAuraSprite(heroId, skinId = null) {
   return bakeSkin(`saura_${normId}`, 76, 42, 38, 21, (g) => {
     g.save();
     g.scale(1, 0.52);
-    if (normId.includes('jade')) {
+    if (normId.includes('bloodmoon')) {
+      // 血月十二芒镇街赤轮阵
+      circ(g, 0, 0, 31);
+      strokeCfg(g, 2.8, VERM);
+      g.stroke();
+      poly(g, Array.from({ length: 12 }, (_, i) => {
+        const a = (i / 12) * TAU;
+        const r = i % 2 === 0 ? 29 : 18;
+        return [Math.cos(a) * r, Math.sin(a) * r];
+      }));
+      strokeCfg(g, 2.1, MINERAL.goldLight);
+      g.stroke();
+    } else if (normId.includes('jade')) {
       // 石绿四方步罡回纹阵
       strokeCfg(g, 2.6, MINERAL.jade);
       g.strokeRect(-26, -26, 52, 52);

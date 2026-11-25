@@ -25,6 +25,14 @@ import {
   getDailyChallengeState,
   recordDailyChallengeRun,
 } from './meta/daily-challenge.js';
+import {
+  buildSeasonRunRules,
+  claimAllSeasonTiers,
+  claimSeasonTier,
+  getSeasonState,
+  recordSeasonRun,
+  setSeasonRuleActive,
+} from './meta/season.js';
 import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
 import { createLeaderboard } from './meta/leaderboard.js';
@@ -423,13 +431,14 @@ export async function startApp(bootOpts = {}) {
       ?? null;
     const chosenPool = unlockedWeapons
       ?? (Array.isArray(save.unlockedWeapons) ? save.unlockedWeapons : null);
+    const effectiveRules = runRules || (!coopParty ? buildSeasonRunRules(save, new Date()) : null);
     lastStart = {
       heroId,
       startWeapon: chosenStart,
       unlockedWeapons: chosenPool,
       nightLevel,
-      seed: runRules?.mode === 'daily' ? seed : undefined,
-      runRules,
+      seed: effectiveRules?.mode === 'daily' ? seed : undefined,
+      runRules: effectiveRules?.mode === 'daily' ? effectiveRules : null,
     };
     setScreen(null, 'battle');
     finished = false;
@@ -447,7 +456,7 @@ export async function startApp(bootOpts = {}) {
       coop: coopParty,
       skinId: p0Skin,
       attackVfx: p0Vfx,
-      runRules,
+      runRules: effectiveRules,
     });
     if (syncCodexFromRun(save, r)) persist(false);
     runUI.mountHud();
@@ -471,6 +480,10 @@ export async function startApp(bootOpts = {}) {
     const nowTs = Date.now();
     const recorded = recordRun(save, summary, nowTs);
     recordDailyRun(save, summary, nowTs);
+    const seasonRes = recordSeasonRun(save, summary, nowTs);
+    if (summary.seasonRuleActive && seasonRes.seasonScore > 0) {
+      leaderboard.submitSeasonScore(seasonRes.seasonScore, save);
+    }
     let dcResult = null;
     if (summary.isDailyChallenge) {
       dcResult = recordDailyChallengeRun(save, summary, summary.dailyDate || nowTs);
@@ -495,7 +508,11 @@ export async function startApp(bootOpts = {}) {
       adsOn: () => adsEnabled(),
       runAd,
       onDouble: (amount) => { const add = grantDoubleCoins(save, amount); persist(true); return add; },
-      onLeaderboard: () => openLeaderboard(summary.isDailyChallenge ? { initialBoard: 'daily' } : 'public'),
+      onLeaderboard: () => openLeaderboard(
+        summary.isDailyChallenge ? { initialBoard: 'daily' }
+          : summary.seasonRuleActive ? { initialBoard: 'season' }
+            : 'public',
+      ),
       onHub: () => showHub(),
       onAgain: () => { game.clear(); startRun({ ...(lastStart || {}), charm: null }); },
     });
@@ -563,6 +580,33 @@ export async function startApp(bootOpts = {}) {
       getSpec: (nowVal = new Date()) => getDailyChallengeSpec(nowVal),
       getState: (nowVal = new Date()) => getDailyChallengeState(save, nowVal),
       start: (nowVal = new Date()) => startDailyChallenge(nowVal),
+    },
+    season: {
+      getState: (nowVal = new Date()) => getSeasonState(save, nowVal),
+      setRuleActive: (active, nowVal = new Date()) => {
+        const next = setSeasonRuleActive(save, active, nowVal);
+        persist(false);
+        hub?.refresh?.();
+        return next;
+      },
+      claimTier: (tier, nowVal = new Date()) => {
+        const res = claimSeasonTier(save, tier, nowVal);
+        if (res.ok) {
+          applySettings(save.settings);
+          persist(true);
+          hub?.refresh?.();
+        }
+        return res;
+      },
+      claimAll: (nowVal = new Date()) => {
+        const res = claimAllSeasonTiers(save, nowVal);
+        if (res.ok) {
+          applySettings(save.settings);
+          persist(true);
+          hub?.refresh?.();
+        }
+        return res;
+      },
     },
     showHub,
     startRun,

@@ -250,12 +250,12 @@ export function openCosmeticShop(root, {
       }, isDef ? '穿戴原装' : '穿戴');
     }
 
-    if (skin.unlock === 'achievement') {
+    if (skin.unlock === 'achievement' || skin.unlock === 'season') {
       return h('button', {
         type: 'button',
         class: 'btn btn--ghost btn--small market-btn',
         disabled: true,
-      }, '功绩解锁');
+      }, skin.unlock === 'season' ? '守夜令得' : '功绩解锁');
     }
 
     const canAfford = (save.coins || 0) >= skin.price;
@@ -521,9 +521,10 @@ export function openCosmeticShop(root, {
   function mountGridList() {
     clear(gridBox);
     if (tab === 'skin') {
+      const visibleSkins = HERO_SKINS.filter((s) => s.unlock !== 'season' || isCosmeticOwned(save, s.id));
       const list = heroFilter === 'all'
-        ? HERO_SKINS
-        : HERO_SKINS.filter((s) => s.heroId === heroFilter);
+        ? visibleSkins
+        : visibleSkins.filter((s) => s.heroId === heroFilter);
       for (const skin of list) {
         gridBox.appendChild(ensureSkinCard(skin).card);
       }

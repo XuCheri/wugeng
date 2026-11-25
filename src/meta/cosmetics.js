@@ -113,6 +113,19 @@ export const HERO_SKINS = [
     achievementId: 'night5',
     mineral: 'violet_gold',
   },
+  {
+    id: 'zhou_bloodmoon',
+    heroId: 'zhou',
+    tier: 3,
+    name: '老周·血月',
+    subtitle: '赤月背轮·玄衣大氅',
+    desc: '背后高悬血月金轮，身披玄墨朱砂阔摆大氅，手提赤月宝灯踏血月法阵。',
+    price: 0,
+    unlock: 'season',
+    seasonId: 's1',
+    achievementId: null,
+    mineral: 'bloodmoon',
+  },
 
   // 2. 巧手阿绵 (mian)
   {
@@ -422,8 +435,8 @@ export function buyCosmetic(save, itemId) {
       : null;
   if (!def) return { ok: false, reason: 'unknown' };
   if (isCosmeticOwned(save, itemId)) return { ok: true, alreadyOwned: true, price: 0 };
-  if (def.unlock === 'achievement' && !(def.price > 0)) {
-    return { ok: false, reason: 'achievement_only' };
+  if ((def.unlock === 'achievement' || def.unlock === 'season') && !(def.price > 0)) {
+    return { ok: false, reason: def.unlock === 'season' ? 'season_only' : 'achievement_only' };
   }
   const price = Math.max(0, Math.floor(def.price || 0));
   const curCoins = Number.isFinite(save.coins) ? Math.floor(save.coins) : 0;

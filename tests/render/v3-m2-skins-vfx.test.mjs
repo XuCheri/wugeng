@@ -167,7 +167,7 @@ test('F1 boot-intro 查询参数解析：?skipIntro=1、?introHold=loading|logo 
 });
 
 test('F5/F6 cosmetics.js：18 套角色皮肤（6×3）+ 5 套攻击特效目录、购买/穿戴闭环与防刷钱计价', () => {
-  assert.equal(HERO_SKINS.length, 18);
+  assert.equal(HERO_SKINS.filter((s) => s.unlock !== 'season').length, HERO_IDS.length * 3);
   assert.deepEqual(ATTACK_VFX_IDS, [
     'default',
     'jade_ghostfire',
@@ -176,8 +176,8 @@ test('F5/F6 cosmetics.js：18 套角色皮肤（6×3）+ 5 套攻击特效目录
     'frost_moon',
   ]);
   for (const hid of HERO_IDS) {
-    const list = HERO_SKINS_BY_HERO[hid];
-    assert.equal(list.length, 3, `英雄 ${hid} 应有 3 套皮肤`);
+    const list = HERO_SKINS_BY_HERO[hid].filter((s) => s.unlock !== 'season');
+    assert.equal(list.length, 3, `英雄 ${hid} 应有 3 套常驻皮肤`);
     assert.equal(list[0].id, `${hid}_default`);
     assert.equal(list[0].unlock, 'default');
     assert.equal(list[0].price, 0);
@@ -278,7 +278,7 @@ test('F5 skins.js：52×58 离屏画布 18 套角色皮肤两两互异，原装�
       });
       assert.ok(stage.ops.length > 6);
     }
-    assert.equal(sigs.size, 18, '全部 18 套角色皮肤离屏绘制流必须两两唯一');
+    assert.equal(sigs.size, HERO_SKINS.length, '全部角色皮肤离屏绘制流必须两两唯一');
   } finally {
     clearSpriteCache();
     if (prevOC === undefined) delete globalThis.OffscreenCanvas;

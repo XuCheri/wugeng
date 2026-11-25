@@ -7,6 +7,7 @@ import {
   cosmeticShopCount,
   cosmeticShopSpent,
 } from './cosmetics.js';
+import { SEASONS, SEASONS_BY_ID, SEASON_TITLE_IDS } from './season-config.js';
 
 export const SAVE_KEY = 'wugeng.save';
 export const SAVE_VERSION = 4;
@@ -143,6 +144,21 @@ export function defaultDailyChallenge() {
   };
 }
 
+export function defaultSeason() {
+  return {
+    seasonId: SEASONS[0]?.id || 's1',
+    xp: 0,
+    claimedTiers: [],
+    activeRule: false,
+    bestSeasonScore: 0,
+    pendingScore: 0,
+    ownedTitles: [],
+    selectedTitle: '',
+    totalTierClaims: 0,
+    history: [],
+  };
+}
+
 export function defaultSave() {
   const shop = {};
   for (const id of SHOP_IDS) shop[id] = 0;
@@ -175,6 +191,7 @@ export function defaultSave() {
     coach: defaultCoach(),
     daily: defaultDaily(),
     dailyChallenge: defaultDailyChallenge(),
+    season: defaultSeason(),
     stats: {
       runs: 0, clears: 0, firstRunDone: false, totalPlaySec: 0,
       bestTimeSec: 0, bestKills: 0, bestHit: 0, totalKills: 0, totalCoins: 0,
@@ -609,6 +626,44 @@ export function migrateSave(raw) {
     }
   }
 
+  if (isObj(src.season)) {
+    const sn = src.season;
+    const defSid = SEASONS[0]?.id || 's1';
+    out.season.seasonId = typeof sn.seasonId === 'string' && Object.hasOwn(SEASONS_BY_ID, sn.seasonId) ? sn.seasonId : defSid;
+    const sCfg = SEASONS_BY_ID[out.season.seasonId] || SEASONS[0];
+    const maxTier = Math.max(1, Number(sCfg?.passTiers) || 30);
+    out.season.xp = int(sn.xp, 0, 0, 1e9);
+    if (Array.isArray(sn.claimedTiers)) {
+      const tSet = new Set();
+      for (const t of sn.claimedTiers) {
+        const tn = int(t, -1, 1, maxTier);
+        if (tn >= 1 && tn <= maxTier) tSet.add(tn);
+      }
+      out.season.claimedTiers = [...tSet].sort((x, y) => x - y);
+    }
+    out.season.activeRule = bool(sn.activeRule, false);
+    out.season.bestSeasonScore = int(sn.bestSeasonScore, 0, 0, 1e12);
+    out.season.pendingScore = int(sn.pendingScore, 0, 0, 1e12);
+    if (Array.isArray(sn.ownedTitles)) {
+      const ttlSet = new Set();
+      for (const tid of sn.ownedTitles) {
+        if (typeof tid === 'string' && SEASON_TITLE_IDS.includes(tid)) ttlSet.add(tid);
+      }
+      out.season.ownedTitles = [...ttlSet];
+    }
+    out.season.selectedTitle = typeof sn.selectedTitle === 'string' && out.season.ownedTitles.includes(sn.selectedTitle)
+      ? sn.selectedTitle
+      : '';
+    out.season.totalTierClaims = int(sn.totalTierClaims, 0, 0, 1e9);
+    out.season.history = sanitizeLeaderboardHistory(sn.history);
+
+    if (out.season.claimedTiers.includes(maxTier) && sCfg?.finalReward?.type === 'skin' && isValidNonDefaultCosmeticId(sCfg.finalReward.id)) {
+      if (!out.cosmetics.owned.includes(sCfg.finalReward.id)) {
+        out.cosmetics.owned.push(sCfg.finalReward.id);
+      }
+    }
+  }
+
   out.version = SAVE_VERSION;
   return out;
 }
@@ -641,6 +696,9 @@ export function isFreshSave(s) {
     && int(s.daily?.weeklyPoints, 0, 0, 99999) === 0
     && int(s.dailyChallenge?.totalRewardClaims, 0, 0, 1e9) === 0
     && int(s.dailyChallenge?.bestScore, 0, 0, 1e12) === 0
+    && int(s.season?.xp, 0, 0, 1e9) === 0
+    && int(s.season?.totalTierClaims, 0, 0, 1e9) === 0
+    && (Array.isArray(s.season?.ownedTitles) ? s.season.ownedTitles.length : 0) === 0
     && onlyDefaultHero
     && !extraUnlockedWeapon
     && (Array.isArray(s.charms) ? s.charms.length : 0) === 0
@@ -669,6 +727,8 @@ export function saveProgressScore(s) {
     + (s?.daily?.totalTaskClaims || 0) * 80
     + (s?.daily?.totalWeeklyClaims || 0) * 140
     + (s?.dailyChallenge?.totalRewardClaims || 0) * 200
+    + (s?.season?.totalTierClaims || 0) * 65
+    + Math.floor((s?.season?.xp || 0) * 0.2)
     + Math.floor(s?.stats?.totalPlaySec || 0);
 }
 
@@ -871,6 +931,49 @@ export function mergeSaves(localRaw, remoteRaw) {
     pendingScore: Math.max(dca.pendingScore || 0, dcb.pendingScore || 0),
     history: mergedDcHist,
   };
+
+  const sna = a.season || defaultSeason();
+  const snb = b.season || defaultSeason();
+  const pSn = primary.season || defaultSeason();
+  const sSn = secondary.season || defaultSeason();
+  const sameSid = sna.seasonId === snb.seasonId;
+  const mergedTitles = [...new Set([...(sna.ownedTitles || []), ...(snb.ownedTitles || [])])]
+    .filter((t) => SEASON_TITLE_IDS.includes(t));
+  const pickedTitle = (pSn.selectedTitle && mergedTitles.includes(pSn.selectedTitle) ? pSn.selectedTitle : sSn.selectedTitle) || '';
+  const snHistMap = new Map();
+  if (sameSid) {
+    for (const item of [...(sna.history || []), ...(snb.history || [])]) {
+      const key = `${item.score}|${item.heroId}|${item.at}`;
+      if (!snHistMap.has(key)) snHistMap.set(key, item);
+    }
+  } else {
+    for (const item of (pSn.history || [])) {
+      const key = `${item.score}|${item.heroId}|${item.at}`;
+      if (!snHistMap.has(key)) snHistMap.set(key, item);
+    }
+  }
+  merged.season = {
+    seasonId: pSn.seasonId || SEASONS[0]?.id || 's1',
+    xp: sameSid ? Math.max(sna.xp || 0, snb.xp || 0) : (pSn.xp || 0),
+    claimedTiers: sameSid
+      ? [...new Set([...(sna.claimedTiers || []), ...(snb.claimedTiers || [])])].sort((x, y) => x - y)
+      : [...(pSn.claimedTiers || [])],
+    activeRule: Boolean(pSn.activeRule),
+    bestSeasonScore: sameSid ? Math.max(sna.bestSeasonScore || 0, snb.bestSeasonScore || 0) : (pSn.bestSeasonScore || 0),
+    pendingScore: sameSid ? Math.max(sna.pendingScore || 0, snb.pendingScore || 0) : (pSn.pendingScore || 0),
+    ownedTitles: mergedTitles,
+    selectedTitle: mergedTitles.includes(pickedTitle) ? pickedTitle : '',
+    totalTierClaims: Math.max(sna.totalTierClaims || 0, snb.totalTierClaims || 0),
+    history: sanitizeLeaderboardHistory([...snHistMap.values()]),
+  };
+  const mergedSeasonCfg = SEASONS_BY_ID[merged.season.seasonId] || SEASONS[0];
+  const mergedMaxTier = Math.max(1, Number(mergedSeasonCfg?.passTiers) || 30);
+  if (merged.season.claimedTiers.includes(mergedMaxTier)
+      && mergedSeasonCfg?.finalReward?.type === 'skin'
+      && isValidNonDefaultCosmeticId(mergedSeasonCfg.finalReward.id)
+      && !merged.cosmetics.owned.includes(mergedSeasonCfg.finalReward.id)) {
+    merged.cosmetics.owned.push(mergedSeasonCfg.finalReward.id);
+  }
 
   const histMap = new Map();
   for (const item of [...a.leaderboard.history, ...b.leaderboard.history]) {

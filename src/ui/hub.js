@@ -26,8 +26,10 @@ import { openCodex } from './codex.js';
 import { openCosmeticShop } from './cosmetic-shop.js';
 import { openAchievementsModal } from './achievements.js';
 import { openDailyModal, openDailyChallengeModal } from './daily.js';
+import { openSeasonModal } from './season.js';
 import { getUnclaimedDailyCount } from '../meta/daily.js';
 import { getDailyChallengeState } from '../meta/daily-challenge.js';
+import { getSeasonState } from '../meta/season.js';
 import { getHubFeatureLock } from './coach.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩' };
@@ -195,7 +197,9 @@ export function renderHub(root, ctx) {
 
   function refreshHeaderAndRibbon() {
     clear(coinBox).appendChild(coinTag(save.coins, true));
-    daoEl.textContent = save.daoName || '守夜打更人';
+    const snSt = getSeasonState(save, ctx.now());
+    const baseDao = save.daoName || '守夜打更人';
+    daoEl.textContent = snSt.selectedTitleName ? `${baseDao}·${snSt.selectedTitleName}` : baseDao;
     subLineEl.textContent = statLine(save);
     cloudBtn.textContent = cloudLabelText();
 
@@ -212,15 +216,28 @@ export function renderHub(root, ctx) {
     if (!lkDaily.locked) {
       const dcSt = getDailyChallengeState(save, ctx.now());
       const dcRuleShort = dcSt.rules.map((r) => r.name).join('·');
-      dailyStripBox.appendChild(h('button', {
-        type: 'button',
-        class: `hub-daily-pill${dcSt.canEarnFirstReward ? ' has-reward' : ''}`,
-        dataset: { action: 'open-daily-challenge' },
-        onClick: () => openDailyChallenge(),
-      },
-      h('i', { class: 'stamp stamp--xs' }, '异'),
-      h('span', { class: 'hub-daily-pill__txt' }, `今日异事 · ${heroInfo(dcSt.heroId).short}`),
-      h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? '首胜+200钱' : (dcRuleShort || '试手冲榜'))));
+      dailyStripBox.append(
+        h('button', {
+          type: 'button',
+          class: `hub-daily-pill${dcSt.canEarnFirstReward ? ' has-reward' : ''}`,
+          dataset: { action: 'open-daily-challenge' },
+          onClick: () => openDailyChallenge(),
+        },
+        h('i', { class: 'stamp stamp--xs' }, '异'),
+        h('span', { class: 'hub-daily-pill__txt' }, `今日异事 · ${heroInfo(dcSt.heroId).short}`),
+        h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? '首胜+200钱' : (dcRuleShort || '试手冲榜'))),
+        h('button', {
+          type: 'button',
+          class: `hub-daily-pill${snSt.claimableCount > 0 || snSt.activeRule ? ' has-reward' : ''}`,
+          dataset: { action: 'open-season' },
+          onClick: () => openSeason(),
+        },
+        h('i', { class: 'stamp stamp--xs' }, '令'),
+        h('span', { class: 'hub-daily-pill__txt' }, `守夜令·${snSt.season.name}`),
+        h('small', { class: 'hub-daily-pill__sub' }, snSt.claimableCount > 0
+          ? `领${snSt.claimableCount}档`
+          : snSt.activeRule ? '血月已开' : `${snSt.currentTier}/${snSt.maxTier}档`)),
+      );
 
       ribbonBox.appendChild(
         ribbonItem('差事', unclaimedDaily > 0 ? `领${unclaimedDaily}` : '周赏', 'open-daily', () => openDaily(), unclaimedDaily, false),
@@ -547,6 +564,27 @@ export function renderHub(root, ctx) {
     });
   }
 
+  // ───────── 守夜令（30档免费通行证与血月守夜）─────────
+  function openSeason() {
+    return openSeasonModal(root, {
+      save,
+      now: () => ctx.now(),
+      persist: (syncCloud) => {
+        ctx.persist(syncCloud);
+        refresh();
+      },
+      onSeasonChange: () => {
+        ctx.onCosmeticChange?.();
+        refresh();
+        stageCtl?.triggerBurst();
+      },
+      onOpenBoard: () => {
+        if (ctx.onOpenLeaderboard) ctx.onOpenLeaderboard({ initialBoard: 'season' });
+        else openLocalLeaderboardFallback();
+      },
+    });
+  }
+
   // ───────── 五更守夜总榜本地荣誉榜（兜底）─────────
   function openLocalLeaderboardFallback() {
     let v;
@@ -802,6 +840,7 @@ export function renderHub(root, ctx) {
     openAchievements,
     openDaily,
     openDailyChallenge,
+    openSeason,
     openCodex: () => openCodex(root, save),
   };
 }
