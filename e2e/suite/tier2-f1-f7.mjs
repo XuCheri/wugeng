@@ -786,6 +786,8 @@ export const TIER2_F1_F7 = [
             });
           }
           let maxAlive = 0;
+          window.__e2eStepFrames(2, { stopOnOverlay: false });
+          maxAlive = Math.max(maxAlive, r.enemies.filter((e) => !e.dead).length);
           const t0 = performance.now();
           for (let f = 0; f < 10; f++) {
             window.__e2eStepFrames(1, { stopOnOverlay: false });

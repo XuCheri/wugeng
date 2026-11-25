@@ -188,6 +188,13 @@ function syncUnlockedHeroSignatureWeapons(save) {
       const sig = HERO_START_WEAPON[h];
       if (sig && WEAPON_IDS.includes(sig) && !save.unlockedWeapons.includes(sig)) {
         save.unlockedWeapons.push(sig);
+        if (
+          isPlainObj(save.starterWeaponByHero) &&
+          canWriteProp(save.starterWeaponByHero, h) &&
+          (!save.starterWeaponByHero[h] || save.starterWeaponByHero[h] === 'gong')
+        ) {
+          save.starterWeaponByHero[h] = sig;
+        }
       }
     }
   } else if (save.unlockedWeapons === undefined && canWriteProp(save, 'unlockedWeapons')) {

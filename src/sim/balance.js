@@ -117,7 +117,7 @@ export const ENEMIES = {
   water_lurker: { name: '沉水鬼', hp: 46, speed: 58, dmg: 11, r: 13, xp: 2.1 },
   paper_raft: { name: '浮木纸妖', hp: 62, speed: 74, dmg: 10, r: 16, xp: 2.4 },
   water_puller: { name: '拉脚水怪', hp: 50, speed: 60, dmg: 9, r: 12, xp: 2.2 },
-  horse: { name: '纸马将军', hp: 2800, speed: 60, dmg: 13, r: 30, xp: 38, boss: true },
+  horse: { name: '纸马将军', hp: 2800, speed: 58, dmg: 11, r: 30, xp: 38, boss: true },
   umbrella: { name: '无面伞女', hp: 58000, speed: 52, dmg: 38, r: 28, xp: 75, boss: true },
   youshen: { name: '夜游神', hp: 176000, speed: 58, dmg: 79, r: 40, xp: 0, boss: true },
   hebo_wedding: { name: '河神夜婚', hp: 168000, speed: 56, dmg: 76, r: 38, xp: 0, boss: true },
@@ -154,13 +154,13 @@ export const ENEMY_AI = {
   cinder: { fuseTime: 0.90, blastRadius: 68, enemyBlastMul: 1.5, playerBlastDmg: 17 },
   // 纸射手：停在中距，0.8s 朱砂准线预警后射出 3 连纸镖逼玩家横移
   archer_ghost: {
-    preferMin: 155, preferMax: 235, fireCd: 2.35, firstFireMin: 0.75, firstFireMax: 1.35,
+    preferMin: 155, preferMax: 235, fireCd: 2.85, firstFireMin: 0.90, firstFireMax: 1.50,
     windup: 0.80, shots: 3, spread: 0.16, fireRange: 365, telegraphLen: 305, telegraphWidth: 14,
-    bulletSpeed: 280, bulletDmg: 16, bulletR: 6, bulletLife: 2.4, bulletStyle: 'paperDart',
+    bulletSpeed: 265, bulletDmg: 10, bulletR: 6, bulletLife: 2.4, bulletStyle: 'paperDart',
   },
   // 爆竹童子：疾奔至近身后定身 1.0s 引信灼亮再范围自爆，同时炸伤周围其他邪祟
   firecracker_boy: {
-    triggerDist: 56, fuseTime: 1.0, blastRadius: 74, enemyBlastMul: 1.85, playerBlastDmg: 20,
+    triggerDist: 56, fuseTime: 1.0, blastRadius: 74, enemyBlastMul: 1.85, playerBlastDmg: 14,
   },
   // 剪纸双生：死亡分裂成 2 个小体，小体死亡再分裂一次（最多 2 层）
   twin_paper: {
@@ -269,7 +269,7 @@ export const SPAWN = {
   bossSpawnMul: 0.55, // 精英夜主在场时刷怪倍率
   youshenSpawnMul: 0.45,
   minuteHpGrowth: 0.37, // 经模拟器校准，使非 Boss 时段压力比落在 0.60–0.95
-  minuteHpGrowth2: 0.126,
+  minuteHpGrowth2: 0.114,
   nightHpGrowth: 0.15, // HP × (1 + 0.15N)
   rateA: 1.52,
   rateB: 0.62,

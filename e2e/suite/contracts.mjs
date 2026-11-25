@@ -5,7 +5,7 @@ export const FEATURE_IDS = [
   'F1', 'F2', 'F3', 'F4', 'F5',
   'F6', 'F7', 'F8', 'F9', 'F10',
   'F11', 'F12', 'F13', 'F14', 'F15',
-  'F16', 'F17', 'F18', 'F19',
+  'F16', 'F17', 'F18', 'F19', 'F20',
 ];
 
 export const FEATURE_TITLES = {
@@ -28,6 +28,7 @@ export const FEATURE_TITLES = {
   F17: 'v4 M2 局内玩法（4 种新邪祟、每更随机异事、20 对兵刃法器开光、留签弃签强化）',
   F18: 'v4 M3 留存系统（每日差事与周赏供盒、每日异事挑战、血月守夜令 30 档与副榜回退）',
   F19: 'v4 M4 真·互联网联机（TapTap 多人联机 SDK、100ms 确定性锁步、独立三选一、断线 AI 接管与状态哈希校准）',
+  F20: 'v4 M5 新地图「河灯水口」、三阶段夜主「河神夜婚」与新守夜人「芦二娘」「钱算子」',
 };
 
 export const MAX_WEAPONS = 6;
@@ -78,6 +79,8 @@ export const V3_NEW_WEAPON_IDS = [
 export const V3_WEAPON_IDS = V3_NEW_WEAPON_IDS;
 export const V4_NEW_WEAPON_IDS = [
   'mourning_staff', 'sky_lantern', 'carpenter_line', 'luopan_slip',
+];
+export const V4_M5_WEAPON_IDS = [
   'bamboo_pole', 'gold_abacus',
 ];
 export const ACHIEVEMENT_WEAPON_IDS = ['taomujian', 'zhinian_kite'];
@@ -89,6 +92,7 @@ export const ALL_WEAPON_IDS = [
   ...NEW_WEAPON_IDS,
   ...V3_NEW_WEAPON_IDS,
   ...V4_NEW_WEAPON_IDS,
+  ...V4_M5_WEAPON_IDS,
 ];
 
 export const V3_BASE_WEAPON_NAMES = {
@@ -121,6 +125,8 @@ export const V3_NEW_RELIC_IDS = [
 export const V3_RELIC_IDS = V3_NEW_RELIC_IDS;
 export const V4_NEW_RELIC_IDS = [
   'altar_mirror', 'lamp_oil', 'folk_rice', 'cinnabar_pen',
+];
+export const V4_M5_RELIC_IDS = [
   'straw_cape', 'ledger_book',
 ];
 export const ALL_RELIC_IDS = [
@@ -128,6 +134,7 @@ export const ALL_RELIC_IDS = [
   ...NEW_RELIC_IDS,
   ...V3_NEW_RELIC_IDS,
   ...V4_NEW_RELIC_IDS,
+  ...V4_M5_RELIC_IDS,
 ];
 
 export const V3_RELIC_NAMES = {

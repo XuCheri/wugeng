@@ -385,20 +385,40 @@ async function main() {
   let browser = null;
   const warmSlots = [];
 
-  try {
-    server = await startStaticServer(ROOT);
-    browser = await chromium.launch({
+  const launchChromium = () =>
+    chromium.launch({
       executablePath: CHROME_EXECUTABLE,
       args: [
         '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
+        '--mute-audio',
         '--autoplay-policy=no-user-gesture-required',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
       ],
     });
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const recycleBrowserProcess = async (settleMs = 300) => {
+    for (const s of warmSlots) {
+      s.tainted = true;
+      try { await s.close(); } catch {}
+    }
+    if (browser) {
+      try { await browser.close(); } catch {}
+    }
+    if (settleMs > 0) await sleep(settleMs);
+    browser = await launchChromium();
+    if (settleMs > 0) await sleep(120);
+    for (const s of warmSlots) {
+      s.browser = browser;
+    }
+  };
+
+  try {
+    server = await startStaticServer(ROOT);
+    browser = await launchChromium();
 
     const poolSize = Math.min(opts.concurrency, selected.length);
     warmSlots.push(
@@ -416,7 +436,10 @@ async function main() {
     const tierStartMs = new Map();
     const tierEndMs = new Map();
 
-    const allResults = await runPoolWithSlots(orderedTests, workerBrowsers, async (test, _idx, workerBrowser) => {
+    const allResults = await runPoolWithSlots(orderedTests, workerBrowsers, async (test, idx, workerBrowser) => {
+      if (poolSize === 1 && idx > 0 && idx % 50 === 0) {
+        await recycleBrowserProcess();
+      }
       const start = performance.now();
       if (!tierStartMs.has(test.tier)) {
         tierStartMs.set(test.tier, start);
@@ -424,7 +447,7 @@ async function main() {
         log(`\n▶ ${TIER_LABELS[test.tier]} (${countInTier} tests)`);
       }
       const timeoutMs = test.timeoutMs || 12_000;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await withTimeout(
             test.run({ browser: workerBrowser, baseUrl: server.baseUrl }),
@@ -449,12 +472,17 @@ async function main() {
           const msg = err?.message || String(err);
           const isBrowserCrash =
             err?.name !== 'AssertionError' &&
-            /(?:Target|Page|Browser) crashed|Target page, context or browser has been closed|waiting for locator\('\.screen--(?:title|hub)/i.test(msg);
+            /(?:Target|Page|Browser) crashed|Target page, context or browser has been closed|waiting for locator\('\.(?:screen--(?:title|hub)|coop-modal)/i.test(msg);
           if ((err?.isTimeout || isBrowserCrash) && workerBrowser?.__warmSlot) {
             workerBrowser.__warmSlot.tainted = true;
             try { await workerBrowser.__warmSlot.close(); } catch {}
           }
-          if (attempt < 2 && isBrowserCrash) {
+          if (attempt < 4 && isBrowserCrash) {
+            if (poolSize === 1) {
+              await recycleBrowserProcess(400 + attempt * 250);
+            } else {
+              await sleep(350 + attempt * 250);
+            }
             continue;
           }
           const end = performance.now();

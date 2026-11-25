@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {
+  ALL_ENEMY_IDS,
   ALL_WEAPON_IDS,
   BASELINE_MAIN_COMMIT,
   COOP_SPEC,
@@ -327,7 +328,7 @@ export const TIER2_F8_F15 = [
         await fastClick(s.page, '.hub-nav .btn:nth-child(2)');
         await s.page.evaluate(() => document.querySelectorAll('.codex-tab')[3]?.click());
         const lockedNames = await s.page.$$eval('.codex-list .codex-row.is-locked .codex-row__name', (els) => els.map((e) => e.textContent?.trim()));
-        assert.equal(lockedNames.length, 11);
+        assert.equal(lockedNames.length, ALL_ENEMY_IDS.length - 1);
         assert.ok(lockedNames.every((n) => n === '？？？'));
         s.assertNoErrors('T2-F8-05');
       } finally {
@@ -1493,23 +1494,27 @@ export const TIER2_F8_F15 = [
         'room=X',
         'room=ABCDEFGHIJKLMNOPQRSTUVWX',
       ];
-      for (const q of payloads) {
-        const s = await createIsolatedPage(browser, { isolated: true });
-        try {
+      const s = await createIsolatedPage(browser, { isolated: true });
+      try {
+        for (const q of payloads) {
           await s.page.goto(`${baseUrl}/index.html?skipIntro=1&${q}`);
-          await s.page.waitForTimeout(180);
-          const check = await s.page.evaluate(() => ({
-            pwn: window.__pwn,
-            injectedSvg: document.querySelectorAll('#ui svg[onload], #ui script').length,
-            codeAttr: document.querySelector('[data-room-code]')?.getAttribute('data-room-code') || '',
-          }));
+          await s.page.waitForSelector('.screen--title, .screen--hub');
+          const check = await s.page.evaluate(() => {
+            const out = {
+              pwn: window.__pwn,
+              injectedSvg: document.querySelectorAll('#ui svg[onload], #ui script').length,
+              codeAttr: document.querySelector('[data-room-code]')?.getAttribute('data-room-code') || '',
+            };
+            try { localStorage.clear(); sessionStorage.clear(); } catch {}
+            return out;
+          });
           assert.equal(check.pwn, undefined, `XSS executed on query '${q}'`);
           assert.equal(check.injectedSvg, 0);
           assert.equal(/<|>|ABCDEFGHIJKLMNOPQRSTUVWX/.test(check.codeAttr), false);
           s.assertNoErrors(`T2-F13-01-${q.slice(0, 12)}`);
-        } finally {
-          await s.close();
         }
+      } finally {
+        await s.close();
       }
     },
   },

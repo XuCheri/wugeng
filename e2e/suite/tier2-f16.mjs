@@ -2,7 +2,7 @@
 // STRICT OPAQUE-BOX: ZERO imports from ../../src/**.
 
 import assert from 'node:assert/strict';
-import { SAVE_VERSION } from './contracts.mjs';
+import { ALL_HERO_IDS, SAVE_VERSION } from './contracts.mjs';
 import {
   bootAndStartRun,
   bootToHub,
@@ -212,7 +212,7 @@ export const TIER2_F16 = [
           query: 'mockAds=complete',
           savePatch: {
             coins: 600,
-            unlockedHeroes: ['zhou', 'mian', 'daotong', 'yinyang', 'tiejiang', 'nuoxi'],
+            unlockedHeroes: ALL_HERO_IDS,
           },
         });
         // Set up run stats + 6 weapons & 6 relics to stress vertical height on 360x780

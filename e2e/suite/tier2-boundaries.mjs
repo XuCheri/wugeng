@@ -7,6 +7,9 @@ import { TIER2_F16 } from './tier2-f16.mjs';
 import { TIER2_F17 } from './tier2-f17.mjs';
 import { TIER2_F18 } from './tier2-f18.mjs';
 import { TIER2_F19 } from './tier2-f19.mjs';
+import { TIER2_F20 } from './tier2-f20.mjs';
 
-export { TIER2_F1_F7, TIER2_F8_F15, TIER2_F16, TIER2_F17, TIER2_F18, TIER2_F19 };
-export const TIER2_TESTS = [...TIER2_F1_F7, ...TIER2_F8_F15, ...TIER2_F16, ...TIER2_F17, ...TIER2_F18, ...TIER2_F19];
+export { TIER2_F1_F7, TIER2_F8_F15, TIER2_F16, TIER2_F17, TIER2_F18, TIER2_F19, TIER2_F20 };
+export const TIER2_TESTS = [
+  ...TIER2_F1_F7, ...TIER2_F8_F15, ...TIER2_F16, ...TIER2_F17, ...TIER2_F18, ...TIER2_F19, ...TIER2_F20,
+];

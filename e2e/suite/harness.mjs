@@ -454,6 +454,24 @@ export const APPLY_SAVE_PATCH_IN_PAGE = (target, patch) => {
   if (patch.unlockedHeroes) target.unlockedHeroes = [...patch.unlockedHeroes];
   if (patch.selectedHero) target.selectedHero = patch.selectedHero;
   if (patch.unlockedWeapons) target.unlockedWeapons = [...patch.unlockedWeapons];
+  if ((patch.unlockedHeroes || patch.unlockedWeapons) && !patch.starterWeaponByHero && target.starterWeaponByHero) {
+    const sigMap = {
+      zhou: 'gong',
+      mian: 'paperman',
+      daotong: 'talisman',
+      yinyang: 'compass',
+      tiejiang: 'suohun_chain',
+      nuoxi: 'nuo_drum',
+      weier: 'bamboo_pole',
+      qiansuanzi: 'gold_abacus',
+    };
+    const uw = Array.isArray(target.unlockedWeapons) ? target.unlockedWeapons : [];
+    for (const [h, sig] of Object.entries(sigMap)) {
+      if (h !== 'zhou' && uw.includes(sig) && (!target.starterWeaponByHero[h] || target.starterWeaponByHero[h] === 'gong')) {
+        target.starterWeaponByHero[h] = sig;
+      }
+    }
+  }
   if (patch.selectedStarterWeapon !== undefined) {
     target.selectedStarterWeapon = patch.selectedStarterWeapon;
     if (target.starterWeaponByHero && typeof target.starterWeaponByHero === 'object') {
@@ -576,7 +594,7 @@ export async function createWarmWorkerSlot(browser, baseUrl) {
         if (slot.context) {
           try { await slot.context.close(); } catch {}
         }
-        slot.context = await browser.newContext({
+        slot.context = await slot.browser.newContext({
           viewport: { width: 390, height: 844 },
           deviceScaleFactor: 1,
           isMobile: true,
@@ -655,7 +673,7 @@ export async function createWarmWorkerSlot(browser, baseUrl) {
         if (slot.styleLabContext) {
           try { await slot.styleLabContext.close(); } catch {}
         }
-        slot.styleLabContext = await browser.newContext({
+        slot.styleLabContext = await slot.browser.newContext({
           viewport: { width: 390, height: 844 },
           deviceScaleFactor: 1,
           isMobile: true,
@@ -843,6 +861,13 @@ export async function createIsolatedPage(browser, opts = {}) {
  * per-tab peer identity. Attaches `pageerror`, `console.error`, and HTTP `>=400` listeners to EVERY tab!
  */
 export async function createCoopPages(browser, pageCount = 2, opts = {}) {
+  if (browser?.__warmSlot?.styleLabContext) {
+    const slot = browser.__warmSlot;
+    slot.styleLabLeaseId++;
+    try { await slot.styleLabContext.close(); } catch {}
+    slot.styleLabContext = null;
+    slot.styleLabPage = null;
+  }
   const base = await createIsolatedPage(browser, {
     defaultTimeout: opts.defaultTimeout ?? 5500,
     ...opts,
