@@ -1,8 +1,8 @@
 // TapTap 排行榜服务封装（F12：五更守夜总榜 c5mzumajes9houq0ra）
 // - 完整对接 tap.getLeaderboardManager() 的 submitScores / loadLeaderboardScores / loadCurrentPlayerLeaderboardScore / openLeaderboard
 // - 支持 collection: 'public'（全服总榜）与 'friends'（好友榜）
-// - 兼容双参数 onFailure(code, message) 与对象错误；对 1025/103/104 好友未授权、500001 及离线环境提供友好中文降级与本地荣誉榜
-// - 支持 pendingScore 待重传队列，以及 ?mockLeaderboard=1|1025|500001 与 ?mockTap=1 模拟宿主
+// - 兼容双参数 onFailure(code, message) 与对象错误；对 112/1025/103/104 好友未授权、500001 及离线环境提供友好中文降级与本地荣誉榜
+// - 支持 pendingScore 待重传队列，以及 ?mockLeaderboard=1|112|1025|103|104|500001 与 ?mockTap=1 模拟宿主
 
 import {
   LEADERBOARD_COLLECTIONS,
@@ -16,7 +16,13 @@ import {
 } from './leaderboard-config.js';
 import { DEFAULT_DAO_NAME, HERO_IDS, sanitizeDaoName, saveSave } from './save.js';
 
-const PERMISSION_ERROR_CODES = new Set([1025, 103, 104, '1025', '103', '104']);
+// 112：接口 scope 未在《小游戏隐私保护指引》中声明（宿主沿用小游戏通用错误码）；1025：未申明使用好友关系信息
+const PRIVACY_DECLARE_CODES = new Set([112, 1025, '112', '1025']);
+// 103：玩家未授权好友关系；104：玩家未同意隐私协议
+const USER_CONSENT_CODES = new Set([103, 104, '103', '104']);
+const PERMISSION_ERROR_CODES = new Set([...PRIVACY_DECLARE_CODES, ...USER_CONSENT_CODES]);
+const MOCK_PERMISSION_MODES = new Set(['112', '1025', '103', '104']);
+const PRIVACY_AUTH_TIMEOUT_MS = 6000;
 const NOT_FOUND_ERROR_CODES = new Set([500001, '500001']);
 // 确定性配置类错误（榜单 ID 不存在 / 与游戏不匹配 / ID 为空 / maxSize 非法）：重试无意义
 const CONFIG_ERROR_CODES = new Set([500001, 500002, 500198, 500201, '500001', '500002', '500198', '500201']);
@@ -243,7 +249,7 @@ function createMockTapLeaderboardManager(mode, getSave) {
         return;
       }
       const col = normalizeCollection(params?.collection);
-      if ((mode === '1025' || mode === '103' || mode === '104') && col === LEADERBOARD_COLLECTIONS.FRIENDS) {
+      if (MOCK_PERMISSION_MODES.has(mode) && col === LEADERBOARD_COLLECTIONS.FRIENDS) {
         params?.callback?.onFailure?.(Number(mode), 'friend permission not granted');
         return;
       }
@@ -259,7 +265,7 @@ function createMockTapLeaderboardManager(mode, getSave) {
         return;
       }
       const col = normalizeCollection(params?.collection);
-      if ((mode === '1025' || mode === '103' || mode === '104') && col === LEADERBOARD_COLLECTIONS.FRIENDS) {
+      if (MOCK_PERMISSION_MODES.has(mode) && col === LEADERBOARD_COLLECTIONS.FRIENDS) {
         params?.callback?.onFailure?.(Number(mode), 'friend permission not granted');
         return;
       }
@@ -303,7 +309,7 @@ export function createLeaderboard({
   function resolveManager() {
     const q = readQueryParams(win);
     const mockLb = (q.get('mockLeaderboard') || '').trim();
-    if (mockLb === '1025' || mockLb === '103' || mockLb === '104' || mockLb === '500001' || mockLb === '1' || mockLb === 'true') {
+    if (MOCK_PERMISSION_MODES.has(mockLb) || mockLb === '500001' || mockLb === '1' || mockLb === 'true') {
       const normKey = mockLb === 'true' ? '1' : mockLb;
       if (cachedMockKey !== normKey || !cachedMockMgr) {
         cachedMockKey = normKey;
@@ -490,9 +496,38 @@ export function createLeaderboard({
     if (typeof tok === 'string' && tok.trim()) knownPeriodToken = tok.trim();
   }
 
+  // 好友榜属隐私接口：宿主若提供 requirePrivacyAuthorize，则先拉起官方隐私授权弹窗（同意过则静默通过）
+  let privacyAuthorized = false;
+  function ensurePrivacyAuthorized() {
+    const tap = win?.tap;
+    if (privacyAuthorized || !tap || typeof tap.requirePrivacyAuthorize !== 'function') return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+      const timer = setTimeout(() => finish(null), PRIVACY_AUTH_TIMEOUT_MS);
+      try {
+        const ret = tap.requirePrivacyAuthorize({
+          success: () => { privacyAuthorized = true; finish(true); },
+          fail: () => finish(false),
+        });
+        if (ret && typeof ret.then === 'function') {
+          ret.then(() => { privacyAuthorized = true; finish(true); }, () => finish(false));
+        }
+      } catch {
+        finish(null);
+      }
+    });
+  }
+
   function buildFailureNotice(code, col) {
+    if (PRIVACY_DECLARE_CODES.has(code)) {
+      return `好友榜尚未开通（码 ${code}）：需在 TapTap 后台「隐私合规」勾选「好友关系」并填写用途，生效后点「重新展卷」即可连通。先为你展示本机荣誉榜。`;
+    }
+    if (code === 104 || code === '104') {
+      return '需先同意《小游戏隐私保护指引》才能读取好友榜（码 104），点「重新展卷」可再次授权。先为你展示本机荣誉榜。';
+    }
     if (isPermissionCode(code)) {
-      return '暂未开通或未获得 TapTap 好友关系权限授权，好友榜暂不可用，已为你回退展示本机荣誉榜记录。';
+      return `尚未授权读取 TapTap 好友关系（码 ${code}），点「重新展卷」可再次授权。先为你展示本机荣誉榜。`;
     }
     if (code === 500000 || code === '500000') {
       return '本期天榜已结算，新一期开榜后自动同步，先为你展示本机荣誉榜。';
@@ -525,7 +560,7 @@ export function createLeaderboard({
       ? { rank: 1, score: bestLocal, name: daoName, isLocal: true }
       : { rank: null, score: 0, name: daoName, isLocal: true };
 
-    const { mgr } = resolveManager();
+    const { mgr, mode } = resolveManager();
     if (!mgr || typeof mgr.loadLeaderboardScores !== 'function') {
       return {
         ok: false,
@@ -552,6 +587,10 @@ export function createLeaderboard({
       if (withPeriod && knownPeriodToken) req.periodToken = knownPeriodToken;
       return req;
     };
+
+    if (col === LEADERBOARD_COLLECTIONS.FRIENDS && mode === 'tap') {
+      await ensurePrivacyAuthorized();
+    }
 
     // 顺序调用（部分宿主桥接不支持同时挂起多个排行榜回调）
     const periodBefore = knownPeriodToken;
@@ -585,7 +624,8 @@ export function createLeaderboard({
         ok: false,
         source: isPermissionCode(code) ? 'permission_fallback' : 'error_fallback',
         code,
-        retryable: !isPermissionCode(code) && !CONFIG_ERROR_CODES.has(code),
+        // 权限类错误也允许「重新展卷」：后台补齐声明或玩家改为同意后无需重进游戏
+        retryable: !CONFIG_ERROR_CODES.has(code),
         collection: col,
         leaderboardId: PRIMARY_LEADERBOARD_ID,
         notice: buildFailureNotice(code, col),

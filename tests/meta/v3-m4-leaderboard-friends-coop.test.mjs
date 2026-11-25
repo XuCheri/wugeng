@@ -145,6 +145,47 @@ test('M4-F12-02: TapTap 排行榜上报、pendingScore 失败重传队列及 102
   assert.equal(opened[0].collection, 'friends');
 });
 
+test('M4-F12-03: 好友榜码 112（隐私指引未声明）给出后台配置指引、可重新展卷，并先拉起隐私授权', async () => {
+  const save = defaultSave();
+  let friendsCode = 112;
+  let privacyCalls = 0;
+  const fakeWin = {
+    location: { search: '' },
+    tap: {
+      requirePrivacyAuthorize(o) { privacyCalls++; o?.success?.(); },
+      getLeaderboardManager() {
+        return {
+          loadLeaderboardScores(p) {
+            if (p.collection === 'friends' && friendsCode) {
+              p.callback?.onFailure?.({ errno: friendsCode, errMsg: 'api scope is not declared in the privacy agreement' });
+              return;
+            }
+            p.callback?.onSuccess?.({ scores: [{ rank: 1, score: 8800, user: { name: '青衫道友' } }] });
+          },
+          loadCurrentPlayerLeaderboardScore(p) { p.callback?.onSuccess?.({}); },
+        };
+      },
+    },
+  };
+  const lb = createLeaderboard({ win: fakeWin, getSave: () => save, persistSave: () => {} });
+
+  const r112 = await lb.fetchBoard({ collection: 'friends', save });
+  assert.equal(r112.ok, false);
+  assert.equal(r112.source, 'permission_fallback');
+  assert.equal(r112.code, 112);
+  assert.equal(r112.retryable, true);
+  assert.ok(/隐私合规/.test(r112.notice) && /好友关系/.test(r112.notice) && /112/.test(r112.notice));
+  assert.equal(/privacy agreement/.test(r112.notice), false);
+  assert.equal(privacyCalls, 1);
+
+  // 后台补齐声明后「重新展卷」即可连通；已授权则不再重复拉起弹窗
+  friendsCode = 0;
+  const ok = await lb.fetchBoard({ collection: 'friends', save });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.entries[0].name, '青衫道友');
+  assert.equal(privacyCalls, 1);
+});
+
 test('M4-F13-01: 房号 XSS 清洗、启动/前台拉起解析、被动分享钩子与异常兜底', async () => {
   assert.equal(sanitizeRoomCode('ab23cd'), 'AB23CD');
   assert.equal(sanitizeRoomCode('<script>alert(1)</script>'), null);
