@@ -385,12 +385,39 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     legacyLantern = null,
     burstProgress = 1, // 0..1 切换角色/兵刃时的破墨金芒涟漪
     attackT = tSec, // 自上次切换起的秒数：0 时立刻打出一记招牌招式
+    backdrop = null, // 更房地界木版夜景插画（Image，加载完成后替换程序化远景）
   } = state;
 
   const isTall = h >= 145;
   // 演武台暗夜木刻底衬 + 月晕景深
   ctx.fillStyle = INK;
   ctx.fillRect(0, 0, w, h);
+
+  const bgImg = backdrop && backdrop.complete && backdrop.naturalWidth > 0 ? backdrop : null;
+  const useBackdrop = !!bgImg && mode === 'hero' && isTall;
+  if (useBackdrop) {
+    // 地界插画铺满舞台（cover 裁切，略偏上保留屋檐与灯笼）
+    const iw = bgImg.naturalWidth;
+    const ih = bgImg.naturalHeight;
+    const s = Math.max(w / iw, h / ih);
+    const dw = iw * s;
+    const dh = ih * s;
+    ctx.drawImage(bgImg, (w - dw) * 0.5, (h - dh) * 0.38, dw, dh);
+    // 夜色压暗 + 顶部/底部墨色渐隐，保证横签与人物铭牌清晰可读
+    ctx.fillStyle = inkA(0.22);
+    ctx.fillRect(0, 0, w, h);
+    const topFade = ctx.createLinearGradient(0, 0, 0, h * 0.3);
+    topFade.addColorStop(0, inkA(0.78));
+    topFade.addColorStop(1, inkA(0));
+    ctx.fillStyle = topFade;
+    ctx.fillRect(0, 0, w, h * 0.3);
+    const botFade = ctx.createLinearGradient(0, h * 0.58, 0, h);
+    botFade.addColorStop(0, inkA(0));
+    botFade.addColorStop(0.55, inkA(0.72));
+    botFade.addColorStop(1, inkA(0.96));
+    ctx.fillStyle = botFade;
+    ctx.fillRect(0, h * 0.58, w, h * 0.42);
+  }
 
   const cx = mode === 'vfx' ? w * 0.5 : w * (isTall ? 0.33 : 0.34);
   const cy = h * (isTall ? 0.5 : 0.56);
@@ -409,16 +436,19 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   };
   const hTheme = heroThemes[heroId] || heroThemes.zhou;
 
-  // 月晕与暖火氛围背光
+  // 月晕与暖火氛围背光（有插画时减弱，只作人物轮廓光）
   const backR = Math.min(w, h) * (isTall ? 0.78 : 0.62);
   const backGrad = ctx.createRadialGradient(cx, cy, 8, cx, cy, backR);
   backGrad.addColorStop(0, isSignature ? hTheme.halo0 : paperA(0.16));
   backGrad.addColorStop(0.48, hTheme.halo1);
   backGrad.addColorStop(1, inkA(0));
   ctx.fillStyle = backGrad;
+  if (useBackdrop) ctx.globalAlpha = 0.55;
   ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = 1;
 
   if (isTall) {
+    if (!useBackdrop) {
     // 远景古月与街巷飞檐剪影（填补上方天空层次，营造古镇子夜演武场氛围）
     const moonX = w * 0.22;
     const moonY = h * 0.18;
@@ -471,6 +501,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     ctx.moveTo(0, horizonY);
     ctx.lineTo(w, horizonY);
     ctx.stroke();
+    }
 
     // 角色专属背后法相阵纹（大幅增强切人仪式感与辨识度）
     ctx.save();
@@ -606,6 +637,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
   const pillarInset = isTall ? 16 : 18;
   for (const side of [-1, 1]) {
     if (isTall && side > 0) continue; // 右侧留给功能纵栏
+    if (useBackdrop) continue; // 插画自带街灯，不再叠加程序化灯柱
     const px = side < 0 ? pillarInset : w - pillarInset;
     ctx.strokeStyle = paperA(0.24);
     ctx.lineWidth = 1.2;

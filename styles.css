@@ -3816,3 +3816,176 @@ p { margin: 0; }
 
 
 
+
+/* ───────── 更房美术升级：木版插画舞台、圆章功能入口、地界缩略卡、线稿底栏、朱漆主按钮与暗木备战台 ───────── */
+.hub-ribbon { gap: 11px; right: 8px; }
+.hub-ribbon::before { background: rgba(240, 190, 98, .3); top: 4px; bottom: 4px; }
+.hub-ribbon__btn {
+  width: 50px;
+  height: 50px;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px rgba(240, 190, 98, .5), 0 4px 10px rgba(28, 26, 23, .7);
+}
+.hub-ribbon__btn:active {
+  transform: scale(.9);
+  background: var(--ink);
+  box-shadow: 0 0 0 1.5px var(--lantern), 0 0 14px rgba(240, 190, 98, .55);
+}
+.hub-ribbon__art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  pointer-events: none;
+  user-select: none;
+}
+.hub-ribbon__btn b {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  z-index: 1;
+  padding: 1px 5px 1px calc(5px + .12em);
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--paper);
+  background: rgba(28, 26, 23, .94);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(240, 190, 98, .6);
+}
+.hub-ribbon__btn small {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  padding: 1px 5px;
+  font-size: 9.5px;
+  color: var(--lantern);
+  background: rgba(28, 26, 23, .86);
+  border-radius: 999px;
+  opacity: 1;
+}
+.hub-ribbon__btn.has-badge { box-shadow: 0 0 0 2px var(--verm), 0 0 14px rgba(194, 59, 38, .6), 0 4px 10px rgba(28, 26, 23, .7); }
+.hub-ribbon__btn .badge-dot { z-index: 2; top: 1px; right: -7px; }
+.hub-ribbon__btn.is-coach-locked {
+  opacity: .9;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px rgba(239, 230, 210, .22), 0 3px 8px rgba(28, 26, 23, .6);
+}
+.hub-ribbon__btn.is-coach-locked .hub-ribbon__art { filter: grayscale(1) brightness(.45); }
+.hub-ribbon__btn.is-coach-locked b { color: rgba(239, 230, 210, .62); box-shadow: inset 0 0 0 1px rgba(239, 230, 210, .2); }
+
+.hub-daily-pill { padding: 3px 11px 3px 4px; gap: 5px; box-shadow: inset 0 0 0 1px rgba(240, 190, 98, .5), 0 2px 8px rgba(28, 26, 23, .6); }
+.hub-daily-pill__ico {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  margin: -2px 0;
+  pointer-events: none;
+}
+
+.hub-map-strip { gap: 7px; padding: 2px; }
+.hub-map-card {
+  position: relative;
+  overflow: hidden;
+  width: 90px;
+  height: 42px;
+  min-height: 0;
+  padding: 3px 7px 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(239, 230, 210, .28), 0 2px 8px rgba(28, 26, 23, .6);
+}
+.hub-map-card__thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  filter: brightness(.55);
+  pointer-events: none;
+  transition: filter 160ms;
+}
+.hub-map-card__name, .hub-map-card__sub { position: relative; z-index: 1; text-shadow: 0 1px 2px var(--ink), 0 0 6px var(--ink); }
+.hub-map-card__name { font-size: 12px; letter-spacing: .08em; line-height: 1.2; color: var(--paper); }
+.hub-map-card__sub { font-size: 9.5px; line-height: 1.15; color: var(--lantern); }
+.hub-map-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(239, 230, 210, .2);
+}
+.hub-map-card.is-on {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 0 0 1px var(--ink), 0 0 12px rgba(240, 190, 98, .45);
+}
+.hub-map-card.is-on::after { box-shadow: inset 0 0 0 2px var(--lantern); }
+.hub-map-card.is-on .hub-map-card__thumb { filter: brightness(.85); }
+.hub-map-card.is-on .hub-map-card__sub { color: var(--lantern); }
+.hub-map-card.is-map-locked { opacity: 1; }
+.hub-map-card.is-map-locked .hub-map-card__thumb { filter: grayscale(1) brightness(.4); }
+.hub-map-card.is-map-locked .hub-map-card__name { color: rgba(239, 230, 210, .7); }
+
+.hub-start {
+  background: var(--ink) url("assets/hub/tex-deck.webp") repeat;
+  background-size: 192px 192px;
+  box-shadow: inset 0 1px 0 rgba(240, 190, 98, .3), 0 -14px 22px rgba(28, 26, 23, .55);
+}
+.hub-cta {
+  background: var(--verm) url("assets/hub/tex-cta.webp") center / cover no-repeat;
+  color: var(--paper);
+  text-shadow: 0 1px 0 var(--verm-dark), 0 0 10px rgba(28, 26, 23, .45);
+  box-shadow: inset 0 0 0 2px rgba(240, 190, 98, .85), inset 0 0 0 4px rgba(142, 42, 27, .7), 0 3px 0 var(--verm-dark), 0 6px 18px rgba(194, 59, 38, .35);
+  animation-name: cta-breathe-art;
+}
+@keyframes cta-breathe-art {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(240, 190, 98, .85), inset 0 0 0 4px rgba(142, 42, 27, .7), 0 3px 0 var(--verm-dark), 0 6px 18px rgba(194, 59, 38, .3); }
+  50% { box-shadow: inset 0 0 0 2px var(--lantern), inset 0 0 0 4px rgba(142, 42, 27, .7), 0 3px 0 var(--verm-dark), 0 6px 26px rgba(240, 190, 98, .45); }
+}
+.hub-cta:active:not(:disabled) {
+  background: var(--verm-dark) url("assets/hub/tex-cta.webp") center / cover no-repeat;
+  filter: brightness(.86);
+}
+
+.hub-nav {
+  background: var(--ink) url("assets/hub/tex-deck.webp") repeat;
+  background-size: 192px 192px;
+  box-shadow: inset 0 1px 0 rgba(240, 190, 98, .14);
+}
+.hub-nav .btn--square { min-height: 52px; padding: 5px 2px 4px; }
+.nav-seal { gap: 1px; }
+.nav-seal__ico { width: 22px; height: 22px; opacity: .88; pointer-events: none; }
+.nav-seal b { font-size: 12.5px; letter-spacing: .1em; padding-left: .1em; line-height: 1.2; }
+.nav-seal small { font-size: 9px; line-height: 1.1; }
+.hub-nav .btn--square:active:not(:disabled) .nav-seal__ico { opacity: 1; }
+.hub-nav .btn.has-dot::after { top: 5px; right: calc(50% - 18px); }
+
+@media (max-height: 800px), (max-width: 370px) {
+  .hub-ribbon { gap: 13px; }
+  .hub-ribbon__btn { width: 42px; height: 42px; }
+  .hub-ribbon__btn b { font-size: 9.5px; bottom: -5px; }
+  .hub-map-card { width: 80px; height: 38px; }
+}
+@media (max-height: 700px) {
+  .hub-ribbon { gap: 12px; }
+  .hub-ribbon__btn { width: 38px; height: 38px; }
+  .hub-nav .btn--square { min-height: 46px; padding: 3px 2px; }
+  .nav-seal__ico { width: 18px; height: 18px; }
+  .nav-seal b { font-size: 12px; }
+  .hub-daily-pill__ico { width: 20px; height: 20px; }
+}

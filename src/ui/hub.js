@@ -36,6 +36,25 @@ const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', t
 const ACH_WEAPON_SET = new Set(['taomujian', 'zhinian_kite']);
 const COIN_SVG = `<svg viewBox="0 0 16 16" class="coin-ico" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="5.9" y="5.9" width="4.2" height="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
 
+// 更房木版美术素材（assets/hub/*.webp）：舞台背景按地界缓存，加载失败则自动回落程序化夜景
+const HUB_ART = 'assets/hub/';
+const BACKDROP_CACHE = {};
+function hubBackdrop(mapId) {
+  if (typeof Image === 'undefined') return null;
+  if (!BACKDROP_CACHE[mapId]) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = `${HUB_ART}bg-${mapId}.webp`;
+    BACKDROP_CACHE[mapId] = img;
+  }
+  return BACKDROP_CACHE[mapId];
+}
+function artImg(name, cls) {
+  return h('img', { class: cls, src: `${HUB_ART}${name}.webp`, alt: '', draggable: 'false', 'aria-hidden': 'true' });
+}
+const RIBBON_ART = { 'open-daily': 'ic-chaishi', 'open-market': 'ic-guishi', 'open-achievements': 'ic-gongji', 'open-leaderboard': 'ic-tianbang', 'open-coop': 'ic-tongshou' };
+const NAV_ART = { 加点: 'nav-jiadian', 图鉴: 'nav-tujian', 更簿: 'nav-gengbu', 设置: 'nav-shezhi' };
+
 function coinTag(n, sm = false) {
   return h('span', { class: `coin-tag${sm ? ' coin-tag--sm' : ''}` }, h('span', { html: COIN_SVG }), h('b', {}, formatCoins(n)));
 }
@@ -51,6 +70,7 @@ export function renderHub(root, ctx) {
   reconcileAchievements(save);
   let charmPick = null;
   let stageCtl = null;
+  for (const mid of MAP_IDS) hubBackdrop(mid);
 
   // ── 1. 顶部极简状态栏 ──
   const daoEl = h('span', { class: 'hub-dao' }, save.daoName || '守夜打更人');
@@ -205,6 +225,7 @@ export function renderHub(root, ctx) {
         isSignature: isHeroSignatureWeapon(hid, sw),
         legacyOutfit: save.cosmetics?.equipped?.outfit || null,
         legacyLantern: save.cosmetics?.equipped?.lantern || null,
+        backdrop: hubBackdrop(getActiveMap()),
       };
     });
   }
@@ -237,6 +258,7 @@ export function renderHub(root, ctx) {
           dataset: { action: 'open-daily-challenge' },
           onClick: () => openDailyChallenge(),
         },
+        artImg('pill-yishi', 'hub-daily-pill__ico'),
         h('span', { class: 'hub-daily-pill__txt' }, '今日异事'),
         h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? `首胜+${dcSt.firstReward?.coins || 200}` : (dcRuleShort || '冲榜'))),
         h('button', {
@@ -245,6 +267,7 @@ export function renderHub(root, ctx) {
           dataset: { action: 'open-season' },
           onClick: () => openSeason(),
         },
+        artImg('pill-shouyeling', 'hub-daily-pill__ico'),
         h('span', { class: 'hub-daily-pill__txt' }, '守夜令'),
         h('small', { class: 'hub-daily-pill__sub' }, snSt.claimableCount > 0
           ? `可领${snSt.claimableCount}档`
@@ -277,8 +300,10 @@ export function renderHub(root, ctx) {
       type: 'button',
       class: `hub-ribbon__btn${badgeCount > 0 ? ' has-badge' : ''}${locked ? ' is-coach-locked' : ''}`,
       dataset: locked ? { action, locked: '1' } : { action },
+      'aria-label': title,
       onClick,
     },
+    RIBBON_ART[action] ? artImg(RIBBON_ART[action], 'hub-ribbon__art') : null,
     h('b', {}, title),
     sub ? h('small', {}, sub) : null,
     dot);
@@ -372,6 +397,7 @@ export function renderHub(root, ctx) {
           stageCtl?.triggerBurst();
         },
       },
+      artImg(`thumb-${mid}`, 'hub-map-card__thumb'),
       h('span', { class: 'hub-map-card__name' }, mCfg.name),
       subText ? h('small', { class: 'hub-map-card__sub' }, subText) : null);
       mapStripBox.appendChild(card);
@@ -497,7 +523,7 @@ export function renderHub(root, ctx) {
       h('span', { class: 'charm-pick__val' }, charmPick ? `${relicName(charmPick)}×${counts[charmPick]}` : '不带'));
     }
 
-    clear(runBarEl).append(nightEl, charmBtn);
+    clear(runBarEl).append(...[nightEl, charmBtn].filter(Boolean));
     ensureStage();
   }
 
@@ -514,7 +540,7 @@ export function renderHub(root, ctx) {
       navSeal('设置', '', () => openSettings()));
   }
   function navSeal(text, sub, onClick, dot = false, label = undefined, locked = false) {
-    return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), sub ? h('small', {}, sub) : null), onClick, {
+    return sealButton(h('span', { class: 'nav-seal' }, NAV_ART[text] ? artImg(NAV_ART[text], 'nav-seal__ico') : null, h('b', {}, text), sub ? h('small', {}, sub) : null), onClick, {
       kind: 'square',
       cls: `hub-dock-btn${dot ? ' has-dot' : ''}${locked ? ' is-coach-locked' : ''}`,
       label,
