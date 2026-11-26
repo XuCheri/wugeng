@@ -49,8 +49,8 @@ export const PLAYER_BASE = {
   critMult: 2,
   hurtFlash: 0.25,
   hurtInvuln: 0.24, // 受击无敌帧秒数
-  hurtPushRadius: 58, // 受击护体震退半径
-  hurtPushForce: 220, // 受击护体震退速度脉冲
+  hurtPushRadius: 42, // 受击护体震退半径
+  hurtPushForce: 160, // 受击护体震退速度脉冲
 };
 
 export const REVIVE = {
@@ -90,7 +90,8 @@ export function cooldownMul(cdr, floor = DAMAGE.cooldownFloor) {
 export function damageTaken(raw, armor) {
   if (!Number.isFinite(raw) || raw <= 0) return 0;
   const a = Number.isFinite(armor) ? armor : 0;
-  return Math.max(DAMAGE.minTaken, raw - a);
+  // 护甲再厚也至少吃下原伤害的 25%（防止叠甲后普通邪祟只能刮 1 点血）
+  return Math.max(DAMAGE.minTaken, Math.ceil(raw * 0.25), raw - a);
 }
 
 /** 期望伤害公式：D = B × (1 + Σ增伤%) × Crit × M开光 × 溢出 */
@@ -382,12 +383,12 @@ export const EVOLUTION = {
 export const WEAPONS = {
   gong: {
     name: '更锣', pair: 'clapper', tags: ['zhenhun'], evoName: '五更鸣锣',
-    evoDesc: '三叠震魂波聚怪易伤，末响震碎敌弹并重创定身',
+    evoDesc: '三叠震魂波聚怪易伤，末响震碎近身敌弹并重创定身',
     evoMult: 1.85,
     dmg: [14, 19, 25, 31, 38], radius: [70, 80, 90, 100, 110], cd: [2.2, 2.05, 1.9, 1.75, 1.6],
     knockback: 155, pulseLife: 0.35,
     evo: {
-      pulses: 3, interval: 0.22, waveRadius: 165, finalRadius: 215, pullForce: 135,
+      pulses: 3, interval: 0.22, waveRadius: 140, finalRadius: 178, pullForce: 135,
       safeInnerR: 54, staggerStun: 0.45, finalStun: 0.90, vulnDur: 3.0, vulnPct: 0.25,
       finalDmgMul: 1.45, finalKnock: 220, stun: 0.90,
     },
@@ -445,7 +446,7 @@ export const WEAPONS = {
     count: [1, 2, 2, 3, 3], dmg: [12, 16, 20, 25, 31], speed: 220, atkCd: 0.30, r: 13,
     seekRange: 300, leash: 520, knockback: 26,
     evo: {
-      count: 8, guards: 3, guardR: 52, guardAngSpeed: 2.4, guardBlockR: 15, guardBlockCd: 0.65, guardHitR: 22, guardAtkCd: 0.32,
+      count: 8, guards: 3, guardR: 52, guardAngSpeed: 2.4, guardBlockR: 15, guardBlockCd: 1.2, guardHitR: 22, guardAtkCd: 0.32,
       cavalry: 4, cavalrySpeed: 320, seekRange: 420, leash: 560, chargeDur: 0.28,
       cavalryHitCd: 0.32, cavalryDmgMul: 1.10, cavalryKnock: 55,
     },
@@ -478,7 +479,7 @@ export const WEAPONS = {
     count: [1, 1, 1, 1, 1], range: 265, fieldLife: 2.0, tick: 0.40, tickDmgMul: 0.42,
     blastDmgMul: 1.35, pullForce: 115, knockback: 0,
     evo: {
-      radiusMul: 1.32, fieldLife: 2.5, tick: 0.32, pullForce: 195, tickDmgMul: 0.50,
+      radiusMul: 1.18, fieldLife: 2.5, tick: 0.32, pullForce: 195, tickDmgMul: 0.50,
       blastDmgMul: 1.25, aftershocks: 2, vulnDur: 2.5, vulnPct: 0.25,
     },
   },
@@ -490,7 +491,7 @@ export const WEAPONS = {
     cd: [1.9, 1.8, 1.7, 1.6, 1.5], knockback: 135, sweepLife: 0.28,
     vulnDur: 2.5, vulnPct: 0.20, killsPerShield: 45, shieldCd: 14, shieldMax: 1,
     evo: {
-      radiusMul: 1.28, spread: 210, doubleSweepDelay: 0.18, secondDmgMul: 1.15,
+      radiusMul: 1.14, spread: 210, doubleSweepDelay: 0.18, secondDmgMul: 1.15,
       executeHpRatio: 0.45, executeBonusMul: 1.20, vulnDur: 4.0, vulnPct: 0.30,
       stunDur: 0.65, killsPerShield: 32, bossHitsPerShield: 8, shieldCd: 10, shieldMax: 2,
     },
@@ -503,7 +504,7 @@ export const WEAPONS = {
     cd: [2.4, 2.28, 2.16, 2.04, 1.9], beamLife: 0.95, tick: 0.15, turnSpeed: 3.4,
     rampPerHit: 0.14, rampMax: 0.84, knockback: 14,
     evo: {
-      beamLife: 1.30, lengthMul: 1.22, widthMul: 1.35, tick: 0.12,
+      beamLife: 1.30, lengthMul: 1.12, widthMul: 1.35, tick: 0.12,
       rampPerHit: 0.18, rampMax: 1.26, solarEvery: 8, solarBurstR: 65, solarBurstMul: 1.55,
     },
   },
@@ -533,7 +534,7 @@ export const WEAPONS = {
     count: [1, 1, 2, 2, 2], dmg: [19, 26, 34, 43, 53], length: [165, 180, 195, 210, 228],
     cd: [1.85, 1.75, 1.65, 1.55, 1.45], width: 24, life: 0.28, pullForce: 155, stunDur: 0.40, knockback: 0,
     evo: {
-      bonusCount: 2, lengthMul: 1.28, widthMul: 1.35, pullForce: 225, stunDur: 0.75,
+      bonusCount: 2, lengthMul: 1.15, widthMul: 1.25, pullForce: 225, stunDur: 0.75,
       vulnDur: 3.5, vulnPct: 0.28, burstRadius: 72, burstDmgMul: 0.65,
     },
   },
@@ -550,7 +551,7 @@ export const WEAPONS = {
   },
   nuo_drum: {
     name: '傩神战鼓', pair: 'wuse_mask', tags: ['zhenhun', 'yangyan'], evoName: '太古百相傩坛',
-    evoDesc: '立起百相神鼓连擂四重逐疫震波，净除敌弹、破甲易伤并终响五方爆裂',
+    evoDesc: '立起百相神鼓连擂四重逐疫震波，震碎近身敌弹、破甲易伤并终响五方爆裂',
     evoMult: 1.85,
     dmg: [12, 16, 21, 25, 29], radius: [78, 86, 94, 100, 106], cd: [2.75, 2.62, 2.50, 2.38, 2.28],
     beats: [2, 2, 3, 3, 3], beatInterval: 0.36, placeRange: 115, accentDmgMul: 1.30, knockback: 100,
@@ -561,13 +562,13 @@ export const WEAPONS = {
   },
   mourning_staff: {
     name: '引魂丧杆', pair: 'altar_mirror', tags: ['zhenhun'], evoName: '幽冥镇魂杆',
-    evoDesc: '周天双幡旋扫震碎敌弹，重创定身并每三扫震开镇魂余波',
+    evoDesc: '周天双幡旋扫震碎近身敌弹，重创定身并每三扫震开镇魂余波',
     evoMult: 1.92,
     dmg: [21, 28, 36, 45, 55], radius: [96, 102, 108, 115, 122], spread: [165, 175, 185, 195, 210],
     cd: [1.55, 1.48, 1.40, 1.32, 1.24], sweepLife: 0.26, knockback: 145,
     evo: {
-      radiusMul: 1.24, stunDur: 0.55, vulnDur: 2.8, vulnPct: 0.24,
-      pulseEvery: 3, pulseRadiusMul: 1.38, pulseDmgMul: 0.72,
+      radiusMul: 1.12, stunDur: 0.55, vulnDur: 2.8, vulnPct: 0.24,
+      pulseEvery: 3, pulseRadiusMul: 1.22, pulseDmgMul: 0.72,
     },
   },
   sky_lantern: {
@@ -588,7 +589,7 @@ export const WEAPONS = {
     count: [1, 1, 2, 2, 3], dmg: [19, 26, 34, 43, 53], length: [190, 205, 220, 238, 256],
     cd: [1.75, 1.66, 1.57, 1.48, 1.38], width: 20, life: 0.45, bleedDpsMul: 0.35, bleedDur: 2.2, knockback: 32,
     evo: {
-      lines: 3, lengthMul: 1.26, widthMul: 1.3, life: 1.35,
+      lines: 3, lengthMul: 1.14, widthMul: 1.3, life: 1.35,
       tick: 0.28, tickDmgMul: 0.48, burstRadius: 56, burstDmgMul: 0.72,
     },
   },
@@ -605,13 +606,13 @@ export const WEAPONS = {
   },
   bamboo_pole: {
     name: '破浪竹杆', pair: 'straw_cape', tags: ['zhenhun'], evoName: '靖海镇浪杆',
-    evoDesc: '双杆交击横扫净除敌弹，卷起破甲巨浪贯穿定身',
+    evoDesc: '双杆交击横扫震碎近身敌弹，卷起破甲巨浪贯穿定身',
     evoMult: 1.94,
     dmg: [20, 27, 35, 44, 54], radius: [112, 120, 128, 138, 148], arcDeg: [130, 140, 150, 160, 172],
     cd: [1.32, 1.25, 1.18, 1.11, 1.04], sweepLife: 0.22, knockback: 92, slowDur: 1.0,
     waveSpeed: 295, waveLife: 0.72, waveR: 22, waveDmgMul: 0.55,
     evo: {
-      arcDeg: 220, radiusMul: 1.18, stunDur: 0.55, clearBullets: true,
+      arcDeg: 220, radiusMul: 1.08, stunDur: 0.55, clearBullets: true,
       waves: 3, waveFan: 0.34, waveSpeed: 340, waveLife: 0.92, waveR: 28, waveDmgMul: 0.72,
     },
   },
@@ -661,7 +662,7 @@ export const RELICS = {
   tinder: { name: '火折子', pair: 'firecracker', tags: ['yangyan'], perLevel: { xpPct: 0.08, pickupPct: 0.10 } },
   redstring: { name: '红绳', pair: 'bell', tags: ['zhenhun'], perLevel: { critChance: 0.05 } },
   strawshoes: { name: '草鞋', pair: 'paperhorse', tags: ['zhenhun'], perLevel: { speedPct: 0.06, slowResist: 0.14 } },
-  glutinous: { name: '糯米', pair: 'soulbanner', tags: ['zhenhun'], perLevel: { hurtInvuln: 0.04, killHeal: 2 }, killInterval: 35 },
+  glutinous: { name: '糯米', pair: 'soulbanner', tags: ['zhenhun'], perLevel: { hurtInvuln: 0.04, killHeal: 2 }, killInterval: 50 },
   fivecoins: { name: '五帝钱', pair: 'bronze_mirror', tags: ['daofa', 'yangyan'], perLevel: { critDmg: 0.18, coinPct: 0.10 } },
   soulwick: { name: '引魂灯芯', pair: 'compass', tags: ['zhizha', 'yangyan'], perLevel: { lightPct: 0.08, ultChargePct: 0.10, ultCdRefund: 0.10 } },
   leijimu: { name: '雷击枣木', pair: 'taomujian', tags: ['daofa', 'yangyan'], perLevel: { cdr: 0.04, critChance: 0.03 }, pierceLevels: [2, 5] },
@@ -995,6 +996,7 @@ export const NIGHT_AFFIXES = [
   { id: 'weaselRush', name: '黄皮子扑得更快', mods: { weaselDashMul: 1.3 } },
 ];
 export const MAX_NIGHT = 10;
+export const NIGHT_DMG_GROWTH = 0.06;
 
 /** 规范化夜色等级到整数 [0, MAX_NIGHT]（过滤 NaN / ±Infinity / 越界值） */
 export function sanitizeNightLevel(level) {
@@ -1018,6 +1020,8 @@ export function nightModifiers(level) {
     for (const [k, v] of Object.entries(a.mods)) m[k] *= v;
     m.affixes.push(a.name);
   }
+  // 夜色每级邪祟伤害 +6%（原先只加血不加伤，高夜色反而不够凶）
+  m.contactDmgMul *= 1 + NIGHT_DMG_GROWTH * lv;
   return m;
 }
 

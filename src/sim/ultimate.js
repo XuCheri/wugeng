@@ -55,7 +55,7 @@ export function castUlt(run, force = false) {
     // 纸扎匠·阿绵：百鬼纸马阵（八骑八向踏弹穿阵 + 5 秒纸兵狂热）
     const M = ULT.mian;
     const R = M.burstR * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 180 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 180 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * M.burstDmgMul, 'ult', { knock: 240, stun: 0.7 });
     run.projectiles.push({
       id: run._nextId++,
@@ -106,7 +106,7 @@ export function castUlt(run, force = false) {
     const D = ULT.daotong;
     const R = D.burstR * areaMul;
     const strikeR = D.strikeRadius * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 185 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 185 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * D.burstDmgMul, 'ult', { knock: 220, stun: D.stun });
     run.projectiles.push({
       id: run._nextId++,
@@ -140,7 +140,7 @@ export function castUlt(run, force = false) {
     const Y = ULT.yinyang;
     const R = Y.burstR * areaMul;
     const fieldR = Y.fieldRadius * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 240 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 240 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * Y.burstDmgMul, 'ult', {
       knock: 160,
       stun: Y.stun,
@@ -205,7 +205,7 @@ export function castUlt(run, force = false) {
     const T = ULT.tiejiang;
     const R = T.slamR * areaMul;
     const emberR = T.emberRadius * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 230 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 230 * Math.min(areaMul, 1.2));
     p.invulnT = Math.max(p.invulnT || 0, T.wardInvuln);
     damageCircle(run, p.x, p.y, R, dmg * T.slamDmgMul, 'ult', {
       armorBreak: true,
@@ -269,7 +269,7 @@ export function castUlt(run, force = false) {
     // 傩戏传人·柳青衣：大傩逐疫百相舞（四重随身逐疫傩鼓净弹 + 5 秒疾舞攻移速）
     const N = ULT.nuoxi;
     const R = N.burstR * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 220 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 220 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * N.burstDmgMul, 'ult', {
       knock: 200,
       stun: N.stun,
@@ -327,7 +327,7 @@ export function castUlt(run, force = false) {
     p.waveStacks = HEROES.weier.waveMaxStacks || 5;
     p._waveAcc = 0;
     recomputeMods(run);
-    clearEnemyBullets(run, p.x, p.y, 240 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 240 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * W.burstDmgMul, 'ult', {
       armorBreak: true,
       knock: 260,
@@ -393,7 +393,7 @@ export function castUlt(run, force = false) {
     // 账房·钱算子：清账（引爆全屏魂火与铜钱倍率入账 + 化作赤金算子索敌连弹轰击）
     const Q = ULT.qiansuanzi;
     const R = Q.burstR * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 235 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 235 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, R, dmg * Q.burstDmgMul, 'ult', {
       knock: 210,
       stun: Q.stun,
@@ -477,7 +477,7 @@ export function castUlt(run, force = false) {
     // 打更人·老周：五更镇魂锣（三叠扩域震波 + 破甲易伤 + 净除敌弹）
     const Z = ULT.zhou;
     const r0 = Z.radii[0] * areaMul;
-    clearEnemyBullets(run, p.x, p.y, 260 * areaMul);
+    clearEnemyBullets(run, p.x, p.y, 260 * Math.min(areaMul, 1.2));
     damageCircle(run, p.x, p.y, r0, dmg * Z.waveDmgMuls[0], 'ult', {
       knock: ULT.knockback,
       stun: Z.stun,

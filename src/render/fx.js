@@ -50,8 +50,8 @@ export function createFx(opts = {}) {
   const parts = [];
   const decals = [];
   const screen = [];
-  let maxParts = low ? 220 : 650;
-  let maxDecals = low ? 20 : 56;
+  let maxParts = low ? 180 : 360;
+  let maxDecals = low ? 20 : 44;
   let trauma = 0;
   let kickX = 0;
   let kickY = 0;
@@ -240,12 +240,13 @@ export function createFx(opts = {}) {
           const hx = Number.isFinite(e.x) ? e.x : 0;
           const hy = Number.isFinite(e.y) ? e.y : 0;
           const crit = !!e.crit;
-          const n = low ? 2 : crit ? 8 : 3;
-          drops(hx, hy - 8, n, crit ? 185 : 115, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink', null, TAU, evTheme);
-          if (!low || crit) slashSpark(hx, hy, crit, evTheme);
+          const busy = parts.length > 140;
+          const n = low || busy ? (crit ? 3 : 1) : (crit ? 6 : 2);
+          drops(hx, hy - 8, n, crit ? 175 : 110, crit ? (rng() < 0.65 ? 'verm' : 'paper') : 'ink', null, TAU, evTheme);
+          if ((!low && !busy) || crit) slashSpark(hx, hy, crit, evTheme);
           if (crit) {
             this.addHitstop(0.03);
-            this.addShake(0.16);
+            if (trauma < 0.24) this.addShake(0.14);
           }
           break;
         }

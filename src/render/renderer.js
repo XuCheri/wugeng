@@ -45,6 +45,7 @@ import { createGround } from './ground.js';
 import { createFx } from './fx.js';
 import { createDamageTexts } from './damage-text.js';
 import { createHud } from './hud.js';
+import { computeHeroMotion, drawBossImage, drawHeroImage } from './hero-images.js';
 
 const TAU = Math.PI * 2;
 
@@ -104,6 +105,10 @@ const GROUND_KINDS = new Set([
   'moltenZone',
   'nuoDanceRing',
   'inkLine',
+  'mourningSweep',
+  'brushArc',
+  'soulSweep',
+  'bambooWave',
   'enemyWaveWall',
 ]);
 
@@ -446,7 +451,20 @@ export function createRenderer(canvas, opts = {}) {
       ctx.restore();
     }
     const stateVariant = e.type === 'umbrella' ? (e.state === 'shield' ? 'shield' : 'open') : '';
-    blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
+    const bossH = e.type === 'youshen' ? 104 : e.type === 'hebo_wedding' ? 100 : e.type === 'horse' ? 96 : 90;
+    if (!(e.boss && drawBossImage(ctx, {
+      bossType: e.type,
+      x,
+      y: feetY + oy,
+      logicalH: bossH,
+      sx,
+      sy,
+      rot,
+      flash,
+      alpha,
+    }))) {
+      blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
+    }
 
     // 纸甲护盾（含精英纸甲词缀与纸钱妖师赋予的纸甲）及阴火、藏宝前景标记
     if ((e.paperArmor || 0) > 0 && (e.affix === 'paper_armor' || !e.affix)) {
@@ -586,39 +604,55 @@ export function createRenderer(canvas, opts = {}) {
     const frame = moving ? Math.floor(clock * 10) % 4 : 0;
     const flip = (p.facingX ?? 1) < 0 ? -1 : 1;
     const feetY = y + (p.r || 12) * 0.72;
-    const bob = moving ? -Math.abs(Math.sin(clock * 10 * Math.PI * 0.5)) * 1.4 : Math.sin(clock * 2) * 0.4;
+    const motion = computeHeroMotion(clock, moving, flip);
+    const bob = motion.bob;
     let alpha = a;
     if (p.invulnT > 0) alpha *= 0.55 + 0.45 * (Math.sin(clock * 30) > 0 ? 1 : 0.3);
     if (run.status === 'dead') alpha *= 0.5;
 
-    // 开光常驻脚底朱砂八卦法环（T1-F11-02）
+    // 开光常驻脚底朱砂八卦法环（T1-F11-02；神兵渐多时主动收敛透明度避免遮眼）
     if (evoCount > 0) {
+      const auraFade = evoCount >= 3 ? 0.46 : evoCount >= 2 ? 0.58 : 0.88;
       const pulse = 0.94 + 0.06 * Math.sin(clock * 4.2);
       ctx.save();
-      const grd = ctx.createRadialGradient(x, y + 2, 10, x, y + 2, 46);
-      grd.addColorStop(0, lanternA(0.28 * alpha));
-      grd.addColorStop(0.68, vermA(0.24 * alpha));
+      const grd = ctx.createRadialGradient(x, y + 2, 10, x, y + 2, 44);
+      grd.addColorStop(0, lanternA(0.2 * auraFade * alpha));
+      grd.addColorStop(0.68, vermA(0.18 * auraFade * alpha));
       grd.addColorStop(1, vermA(0));
       ctx.fillStyle = grd;
       ctx.beginPath();
-      ctx.arc(x, y + 2, 46, 0, TAU);
+      ctx.arc(x, y + 2, 44, 0, TAU);
       ctx.fill();
       ctx.restore();
 
       const auraSpr = baguaArraySprite('awakened');
-      const scaleK = (0.88 + Math.min(3, evoCount - 1) * 0.06) * pulse;
-      blit(ctx, auraSpr, x, y + 2, scaleK, scaleK * 0.92, clock * 0.85, 0.92 * alpha);
+      const scaleK = (0.84 + Math.min(2, evoCount - 1) * 0.05) * pulse;
+      blit(ctx, auraSpr, x, y + 2, scaleK, scaleK * 0.92, clock * 0.85, auraFade * alpha);
       if (evoCount >= 2) {
-        blit(ctx, ringSprite('vthin', 1), x, y + 2, 0.28 * pulse, 0.26 * pulse, -clock * 1.3, 0.75 * alpha);
+        blit(ctx, ringSprite('vthin', 1), x, y + 2, 0.27 * pulse, 0.25 * pulse, -clock * 1.3, 0.55 * auraFade * alpha);
       }
     }
 
+    // 脚底清晰受击判定定位圈（纯暖墨金双线，混战中一眼锁定自己脚下圆心）
+    ctx.save();
+    ctx.strokeStyle = inkA(0.58 * alpha);
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.ellipse(x, feetY - 2, 14, 8.2, 0, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = lanternA(0.76 * alpha);
+    ctx.lineWidth = 1.35;
+    ctx.beginPath();
+    ctx.ellipse(x, feetY - 2, 14, 8.2, 0, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+
     const rawSkin = p.skinId || cosmetics?.heroSkins?.[heroId] || null;
-    const lean = moving ? 0.05 * flip : 0;
+    const lean = motion.lean;
     const swing = Math.sin(clock * 3.1) * 0.12 + (moving ? -0.32 * flip : 0) + Math.sin(clock * 10) * (moving ? 0.06 : 0);
 
     if (isNonDefaultSkin(heroId, rawSkin)) {
-      blit(ctx, shadowSprite(11), x, feetY, 1, 1, 0, alpha);
+      blit(ctx, shadowSprite(12), x, feetY, 1.12, 1.05, 0, alpha);
       const lanPos = drawHeroWithSkin(ctx, {
         heroId,
         skinId: rawSkin,
@@ -628,7 +662,7 @@ export function createRenderer(canvas, opts = {}) {
         flip,
         lean,
         swing,
-        scale: 1,
+        scale: 1.12,
         flash: p.hurtT > 0,
         alpha,
         auraRot: clock,
@@ -640,26 +674,46 @@ export function createRenderer(canvas, opts = {}) {
       if (barrier > 0) {
         for (let i = 0; i < barrier; i++) {
           const ba = clock * 2.8 + (i / barrier) * TAU;
-          blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 20, y - 6 + Math.sin(ba) * 11, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
+          blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 22, y - 8 + Math.sin(ba) * 12, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
         }
       }
       return lanPos;
     }
 
-    blit(ctx, shadowSprite(10), x, feetY, 1, 1, 0, alpha);
-    const spr = heroSprite(heroId, frame, p.hurtT > 0, cosmetics?.outfit || null);
-    blit(ctx, spr, x, feetY + bob, flip, 1, lean, alpha);
+    blit(ctx, shadowSprite(12), x, feetY, 1.1, 1.04, 0, alpha);
+    const drewImg = drawHeroImage(ctx, {
+      heroId,
+      skinId: `${heroId}_default`,
+      x,
+      y: feetY + bob,
+      logicalH: 56,
+      scale: 1,
+      flip,
+      lean,
+      squashX: motion.squashX,
+      squashY: motion.squashY,
+      flash: p.hurtT > 0,
+      alpha,
+    });
+    if (!drewImg) {
+      const spr = heroSprite(heroId, frame, p.hurtT > 0, cosmetics?.outfit || null);
+      blit(ctx, spr, x, feetY + bob, flip, 1, lean, alpha);
+    }
 
     // 无常勾魂幡：护体魂障环绕符纸
     const barrier = p.soulBarrier || 0;
     if (barrier > 0) {
       for (let i = 0; i < barrier; i++) {
         const ba = clock * 2.8 + (i / barrier) * TAU;
-        blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 20, y - 6 + Math.sin(ba) * 11, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
+        blit(ctx, projSprite('talismanEvo'), x + Math.cos(ba) * 22, y - 8 + Math.sin(ba) * 12, 0.65, 0.65, ba + Math.PI / 2, 0.88 * alpha);
       }
     }
 
-    // 手提灯笼：以手为轴摆动
+    if (drewImg) {
+      return { lx: x + 14 * flip, ly: feetY + bob - 22 };
+    }
+
+    // 程序化小人兜底时保留独立手提灯笼
     const hand = heroHand();
     const hx = x + hand.x * flip;
     const hy = feetY + bob + hand.y;
@@ -831,29 +885,29 @@ export function createRenderer(canvas, opts = {}) {
       case 'mirrorBeam': {
         const len = p.length || p.radius || 220;
         const ang = p.angle || 0;
-        const x0 = p.x;
-        const y0 = p.y;
-        const x1 = Number.isFinite(p.endX) ? p.endX : x0 + Math.cos(ang) * len;
-        const y1 = Number.isFinite(p.endY) ? p.endY : y0 + Math.sin(ang) * len;
-        const w = p.width || (evolved ? 30 : 18);
+        const x0 = p.x + Math.cos(ang) * 24;
+        const y0 = p.y + Math.sin(ang) * 24;
+        const x1 = Number.isFinite(p.endX) ? p.endX : p.x + Math.cos(ang) * len;
+        const y1 = Number.isFinite(p.endY) ? p.endY : p.y + Math.sin(ang) * len;
+        const w = (p.width || (evolved ? 28 : 18)) * 0.88;
         const fade = Math.min(1, (p.t + 0.03) / 0.08) * (k > 0.86 ? (1 - k) / 0.14 : 1);
         ctx.save();
-        ctx.globalAlpha = fade;
+        ctx.globalAlpha *= fade * 0.82;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = pal.glowRgba(0.45);
-        ctx.lineWidth = w * 1.25;
+        ctx.strokeStyle = pal.glowRgba(0.38);
+        ctx.lineWidth = w * 1.15;
         ctx.beginPath();
         ctx.moveTo(x0, y0);
         ctx.lineTo(x1, y1);
         ctx.stroke();
         ctx.strokeStyle = pal.primary;
-        ctx.lineWidth = w * 0.62;
+        ctx.lineWidth = w * 0.56;
         ctx.stroke();
         ctx.strokeStyle = pal.bright;
-        ctx.lineWidth = Math.max(2, w * 0.25);
+        ctx.lineWidth = Math.max(2, w * 0.22);
         ctx.stroke();
         ctx.restore();
-        blit(ctx, projSprite('bronzeMirror'), x0 + Math.cos(ang) * 14, y0 + Math.sin(ang) * 14, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        blit(ctx, projSprite('bronzeMirror'), x0, y0, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang, fade);
         return true;
       }
       case 'soulChain':
@@ -1268,33 +1322,33 @@ export function createRenderer(canvas, opts = {}) {
         break;
       }
       case 'mirrorBeam': {
-        // 照妖铜镜 / 乾坤赤阳镜：横扫赤阳神光柱
+        // 照妖铜镜 / 乾坤赤阳镜：横扫赤阳神光柱（自周身 24px 镜面射出，不糊主角自身）
         const len = p.length || p.radius || 220;
         const ang = p.angle || 0;
-        const x0 = p.x;
-        const y0 = p.y;
-        const x1 = Number.isFinite(p.endX) ? p.endX : x0 + Math.cos(ang) * len;
-        const y1 = Number.isFinite(p.endY) ? p.endY : y0 + Math.sin(ang) * len;
-        const w = p.width || (evolved ? 30 : 18);
+        const x0 = p.x + Math.cos(ang) * 24;
+        const y0 = p.y + Math.sin(ang) * 24;
+        const x1 = Number.isFinite(p.endX) ? p.endX : p.x + Math.cos(ang) * len;
+        const y1 = Number.isFinite(p.endY) ? p.endY : p.y + Math.sin(ang) * len;
+        const w = (p.width || (evolved ? 28 : 18)) * 0.88;
         const fade = Math.min(1, (p.t + 0.03) / 0.08) * (k > 0.86 ? (1 - k) / 0.14 : 1);
         const pulse = 0.9 + 0.1 * Math.sin(clock * 32 + id);
         ctx.save();
-        ctx.globalAlpha = fade;
+        ctx.globalAlpha *= fade * 0.85;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = vermA(evolved ? 0.46 : 0.3);
-        ctx.lineWidth = w * 1.25 * pulse;
+        ctx.strokeStyle = vermA(evolved ? 0.42 : 0.28);
+        ctx.lineWidth = w * 1.15 * pulse;
         ctx.beginPath();
         ctx.moveTo(x0, y0);
         ctx.lineTo(x1, y1);
         ctx.stroke();
         ctx.strokeStyle = LANTERN;
-        ctx.lineWidth = w * 0.62 * pulse;
+        ctx.lineWidth = w * 0.56 * pulse;
         ctx.beginPath();
         ctx.moveTo(x0, y0);
         ctx.lineTo(x1, y1);
         ctx.stroke();
         ctx.strokeStyle = PAPER;
-        ctx.lineWidth = Math.max(2, w * 0.24);
+        ctx.lineWidth = Math.max(2, w * 0.22);
         ctx.beginPath();
         ctx.moveTo(x0, y0);
         ctx.lineTo(x1, y1);
@@ -1302,10 +1356,10 @@ export function createRenderer(canvas, opts = {}) {
         // 光束末端耀斑
         ctx.fillStyle = LANTERN;
         ctx.beginPath();
-        ctx.arc(x1, y1, w * 0.42 * pulse, 0, TAU);
+        ctx.arc(x1, y1, w * 0.38 * pulse, 0, TAU);
         ctx.fill();
         ctx.restore();
-        blit(ctx, projSprite('bronzeMirror'), x0 + Math.cos(ang) * 14, y0 + Math.sin(ang) * 14, evolved ? 1.15 : 1, evolved ? 1.15 : 1, ang, fade);
+        blit(ctx, projSprite('bronzeMirror'), x0, y0, evolved ? 1.12 : 1, evolved ? 1.12 : 1, ang, fade);
         break;
       }
       case 'paperHorse': {
@@ -1557,6 +1611,23 @@ export function createRenderer(canvas, opts = {}) {
         break;
       }
       case 'enemyBullet': {
+        const br = Math.max(6.5, (p.r || 8) * (p.bossBullet ? 1.05 : 0.95));
+        ctx.save();
+        ctx.fillStyle = vermA(p.bossBullet ? 0.30 : 0.18);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, br + 2, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, br, 0, TAU);
+        ctx.stroke();
+        ctx.strokeStyle = VERM;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, br, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
         if (p.style === 'ink') {
           blit(ctx, projSprite('inkBullet'), p.x, p.y, 1, 1, clock * 3 + id);
         } else if (p.source === 'archer_ghost' || p.style === 'paperDart') {
@@ -1566,7 +1637,7 @@ export function createRenderer(canvas, opts = {}) {
           const ang = Math.atan2(p.vy || 0, p.vx || 1);
           blit(ctx, projSprite('soulFireBullet'), p.x, p.y, 1.05, 1.05, ang);
         } else {
-          blit(ctx, projSprite('paperMoney'), p.x, p.y, Math.max(0.3, Math.abs(Math.cos(clock * 9 + id))), 1, id);
+          blit(ctx, projSprite('paperMoney'), p.x, p.y, Math.max(0.55, Math.abs(Math.cos(clock * 9 + id))), 1, id);
         }
         break;
       }
@@ -2263,13 +2334,25 @@ export function createRenderer(canvas, opts = {}) {
     const M = 90;
     const inView = (x, y, m = M) => x > vx - m && x < vx + W + m && y > vy - m && y < vy + H + m * 1.6;
 
-    // 地面层弹体 / 阵法
+    // 神兵渐多时主动降噪：己方特效化作半透淡墨层，杜绝满屏糊脸
+    const vfxClutterMul = evoCount >= 4 ? 0.44 : evoCount >= 3 ? 0.54 : evoCount >= 2 ? 0.66 : 1;
+
+    // 地面层弹体 / 阵法 / 扇扫
     const projs = run.projectiles || [];
     for (let i = 0; i < projs.length; i++) {
       const q = projs[i];
       if (!GROUND_KINDS.has(q.kind)) continue;
       const gm = q.kind === 'enemyWaveWall' ? 620 : Math.max(150, (q.radius || q.maxRadius || 60) + 40);
-      if (inView(q.x ?? pxI, q.y ?? pyI, gm)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
+      if (!inView(q.x ?? pxI, q.y ?? pyI, gm)) continue;
+      const isHazard = q.kind === 'enemyWaveWall' || q.kind === 'cinderCore';
+      if (!isHazard && vfxClutterMul < 0.99) {
+        ctx.save();
+        ctx.globalAlpha *= vfxClutterMul;
+        drawProjectile(q, evo, run, ppos, settings.cosmetics);
+        ctx.restore();
+      } else {
+        drawProjectile(q, evo, run, ppos, settings.cosmetics);
+      }
     }
 
     // 联机倒地八卦救援阵（地面层绘制）
@@ -2364,28 +2447,54 @@ export function createRenderer(canvas, opts = {}) {
       if (d.t === 0) blit(ctx, propSprite(d.o.kind), d.x, d.y);
       else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
       else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded, run);
-      else if (d.t === 4) {
+    }
+    if (run.watchEvent) drawWatchEventActors(run.watchEvent);
+
+    // 空中己方弹体 / 光束 / 雷柱（神兵多时降透，经过主角头顶再额外退让）
+    for (let i = 0; i < projs.length; i++) {
+      const q = projs[i];
+      if (GROUND_KINDS.has(q.kind) || q.kind === 'enemyBullet') continue;
+      const am = Math.max(150, (q.radius || q.length || q.maxRadius || 0) + 56);
+      if (!inView(q.x ?? pxI, q.y ?? pyI, am)) continue;
+      let aMul = vfxClutterMul;
+      if (evoCount >= 2) {
+        const dx = (q.x ?? pxI) - pxI;
+        const dy = (q.y ?? pyI) - pyI;
+        if (dx * dx + dy * dy < 52 * 52) aMul *= 0.56;
+      }
+      if (aMul < 0.99) {
+        ctx.save();
+        ctx.globalAlpha *= aMul;
+        drawProjectile(q, evo, run, ppos, settings.cosmetics);
+        ctx.restore();
+      } else {
+        drawProjectile(q, evo, run, ppos, settings.cosmetics);
+      }
+    }
+    fx.drawParticles(ctx);
+
+    // 主控守夜人与协战道友置于己方神兵光效与粒子之上，混战中永远清晰可见
+    for (let i = 0; i < drawList.length; i++) {
+      const d = drawList[i];
+      if (d.t === 4) {
         const ally = d.o;
         const allyEvo = Array.isArray(ally.weapons) ? ally.weapons.filter((w) => w && w.evolved).length : 0;
         drawPlayer(ally, d.x, d.y, run, ally.downed ? 0.5 : 0.94, null, allyEvo);
         drawAllyOverlay(ally, d.x, d.y, d.idx);
-      } else {
+      } else if (d.t === 2) {
         lantern = drawPlayer(p, d.x, d.y, run, p.downed ? 0.5 : 1, settings.cosmetics, evoCount);
         if (party && p.downed) {
           drawStamp(ctx, '救', d.x, d.y - 46, 10, { color: VERM, seed: 3 });
         }
       }
     }
-    if (run.watchEvent) drawWatchEventActors(run.watchEvent);
 
-    // 空中弹体 / 光束 / 雷柱
+    // 敌方弹幕独立置顶绘制（永远压在己方技能光效与角色之上，威胁绝不被遮挡）
     for (let i = 0; i < projs.length; i++) {
       const q = projs[i];
-      if (GROUND_KINDS.has(q.kind)) continue;
-      const am = Math.max(150, (q.radius || q.length || q.maxRadius || 0) + 56);
-      if (inView(q.x ?? pxI, q.y ?? pyI, am)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
+      if (q.kind !== 'enemyBullet') continue;
+      if (inView(q.x ?? pxI, q.y ?? pyI, 80)) drawProjectile(q, evo, run, ppos, settings.cosmetics);
     }
-    fx.drawParticles(ctx);
 
     // ---------- 夜色与动态灯笼暖光 ----------
     const darkness = Math.max(0, Math.min(1, run.darkness || 0));
@@ -2436,9 +2545,13 @@ export function createRenderer(canvas, opts = {}) {
       withSun(ctx, W);
     }
 
-    // ---------- 伤害数字（世界坐标，夜色之上） ----------
+    // ---------- 伤害数字（世界坐标，夜色之上，自动避让主角中心） ----------
     ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
-    dmg.draw(ctx, clock, settings.dmgText || 'all');
+    dmg.draw(ctx, clock, settings.dmgText || 'all', {
+      playerX: pxI,
+      playerY: pyI,
+      crowded: evoCount >= 2 || projs.length > 26,
+    });
 
     // ---------- 屏幕层（五更浮尘 + 屏边奇遇指针 + 全屏墨晕横幅 + HUD） ----------
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -7,6 +7,13 @@ import { computeBlessingMods, BLESSING_TUNING } from './blessings.js';
 import { terrainMoveMul, isRiverWater } from './maps.js';
 import { clamp } from '../core/math.js';
 
+/** 范围加成软上限：1.3 倍以内全额生效，超出部分收益减半，最终不超过 1.7 倍 */
+export function softAreaMul(raw) {
+  const v = Math.max(0.4, raw);
+  if (v <= 1.3) return v;
+  return Math.min(1.7, 1.3 + (v - 1.3) * 0.5);
+}
+
 export function createPlayer(heroId, extra = {}) {
   const safeExtra = extra && typeof extra === 'object' ? extra : {};
   const validHero = typeof heroId === 'string' && Object.hasOwn(HEROES, heroId) ? heroId : 'zhou';
@@ -155,7 +162,7 @@ export function recomputeMods(run, opts = {}) {
     cdr: cdrTotal,
     cooldownFloor,
     cdMul: cdMulFinal,
-    areaMul: Math.max(0.4, 1 + rel.areaPct + (hero.areaPct || 0) + waveAreaBonus + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
+    areaMul: softAreaMul(1 + rel.areaPct + (hero.areaPct || 0) + waveAreaBonus + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
     durMul: Math.max(0.4, 1 + rel.durPct + (hero.durPct || 0) + syn.durPct),
     amount: rel.amount + syn.amount + bl.amount + (rr ? rr.amount : 0),
     bonusPierce: (rel.bonusPierce || 0) + syn.bonusPierce,

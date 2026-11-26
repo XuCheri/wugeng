@@ -16,6 +16,7 @@ import {
 import { ACHIEVEMENTS_BY_ID } from '../meta/achievements.js';
 import { isHeroSignatureWeapon } from '../sim/balance.js';
 import { drawHeroWithSkin } from '../render/skins.js';
+import { isHeroImageReady, preloadHeroSkinImage } from '../render/hero-images.js';
 import { getVfxPalette, vfxRingSprite, vfxSlashSprite } from '../render/vfx-themes.js';
 import { renderStagePreviewFrame } from '../render/menu-scene.js';
 import { INK, LANTERN, PAPER, PAPER_SHADE, VERM } from '../render/palette.js';
@@ -30,6 +31,7 @@ function bakeSkinThumbURL(skin) {
   if (typeof document === 'undefined') return null;
   const key = `skin_thumb:${skin.id}`;
   if (thumbCache.has(key)) return thumbCache.get(key);
+  const ready = isHeroImageReady(skin.heroId, skin.id);
   const c = document.createElement('canvas');
   c.width = 96;
   c.height = 96;
@@ -45,15 +47,15 @@ function bakeSkinThumbURL(skin) {
     heroId: skin.heroId,
     skinId: skin.id,
     x: 24,
-    y: 41,
+    y: 43,
     frame: 0,
-    scale: 0.78,
+    scale: 0.82,
     showAura: true,
   });
   const url = c.toDataURL('image/png');
   c.width = 0;
   c.height = 0;
-  thumbCache.set(key, url);
+  if (ready) thumbCache.set(key, url);
   return url;
 }
 
@@ -343,6 +345,13 @@ export function openCosmeticShop(root, {
     let entry = skinCardMap.get(skin.id);
     if (entry) return entry;
     const thumbUrl = bakeSkinThumbURL(skin);
+    const thumbImg = thumbUrl ? h('img', { class: 'cosmetic-card__thumb', src: thumbUrl, width: 48, height: 48, alt: '' }) : null;
+    if (thumbImg && !thumbCache.has(`skin_thumb:${skin.id}`)) {
+      preloadHeroSkinImage(skin.heroId, skin.id).then(() => {
+        const nextUrl = bakeSkinThumbURL(skin);
+        if (nextUrl) thumbImg.src = nextUrl;
+      });
+    }
     const statusTag = h('span', { class: 'cosmetic-card__price' });
     const actHolder = h('div', { class: 'cosmetic-card__act' });
     const achName = skin.achievementId && ACHIEVEMENTS_BY_ID[skin.achievementId]
@@ -366,7 +375,7 @@ export function openCosmeticShop(root, {
         drawPreviewNow();
       },
     },
-    thumbUrl ? h('img', { class: 'cosmetic-card__thumb', src: thumbUrl, width: 48, height: 48, alt: '' }) : null,
+    thumbImg,
     h('div', { class: 'cosmetic-card__body' },
       h('p', { class: 'cosmetic-card__head' },
         h('b', { class: 'cosmetic-card__name' }, skin.name),

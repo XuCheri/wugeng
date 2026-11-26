@@ -8,6 +8,7 @@ import {
   inkA, paperA, vermA, lanternA,
 } from './palette.js';
 import { drawHeroShowcase } from './hero-showcase.js';
+import { onHeroImageReady, preloadHeroSkinImage } from './hero-images.js';
 import {
   getVfxPalette,
   vfxArraySprite,
@@ -845,6 +846,11 @@ export function createHeroStage(canvas, getState) {
   }
 
   document.addEventListener('visibilitychange', onVis);
+  const initSt = getState?.() || {};
+  if (initSt.heroId) preloadHeroSkinImage(initSt.heroId, initSt.skinId);
+  const offHeroImg = onHeroImageReady(() => {
+    if (active && canvas.isConnected) refreshNow();
+  });
 
   function refreshNow() {
     const now = typeof performance !== 'undefined' ? performance.now() : 16;
@@ -863,6 +869,7 @@ export function createHeroStage(canvas, getState) {
 
   function destroy() {
     active = false;
+    offHeroImg();
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = 0;

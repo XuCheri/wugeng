@@ -58,7 +58,16 @@ async function loadFont() {
 }
 
 const canvas = document.getElementById('game-canvas');
-await Promise.race([loadFont(), new Promise((r) => setTimeout(r, 1500))]);
+const { preloadAllHeroImages, preloadHeroSkinImage } = await import('./src/render/hero-images.js');
+const heroPreload = scene === 'skins' || scene === 'vfx'
+  ? preloadAllHeroImages(2000)
+  : scene === 'sheet'
+    ? Promise.resolve()
+    : preloadHeroSkinImage(q.get('hero') || 'zhou', null);
+await Promise.race([
+  Promise.all([loadFont(), heroPreload]),
+  new Promise((r) => setTimeout(r, 2200)),
+]);
 await document.fonts.ready;
 
 if (scene === 'sheet' || scene === 'skins' || scene === 'vfx') {

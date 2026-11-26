@@ -101,33 +101,54 @@ export function createDamageTexts() {
     clear() {
       list.length = 0;
     },
-    /** 在世界坐标系下绘制（应在夜色遮罩之后调用，保证可读） */
-    draw(ctx, now, mode = 'all') {
+    /** 在世界坐标系下绘制（应在夜色遮罩之后调用，保证可读；神兵密集时自动避让主角中心并限流） */
+    draw(ctx, now, mode = 'all', opts = null) {
       pruneTexts(list, now);
       if (mode === 'off') return;
-      for (let i = 0; i < list.length; i++) {
+      const crowded = !!(opts && opts.crowded) || list.length > 24;
+      const hasPlayer = !!(opts && Number.isFinite(opts.playerX) && Number.isFinite(opts.playerY));
+      const px = hasPlayer ? opts.playerX : 0;
+      const py = hasPlayer ? opts.playerY - 18 : 0;
+      // 密集时只绘制最近若干条（保留暴击优先感），避免满屏红章遮挡角色与弹幕
+      const maxDraw = crowded ? 18 : MAX_TEXTS;
+      const startIdx = Math.max(0, list.length - maxDraw);
+      for (let i = startIdx; i < list.length; i++) {
         const e = list[i];
         if (!visibleFor(e, mode)) continue;
+        if (hasPlayer) {
+          const dx = e.x - px;
+          const dy = e.y - py;
+          const d2 = dx * dx + dy * dy;
+          // 主角周身 44px 安全视窗内不叠普通白字，暴击章也大幅半透明退让
+          if (!e.crit && d2 < 44 * 44) continue;
+        }
         const age = now - e.born;
         const since = now - e.last;
         const life = e.crit ? LIFE_CRIT : LIFE_NORMAL;
-        const fade = since > life - 0.25 ? Math.max(0, (life - since) / 0.25) : 1;
+        let fade = since > life - 0.25 ? Math.max(0, (life - since) / 0.25) : 1;
+        if (crowded) fade *= e.crit ? 0.86 : 0.72;
+        if (hasPlayer && e.crit) {
+          const d2 = (e.x - px) ** 2 + (e.y - py) ** 2;
+          if (d2 < 48 * 48) fade *= 0.38;
+        }
+        if (fade <= 0.04) continue;
         const rise = Math.min(1, age / 0.5);
         const ox = ((e.seed % 13) - 6) * 0.9;
         const y = e.y - 18 - (1 - (1 - rise) * (1 - rise)) * 16;
         const str = formatCN(e.amount);
+        const crowdScale = crowded ? 0.85 : 1;
         ctx.save();
         ctx.globalAlpha *= fade;
         if (e.crit) {
           // 印章盖下：先放大后压实，略带旋转
           const k = Math.min(1, since / 0.09);
-          const scale = since < 0.09 ? 1.7 - 0.8 * k : 0.9 + Math.min(0.1, (since - 0.09) * 1.2);
-          const size = Math.round(Math.min(17, 12 + Math.log10(e.amount + 1) * 0.9));
+          const scale = (since < 0.09 ? 1.7 - 0.8 * k : 0.9 + Math.min(0.1, (since - 0.09) * 1.2)) * crowdScale;
+          const size = Math.round(Math.min(17, 12 + Math.log10(e.amount + 1) * 0.9) * crowdScale);
           drawStamp(ctx, str, e.x + ox, y - 4, size, { rot: ((e.seed % 9) - 4) * 0.035, scale, seed: e.seed });
         } else {
-          const pop = since < 0.06 ? 1.25 : 1;
-          const size = Math.min(14, 9 + Math.log10(e.amount + 1) * 1.2) * pop;
-          drawSeal(ctx, str, e.x + ox, y, Math.round(size), INK, 'center', 'outlined', 0.95);
+          const pop = since < 0.06 ? 1.2 : 1;
+          const size = Math.min(14, 9 + Math.log10(e.amount + 1) * 1.2) * pop * crowdScale;
+          drawSeal(ctx, str, e.x + ox, y, Math.max(8, Math.round(size)), INK, 'center', 'outlined', 0.92);
         }
         ctx.restore();
       }

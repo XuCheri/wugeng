@@ -492,7 +492,7 @@ export async function startApp(bootOpts = {}) {
     runUI.syncHud(r);
     audio.setMusicMode('run');
     audio.setWatch(1);
-    if (!save.stats.firstRunDone) runUI.showFirstRunHint();
+    if (!save.stats.firstRunDone && !(save.stats.runs > 0)) runUI.showFirstRunHint();
     return r;
   }
 

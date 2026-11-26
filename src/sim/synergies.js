@@ -1,6 +1,7 @@
 // 四门民俗流派羁绊（F6：镇魂 · 道法 · 纸扎 · 阳炎）。
 // 统计当前已拥有的武器与法器流派标签，激活 2 / 4 / 6 件阶梯效果（同门内各阶效果累加）。
 
+import { weaponClearBullets } from './bullet-clear.js';
 import { WEAPONS, RELICS, SCHOOL_TAG_IDS, SCHOOL_TAGS, DAMAGE, ENEMY_AI } from './balance.js';
 import { fsin, fcos, fatan2 } from '../core/math.js';
 import { damageCircle } from './combat.js';
@@ -13,7 +14,7 @@ export const SYNERGY_TIERS = [2, 4, 6];
 export const SYNERGY_TUNING = {
   zhenhun2: { knockbackPct: 0.30, controlDurPct: 0.25, armor: 1 },
   zhenhun4: { vulnDmgMul: 1.22, vulnSec: 2 },
-  zhenhun6: { intervalSec: 6 },
+  zhenhun6: { intervalSec: 10, clearMax: 8 },
   daofa2: { critChance: 0.08, durPct: 0.15 },
   daofa4: { cdSec: 0.35 },
   daofa6: { cdr: 0.12, cooldownFloor: 0.42, critMultBonus: 0.35, bonusPierce: 2 },
@@ -218,12 +219,7 @@ export function updateSynergyRuntime(run, dt) {
       run._zhenhunGongT = T.zhenhun6.intervalSec;
       const R = 165 * mods.areaMul;
       damageCircle(run, p.x, p.y, R, 42 + 6 * p.level, 'gong', { knock: 220, stun: 0.9, vuln: 2.5, vulnPct: 0.25 });
-      for (const pr of run.projectiles) {
-        if (pr.kind === 'enemyBullet' && !pr.dead) {
-          const rr = R + (pr.r || 0);
-          if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) pr.dead = true;
-        }
-      }
+      weaponClearBullets(run, p.x, p.y, R, T.zhenhun6.clearMax);
       run.projectiles.push({
         id: run._nextId++,
         kind: 'gongPulse',

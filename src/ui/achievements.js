@@ -11,6 +11,7 @@ import {
 import { applyStagger } from './motion.js';
 import { getSkinDef } from '../meta/cosmetics.js';
 import { drawHeroWithSkin } from '../render/skins.js';
+import { isHeroImageReady, preloadHeroSkinImage } from '../render/hero-images.js';
 import { INK, PAPER_SHADE } from '../render/palette.js';
 import { clear, formatCoins, h, scroll, sealButton, toast, veil } from './dom.js';
 import { icon } from './icons.js';
@@ -19,39 +20,48 @@ const COIN_SVG = `<svg viewBox="0 0 16 16" class="coin-ico" aria-hidden="true"><
 
 const achSkinThumbCache = new Map();
 
+function bakeAchSkinURL(def) {
+  const ready = isHeroImageReady(def.heroId, def.id);
+  const c = document.createElement('canvas');
+  c.width = 84;
+  c.height = 84;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.scale(2, 2);
+  g.fillStyle = INK;
+  g.fillRect(0, 0, 42, 42);
+  g.strokeStyle = PAPER_SHADE;
+  g.lineWidth = 1;
+  g.strokeRect(1, 1, 40, 40);
+  drawHeroWithSkin(g, {
+    heroId: def.heroId,
+    skinId: def.id,
+    x: 21,
+    y: 38,
+    frame: 0,
+    scale: 0.72,
+    showAura: true,
+  });
+  const url = c.toDataURL('image/png');
+  c.width = 0;
+  c.height = 0;
+  if (ready) achSkinThumbCache.set(def.id, url);
+  return url;
+}
+
 function skinRewardBadgeIcon(skinId) {
   if (typeof document === 'undefined') return h('i', { class: 'stamp stamp--sm' }, '衣');
-  if (!achSkinThumbCache.has(skinId)) {
-    const def = getSkinDef(skinId, 'zhou');
-    const c = document.createElement('canvas');
-    c.width = 84;
-    c.height = 84;
-    const g = c.getContext('2d');
-    if (g) {
-      g.scale(2, 2);
-      g.fillStyle = INK;
-      g.fillRect(0, 0, 42, 42);
-      g.strokeStyle = PAPER_SHADE;
-      g.lineWidth = 1;
-      g.strokeRect(1, 1, 40, 40);
-      drawHeroWithSkin(g, {
-        heroId: def.heroId,
-        skinId: def.id,
-        x: 21,
-        y: 36,
-        frame: 0,
-        scale: 0.68,
-        showAura: true,
-      });
-      achSkinThumbCache.set(skinId, c.toDataURL('image/png'));
-      c.width = 0;
-      c.height = 0;
-    }
+  const def = getSkinDef(skinId, 'zhou');
+  const url = achSkinThumbCache.get(def.id) || bakeAchSkinURL(def);
+  if (!url) return h('i', { class: 'stamp stamp--sm' }, '衣');
+  const imgEl = h('img', { class: 'icon', src: url, width: 42, height: 42, alt: '' });
+  if (!achSkinThumbCache.has(def.id)) {
+    preloadHeroSkinImage(def.heroId, def.id).then(() => {
+      const next = achSkinThumbCache.get(def.id) || bakeAchSkinURL(def);
+      if (next) imgEl.src = next;
+    });
   }
-  const url = achSkinThumbCache.get(skinId);
-  return url
-    ? h('img', { class: 'icon', src: url, width: 42, height: 42, alt: '' })
-    : h('i', { class: 'stamp stamp--sm' }, '衣');
+  return imgEl;
 }
 
 function renderRewardIcon(ach) {

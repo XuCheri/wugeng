@@ -243,7 +243,7 @@ export const WEAPON_INTRO = {
 };
 
 export const EVOLVE_INTRO = {
-  gong: B.WEAPONS?.gong?.evoDesc || '三叠震魂波聚怪易伤，末响震碎敌弹并重创定身',
+  gong: B.WEAPONS?.gong?.evoDesc || '三叠震魂波聚怪易伤，末响震碎近身敌弹并重创定身',
   lantern: B.WEAPONS?.lantern?.evoDesc || '双层火莲疾速灼烧并刻印阳炎，亡魂爆裂、夜主六叠爆燃、照亮扩域',
   talisman: B.WEAPONS?.talisman?.evoDesc || '齐射增符穿透连锁，首中布下八卦天雷阵四落神雷',
   brush: B.WEAPONS?.brush?.evoDesc || '周天泼墨横扫全屏，破空墨浪贯穿群祟并铺开镇邪墨河',
@@ -258,12 +258,12 @@ export const EVOLVE_INTRO = {
   taomujian: B.WEAPONS?.taomujian?.evoDesc || '多柄雷木飞剑疾速御空穿刺，每三击引落天罡神雷轰击群祟',
   suohun_chain: B.WEAPONS?.suohun_chain?.evoDesc || '双链裂空贯穿破甲，强力拽聚群祟定身并引爆夺魄阴煞',
   zhinian_kite: B.WEAPONS?.zhinian_kite?.evoDesc || '成群金乌火鸦俯冲轰炸并刻印阳炎，掠过之处铺开流火焚天径',
-  nuo_drum: B.WEAPONS?.nuo_drum?.evoDesc || '立起百相神鼓连擂四重逐疫震波，净除敌弹、破甲易伤并终响五方爆裂',
-  mourning_staff: B.WEAPONS?.mourning_staff?.evoDesc || '周天双幡旋扫震碎敌弹，重创定身并每三扫震开镇魂余波',
+  nuo_drum: B.WEAPONS?.nuo_drum?.evoDesc || '立起百相神鼓连擂四重逐疫震波，震碎近身敌弹、破甲易伤并终响五方爆裂',
+  mourning_staff: B.WEAPONS?.mourning_staff?.evoDesc || '周天双幡旋扫震碎近身敌弹，重创定身并每三扫震开镇魂余波',
   sky_lantern: B.WEAPONS?.sky_lantern?.evoDesc || '多枚赤焰天灯升空洒火，轰落引爆阳炎火印并留流火余烬',
   carpenter_line: B.WEAPONS?.carpenter_line?.evoDesc || '布下三才断魂墨阵持续斩裂沿线邪祟，碎甲减速并引爆墨煞',
   luopan_slip: B.WEAPONS?.luopan_slip?.evoDesc || '金朱飞签疾速追踪连穿，三中同祟引爆定穴破脉震晕四邻',
-  bamboo_pole: B.WEAPONS?.bamboo_pole?.evoDesc || '双杆交击横扫净除敌弹，卷起破甲巨浪贯穿定身',
+  bamboo_pole: B.WEAPONS?.bamboo_pole?.evoDesc || '双杆交击横扫震碎近身敌弹，卷起破甲巨浪贯穿定身',
   gold_abacus: B.WEAPONS?.gold_abacus?.evoDesc || '多枚赤金算子连环弹射，每三跳引爆金光震波并震落铜钱',
 };
 
@@ -452,7 +452,8 @@ export function nightDesc(n) {
   if (n <= 0) return '不加码，先摸清这条街';
   const pct = Math.round((B.COIN_REWARD?.nightPct ?? 0.15) * 100 * n);
   const affix = B.NIGHT_AFFIXES?.[n]?.name;
-  return `鬼更硬 +${15 * n}% · 铜钱 +${pct}%${affix ? ` · 新添「${affix}」` : ''}`;
+  const dmgPct = Math.round((B.NIGHT_DMG_GROWTH ?? 0.06) * 100 * n);
+  return `鬼硬+${15 * n}% 凶+${dmgPct}% · 铜钱+${pct}%${affix ? ` · ${affix}` : ''}`;
 }
 
 export function watchName(w) {

@@ -1,5 +1,6 @@
 // 弹体更新：移动、碰撞、持续场域、视觉寿命；以及延迟动作（连环莲花爆、阴火自爆、摄魂回响、天雷轰击等）。
 
+import { clearBulletsNear, weaponClearBullets } from './bullet-clear.js';
 import { WEAPONS, FX, ULT } from './balance.js';
 import { turnToward, fsin, fcos, fatan2 } from '../core/math.js';
 import { damageEnemy, damageCircle, knockback, applySlow, applyStun } from './combat.js';
@@ -874,11 +875,11 @@ function updatePapermanProj(run, pr, dt, hash, near) {
     if (!(pr._blockCd > 0)) {
       for (let j = 0; j < run.projectiles.length; j++) {
         const b = run.projectiles[j];
-        if (b.kind === 'enemyBullet' && !b.dead) {
+        if (b.kind === 'enemyBullet' && !b.dead && !b.bossBullet) {
           const rr = evo.guardBlockR * sigScale + (b.r || 0);
           if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) {
             b.dead = true;
-            pr._blockCd = evo.guardBlockCd || 0.65;
+            pr._blockCd = evo.guardBlockCd || 1.2;
             break;
           }
         }
@@ -1115,11 +1116,11 @@ function updateMirrorBeam(run, pr, dt, hash, near) {
   pr.endY = p.y + fsin(pr.angle) * pr.length;
 
   // 焚毁与光束胶囊体相交的敌方弹幕（每道光束有净除上限，保留夜主弹幕压迫感）
-  if (pr._burnsLeft === undefined) pr._burnsLeft = pr.evolved ? 8 : 4;
+  if (pr._burnsLeft === undefined) pr._burnsLeft = pr.evolved ? 3 : 1;
   if (pr._burnsLeft > 0) {
     for (let j = 0; j < run.projectiles.length && pr._burnsLeft > 0; j++) {
       const b = run.projectiles[j];
-      if (b.kind !== 'enemyBullet' || b.dead) continue;
+      if (b.kind !== 'enemyBullet' || b.dead || b.bossBullet) continue;
       const rr = pr.width * 0.65 + (b.r || 0);
       if (pointToSegDist2(b.x, b.y, pr.x, pr.y, pr.endX, pr.endY) <= rr * rr) {
         b.dead = true;
@@ -1382,13 +1383,8 @@ function updateNuoDrumProj(run, pr, dt) {
     });
 
     if (pr.evolved && isFinal) {
-      for (let j = 0; j < run.projectiles.length; j++) {
-        const b = run.projectiles[j];
-        if (b.kind === 'enemyBullet' && !b.dead) {
-          const rr = pr.radius + (b.r || 0);
-          if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) b.dead = true;
-        }
-      }
+      // 终响仅震碎鼓边 4 颗普通敌弹
+      weaponClearBullets(run, pr.x, pr.y, pr.radius, 4);
     }
 
     run.projectiles.push({
@@ -1593,13 +1589,10 @@ function updateBambooWaveProj(run, pr, dt, hash, near) {
   const hitR = pr.hitR || pr.radius || pr.r || 22;
   hitPropsCircle(run, pr.x, pr.y, hitR);
   if (pr.clearBullets) {
-    for (let j = 0; j < run.projectiles.length; j++) {
-      const b = run.projectiles[j];
-      if (b.kind === 'enemyBullet' && !b.dead) {
-        const rr = hitR + (b.r || 0);
-        if ((b.x - pr.x) ** 2 + (b.y - pr.y) ** 2 <= rr * rr) b.dead = true;
-      }
-    }
+    // 每道浪头只能撞碎有限颗普通敌弹（数值型 clearBullets = 剩余次数；true 视作 1）
+    const left = pr.clearBullets === true ? 1 : pr.clearBullets;
+    const n = clearBulletsNear(run, pr.x, pr.y, hitR, left);
+    pr.clearBullets = left - n;
   }
   const wid = pr.weaponId || 'bamboo_pole';
   const list = hash.queryCircle(pr.x, pr.y, hitR, near);

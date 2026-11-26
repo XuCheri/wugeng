@@ -10,6 +10,7 @@ import {
 } from './palette.js';
 import { MINERAL as M } from './skins.js';
 import { normalizeHeroSkinId } from '../meta/cosmetics.js';
+import { drawHeroImage } from './hero-images.js';
 
 const TAU = Math.PI * 2;
 export const SHOWCASE_PERIOD = 1.8;
@@ -2038,17 +2039,50 @@ export function drawHeroShowcase(ctx, o = {}) {
   const pose = armPose(style, p);
   const breathe = Math.sin(t * 2.2) * 0.8;
 
+  const br = Math.sin(t * 2.3);
+  const strikePush = Math.max(0, Math.sin(Math.min(1, p * 2.2) * Math.PI)) * (pose.lean > 0 ? 4.5 : 1.5);
+  const imgX = o.x + strikePush * s;
+  const imgY = o.y + br * 0.45 * s;
+
+  // 优先绘制高精木版立绘法相（脚底投影 + 呼吸起伏 + 出招前倾），未加载完成时无缝回退矢量法相
+  ctx.save();
+  ctx.globalAlpha *= 0.46;
+  ctx.beginPath();
+  ctx.ellipse(imgX, o.y + 1 * s, (B.hem + 9) * s, 5.5 * s, 0, 0, TAU);
+  ctx.fillStyle = INK;
+  ctx.fill();
+  ctx.restore();
+
+  if (drawHeroImage(ctx, {
+    heroId,
+    skinId: normSkin,
+    x: imgX,
+    y: imgY,
+    logicalH: 98,
+    scale: s,
+    flip: 1,
+    lean: pose.lean * 0.42,
+    squashX: 1 - br * 0.011,
+    squashY: 1 + br * 0.016,
+    flash: false,
+    alpha: 1,
+  })) {
+    const hx = imgX + 24 * s;
+    const hy = imgY - 42 * s;
+    if (o.showTarget !== false && Number.isFinite(o.targetX)) {
+      const hitP = getShowcaseHitPhase(weaponId);
+      const hitAge = (p - hitP) * SHOWCASE_PERIOD;
+      drawPaperGhostTarget(ctx, o.targetX, o.targetY, s * (o.targetScale || 0.85), t, hitAge, vp);
+      drawAttackFx(ctx, weaponId, {
+        p, hx, hy, tx: o.targetX, ty: o.targetY - 4 * s, s, vp, t,
+      });
+    }
+    return { hx, hy, phase: p };
+  }
+
   ctx.save();
   ctx.translate(o.x, o.y);
   ctx.scale(s, s);
-
-  // 足下投影
-  ctx.globalAlpha = 0.45;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, B.hem + 6, 5, 0, 0, TAU);
-  ctx.fillStyle = INK;
-  ctx.fill();
-  ctx.globalAlpha = 1;
 
   ctx.rotate(pose.lean);
   ctx.translate(0, breathe * 0.3);

@@ -2,6 +2,7 @@
 // 优先同步调用 src/render/sprites.js 的 iconDataURL（民俗版画离屏 Canvas 烘焙）；
 // 命签与奇遇使用版画朱印，无 DOM 环境（Node 单测）或未知图标安全退回墨印。
 import * as Sprites from '../render/sprites.js';
+import { getHeroImage, preloadHeroSkinImage } from '../render/hero-images.js';
 import { h } from './dom.js';
 
 const CANVAS_KINDS = new Set(['weapon', 'evo', 'relic', 'enemy', 'hero', 'coin', 'bun', 'overflow']);
@@ -108,8 +109,59 @@ function bakeWoodblockFallbackURL(kind, id, size, glyph) {
   return url;
 }
 
+function bakeHeroPortraitURL(id, size) {
+  if (typeof document === 'undefined') return null;
+  const img = getHeroImage(id, `${id}_default`);
+  if (!img) return null;
+  const s = 2;
+  const c = document.createElement('canvas');
+  c.width = size * s;
+  c.height = size * s;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.scale(s, s);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.47;
+
+  g.save();
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.fillStyle = '#1C1A17';
+  g.fill();
+  g.clip();
+
+  // 取上半身（冠帽 + 面容 + 领肩）居中构图，保证 34px 小圆章下五官与标志头饰一目了然
+  const drawH = size * 1.38;
+  const drawW = drawH * (img.naturalWidth / img.naturalHeight);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, cx - drawW * 0.5, size * 0.03, drawW, drawH);
+  g.restore();
+
+  g.strokeStyle = 'rgba(240, 190, 98, 0.52)';
+  g.lineWidth = 1.25;
+  g.beginPath();
+  g.arc(cx, cy, r - 0.6, 0, Math.PI * 2);
+  g.stroke();
+
+  const url = c.toDataURL('image/png');
+  c.width = 0;
+  c.height = 0;
+  return url;
+}
+
 function urlFor(kind, id, size, glyph) {
   if (typeof document === 'undefined' || !CANVAS_KINDS.has(kind)) return null;
+  if (kind === 'hero' && !isSilentPlaceholder(kind, id)) {
+    const portraitKey = `hero_portrait:${id}:${size}`;
+    if (cache.has(portraitKey)) return cache.get(portraitKey);
+    const portraitUrl = bakeHeroPortraitURL(id, size);
+    if (portraitUrl) {
+      cache.set(portraitKey, portraitUrl);
+      return portraitUrl;
+    }
+  }
   const key = `${kind}:${id}:${size}`;
   if (cache.has(key)) return cache.get(key);
   let url = null;
@@ -144,7 +196,14 @@ export function icon(kind, id, size, glyph, opts = {}) {
   }
   const url = urlFor(kind, id, size, glyph);
   if (url) {
-    return h('img', { class: 'icon', src: url, width: size, height: size, alt: '', draggable: 'false' });
+    const imgEl = h('img', { class: 'icon', src: url, width: size, height: size, alt: '', draggable: 'false' });
+    if (kind === 'hero' && !isSilentPlaceholder(kind, id) && !cache.has(`hero_portrait:${id}:${size}`)) {
+      preloadHeroSkinImage(id, `${id}_default`).then(() => {
+        const readyUrl = urlFor('hero', id, size, glyph);
+        if (readyUrl) imgEl.src = readyUrl;
+      });
+    }
+    return imgEl;
   }
   return h('span', {
     class: 'icon icon--glyph',

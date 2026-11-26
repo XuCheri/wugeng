@@ -10,6 +10,7 @@ import { heroInfo, weaponName } from './copy.js';
 import { getAttackVfxDef, getSkinDef } from '../meta/cosmetics.js';
 import { INK, PAPER_SHADE } from '../render/palette.js';
 import { drawHeroWithSkin } from '../render/skins.js';
+import { isHeroImageReady, preloadHeroSkinImage } from '../render/hero-images.js';
 import { MAX_COOP_PLAYERS } from '../sim/coop.js';
 
 /**
@@ -46,9 +47,11 @@ export function openCoopLobbyModal(root, opts = {}) {
 
   function renderMemberThumb(member) {
     const cvs = h('canvas', { class: 'coop-member__thumb', width: 96, height: 96 });
-    const g = cvs.getContext?.('2d');
-    if (g) {
-      g.scale(2, 2);
+    const sid = member.skinId || `${member.heroId}_default`;
+    const paint = () => {
+      const g = cvs.getContext?.('2d');
+      if (!g) return;
+      g.setTransform(2, 0, 0, 2, 0, 0);
       g.fillStyle = INK;
       g.fillRect(0, 0, 48, 48);
       g.strokeStyle = PAPER_SHADE;
@@ -56,12 +59,18 @@ export function openCoopLobbyModal(root, opts = {}) {
       g.strokeRect(1.5, 1.5, 45, 45);
       drawHeroWithSkin(g, {
         heroId: member.heroId,
-        skinId: member.skinId || `${member.heroId}_default`,
+        skinId: sid,
         x: 24,
-        y: 41,
+        y: 43,
         frame: 0,
-        scale: 0.78,
+        scale: 0.82,
         showAura: true,
+      });
+    };
+    paint();
+    if (!isHeroImageReady(member.heroId, sid)) {
+      preloadHeroSkinImage(member.heroId, sid).then(() => {
+        if (!closed && cvs.isConnected) paint();
       });
     }
     return cvs;

@@ -8,6 +8,7 @@ import { damageCircle, damageEnemy, knockback, applyStun, applySlow, applyVuln }
 import { hasRelic } from './relics.js';
 import { hitPropsCircle } from './props.js';
 import { wrapAngle, fsin, fcos, fatan2 } from '../core/math.js';
+import { clearBulletsNear, weaponClearBullets } from './bullet-clear.js';
 
 /** 取武器某项属性在 level 级时的数值（数组按级取，标量直接返回） */
 export function wstat(id, key, level) {
@@ -27,9 +28,15 @@ export function isWeaponSignature(w, run = null, owner = null) {
   return hid ? isHeroSignatureWeapon(hid, w.id) : false;
 }
 
+/** 自身为圆心的横扫/震波半径硬上限（竖屏半宽约 180–195px，保证四周仍看得见来敌） */
+export const SELF_AOE_RADIUS_CAP = 172;
+/** 单件兵刃最终范围倍率上限（含本命加成），防止叠满范围后技能铺满全屏 */
+export const WEAPON_AREA_MUL_CAP = 1.75;
+
 export function weaponAreaMul(run, w, owner = null) {
   const base = run?.mods?.areaMul || 1;
-  return isWeaponSignature(w, run, owner) ? base * (1 + HERO_AFFINITY.areaBonus) : base;
+  const v = isWeaponSignature(w, run, owner) ? base * (1 + HERO_AFFINITY.areaBonus) : base;
+  return Math.min(WEAPON_AREA_MUL_CAP, v);
 }
 
 /** 获得新武器或升一级；返回新等级，失败返回 0 */
@@ -238,7 +245,7 @@ function gongPulse(run, w, waveIdx = 1) {
   }
 
   if (waveIdx < 3) {
-    const R = evo.waveRadius * areaMul;
+    const R = Math.min(SELF_AOE_RADIUS_CAP, evo.waveRadius * areaMul);
     const list = run._sys.hash.queryCircle(p.x, p.y, R, run._sys.scratchW);
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
@@ -263,19 +270,15 @@ function gongPulse(run, w, waveIdx = 1) {
     });
     emitFire(run, w, p.x, p.y, 0, { waveIdx });
   } else {
-    const R = evo.finalRadius * areaMul;
+    const R = Math.min(SELF_AOE_RADIUS_CAP + 28, evo.finalRadius * areaMul);
     damageCircle(run, p.x, p.y, R, dmg * evo.finalDmgMul, 'gong', {
       knock: evo.finalKnock,
       stun: evo.finalStun,
       vuln: evo.vulnDur,
       vulnPct: evo.vulnPct,
     });
-    for (const pr of run.projectiles) {
-      if (pr.kind === 'enemyBullet' && !pr.dead) {
-        const rr = R + (pr.r || 0);
-        if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) pr.dead = true;
-      }
-    }
+    // 末响震碎近身普通敌弹（半径封顶 160、至多 6 颗，夜主弹幕不受影响）
+    clearBulletsNear(run, p.x, p.y, R, evo.finalClearMax || 6, { cap: 160 });
     newProj(run, 'gongPulse', p.x, p.y, R, 0, def.pulseLife * 1.25, {
       weaponId: 'gong',
       radius: 0,
@@ -483,7 +486,7 @@ function updateBrush(run, w, dt) {
 
   // 泼墨山河：周天满圆挥砍 + 360px 贯穿墨浪 + 镇邪墨河
   const evo = def.evo;
-  const R = (wstat('brush', 'radius', w.level) + evo.slashRadiusBonus) * areaMul;
+  const R = Math.min(SELF_AOE_RADIUS_CAP, (wstat('brush', 'radius', w.level) + evo.slashRadiusBonus) * areaMul);
   const pri = findPriorityTarget(run, p.x, p.y, 380, run._sys.scratchW);
   const aimAngle = pri ? fatan2(pri.y - p.y, pri.x - p.x) : fatan2(p.facingY, p.facingX);
 
@@ -860,7 +863,7 @@ function updateSoulbanner(run, w, dt) {
   const def = WEAPONS.soulbanner;
   const evo = def.evo;
   const p = run.player;
-  const R = wstat('soulbanner', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * weaponAreaMul(run, w);
+  const R = Math.min(SELF_AOE_RADIUS_CAP, wstat('soulbanner', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * weaponAreaMul(run, w));
   const spreadDeg = w.evolved ? evo.spread : wstat('soulbanner', 'spread', w.level);
   const spreadRad = (spreadDeg * Math.PI) / 180;
   const pri = findPriorityTarget(run, p.x, p.y, R * 1.35, run._sys.scratchW);
@@ -1239,7 +1242,7 @@ function updateMourningStaff(run, w, dt) {
   const evo = def.evo;
   const p = run.player;
   const areaMul = weaponAreaMul(run, w);
-  const R = wstat('mourning_staff', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const R = Math.min(SELF_AOE_RADIUS_CAP, wstat('mourning_staff', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul);
   const spreadRad = w.evolved ? Math.PI * 2 : (wstat('mourning_staff', 'spread', w.level) * Math.PI) / 180;
   const dmg = baseDmg(w, run);
 
@@ -1274,13 +1277,8 @@ function updateMourningStaff(run, w, dt) {
   }
 
   if (w.evolved) {
-    for (let j = 0; j < run.projectiles.length; j++) {
-      const b = run.projectiles[j];
-      if (b.kind === 'enemyBullet' && !b.dead) {
-        const rr = R + (b.r || 0);
-        if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 <= rr * rr) b.dead = true;
-      }
-    }
+    // 每扫仅拨落近身 2 颗普通敌弹
+    weaponClearBullets(run, p.x, p.y, R, evo.clearMax || 2);
     if (w._sweeps % evo.pulseEvery === 0) {
       const pR = R * evo.pulseRadiusMul;
       damageCircle(run, p.x, p.y, pR, dmg * evo.pulseDmgMul, 'mourning_staff', {
@@ -1562,7 +1560,7 @@ function updateBambooPole(run, w, dt) {
   const evo = def.evo;
   const p = run.player;
   const areaMul = weaponAreaMul(run, w);
-  const R = wstat('bamboo_pole', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul;
+  const R = Math.min(SELF_AOE_RADIUS_CAP, wstat('bamboo_pole', 'radius', w.level) * (w.evolved ? evo.radiusMul : 1) * areaMul);
   const spreadDeg = w.evolved ? evo.arcDeg : wstat('bamboo_pole', 'arcDeg', w.level);
   const spreadRad = Math.min(Math.PI * 1.9, (spreadDeg * Math.PI) / 180 * Math.min(1.4, areaMul));
   const dmg = baseDmg(w, run);
@@ -1595,13 +1593,8 @@ function updateBambooPole(run, w, dt) {
   }
 
   if (w.evolved && evo.clearBullets) {
-    for (let j = 0; j < run.projectiles.length; j++) {
-      const b = run.projectiles[j];
-      if (b.kind === 'enemyBullet' && !b.dead) {
-        const rr = R + (b.r || 0);
-        if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 <= rr * rr) b.dead = true;
-      }
-    }
+    // 每扫仅拨落近身 2 颗普通敌弹
+    weaponClearBullets(run, p.x, p.y, R, evo.clearMax || 2);
   }
 
   newProj(run, 'mourningSweep', p.x, p.y, R, aim, def.sweepLife, {
@@ -1640,7 +1633,7 @@ function updateBambooPole(run, w, dt) {
       speed: wSpd,
       dmg: wDmg,
       stunDur: w.evolved ? evo.stunDur * 0.7 : 0,
-      clearBullets: w.evolved,
+      clearBullets: w.evolved ? 1 : 0,
       evolved: w.evolved,
       _hit: [],
     });

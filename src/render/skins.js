@@ -7,6 +7,7 @@ import {
 } from './palette.js';
 import { makeCanvas, makeRng, hashStr, withMisreg, printSpeckle } from './ink.js';
 import { normalizeHeroSkinId } from '../meta/cosmetics.js';
+import { drawHeroImage } from './hero-images.js';
 
 const TAU = Math.PI * 2;
 
@@ -1251,6 +1252,25 @@ export function drawHeroWithSkin(ctx, {
       ctx.drawImage(aura.canvas, -aura.ax, -aura.ay, aura.w, aura.h);
       ctx.restore();
     }
+  }
+
+  if (drawHeroImage(ctx, {
+    heroId,
+    skinId,
+    x,
+    y,
+    logicalH: 50,
+    scale,
+    flip,
+    lean,
+    flash,
+    alpha: 1,
+  })) {
+    ctx.restore();
+    return {
+      lx: x + 13 * flip * scale,
+      ly: y - 20 * scale,
+    };
   }
 
   const spr = heroSkinSprite(heroId, skinId, frame, flash, legacyOutfit);

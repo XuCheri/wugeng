@@ -485,7 +485,7 @@ test('F4 & F5: 全部 12 武器发射 fire 事件、+4 新武器与 +4 新法器
 
   // 糯米：击杀积分累积回血
   run.player.hp = 50;
-  for (let k = 0; k < 4; k++) {
+  for (let k = 0; k < 6; k++) {
     const b = spawnBoss(run, 'horse');
     killEnemy(run, b);
   }

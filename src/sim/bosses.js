@@ -66,9 +66,12 @@ export function spawnBoss(run, type, opts = {}) {
 }
 
 function fireBullet(run, x, y, angle, speed, dmg, r, life, style) {
+  // 夜主弹幕随夜色加深（与接触伤害同口径）
+  dmg = Math.round(dmg * (run.night?.contactDmgMul || 1));
   run.projectiles.push({
     id: run._nextId++,
     kind: 'enemyBullet',
+    bossBullet: true,
     x,
     y,
     r,
