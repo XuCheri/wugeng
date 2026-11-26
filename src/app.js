@@ -36,6 +36,8 @@ import {
 import { getEquippedHeroSkin, getEquippedAttackVfx } from './meta/cosmetics.js';
 import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
 import { createLeaderboard } from './meta/leaderboard.js';
+import { TAP_ACHIEVEMENT_SPECS } from './meta/tap-achievements-config.js';
+import { createTapAchievements } from './meta/tap-achievements.js';
 import { createFriends } from './meta/friends.js';
 import { createCoopManager } from './net/coop-net.js';
 import { adsEnabled, preloadAds, watchAd } from './ads/ads.js';
@@ -85,6 +87,13 @@ export async function startApp(bootOpts = {}) {
   const leaderboard = createLeaderboard({
     getSave: () => save,
     persistSave: (s) => saveSave(s),
+  });
+
+  const tapAchievements = createTapAchievements({
+    onPlatinum: () => {
+      haptics.heavy?.();
+      toast('白金成就达成 · 五更天全功绩皆成', 3000);
+    },
   });
 
   const coop = createCoopManager({
@@ -172,11 +181,13 @@ export async function startApp(bootOpts = {}) {
       save.achievements.kills800 = Date.now();
       persist(false);
       showAchBanner('kills800');
+      tapAchievements.unlock('kills800', { silent: false });
     }
     if (!save.achievements?.hit10k && run.stats.maxHit >= 10_000) {
       save.achievements.hit10k = Date.now();
       persist(false);
       showAchBanner('hit10k');
+      tapAchievements.unlock('hit10k', { silent: false });
     }
   }
 
@@ -267,6 +278,7 @@ export async function startApp(bootOpts = {}) {
     if (r.hasRemote && r.merged) {
       Object.assign(save, r.merged);
       reconcileAchievements(save);
+      tapAchievements.syncUnlocked(save, { silent: true });
       saveSave(save);
       applySettings(save.settings);
       if (hub && screen === hub.el) hub.refresh();
@@ -391,6 +403,7 @@ export async function startApp(bootOpts = {}) {
     hub?.teardown?.();
     hub = renderHub(root, {
       save,
+      tapAchievements,
       adsOn: () => adsEnabled(),
       persist,
       runAd,
@@ -401,6 +414,7 @@ export async function startApp(bootOpts = {}) {
       onCosmeticChange: () => {
         applySettings(save.settings);
         coop.syncLocalProfile();
+        tapAchievements.syncUnlocked(save, { silent: true });
       },
       onProfileChange: () => coop.syncLocalProfile(),
       cloudState: () => cloud.getState(),
@@ -506,6 +520,13 @@ export async function startApp(bootOpts = {}) {
         }
       }
     }
+    const extraAch = reconcileAchievements(save, nowTs);
+    const newlyUnlocked = [...new Set([...(recorded.achievements || []), ...extraAch])];
+    if (newlyUnlocked.length > 0) {
+      haptics.medium?.();
+      tapAchievements.unlockMany(newlyUnlocked, { silent: false });
+    }
+    tapAchievements.syncUnlocked(save, { silent: true });
     persist(true);
     (async () => {
       await leaderboard.submitScore(summary.score, save);
@@ -557,9 +578,11 @@ export async function startApp(bootOpts = {}) {
     coach,
     cloud,
     leaderboard,
+    tapAchievements,
     friends,
     coop,
     PRIMARY_LEADERBOARD_ID,
+    TAP_ACHIEVEMENT_SPECS,
     achievements: {
       ACHIEVEMENTS,
       list: ACHIEVEMENTS,
@@ -568,12 +591,15 @@ export async function startApp(bootOpts = {}) {
       claim: (id) => {
         const res = claimAchievement(save, id);
         if (res.ok) {
+          tapAchievements.unlock(id, { silent: true });
           applySettings(save.settings);
           persist(true);
           hub?.refresh?.();
         }
         return res;
       },
+      syncTap: () => tapAchievements.syncUnlocked(save, { silent: true, force: true }),
+      openTap: () => tapAchievements.openNativeAchievements(save),
     },
     daily: {
       getState: (nowVal = new Date()) => getDailyState(save, nowVal),
@@ -652,6 +678,10 @@ export async function startApp(bootOpts = {}) {
     openCoop({ autoJoinCode: launchRoomCode });
   } else {
     showTitle();
+  }
+  if (tapAchievements.isAvailable()) {
+    tapAchievements.init();
+    tapAchievements.syncUnlocked(save, { silent: true });
   }
   if (cloud.isAvailable()) handleCloudPull(true);
   if (

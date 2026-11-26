@@ -560,12 +560,14 @@ export function renderHub(root, ctx) {
   function openAchievements() {
     return openAchievementsModal(root, {
       save,
+      tapAchievements: ctx.tapAchievements,
       persist: (syncCloud) => {
         ctx.persist(syncCloud);
         refresh();
       },
       onRewardClaimed: () => {
         ctx.onCosmeticChange?.();
+        ctx.tapAchievements?.syncUnlocked?.(save, { silent: true });
         refresh();
       },
     });

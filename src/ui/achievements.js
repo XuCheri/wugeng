@@ -68,8 +68,9 @@ function renderRewardIcon(ach) {
   return icon('coin', 'coin', 38, '赏');
 }
 
-export function openAchievementsModal(root, { save, persist, onRewardClaimed } = {}) {
+export function openAchievementsModal(root, { save, persist, onRewardClaimed, tapAchievements } = {}) {
   reconcileAchievements(save);
+  tapAchievements?.syncUnlocked?.(save, { silent: true });
   let activeCat = 'all';
 
   const summaryBar = h('div', { class: 'ach-head' });
@@ -146,6 +147,7 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed } =
         onClick: () => {
           const res = claimAchievement(save, ach.id);
           if (!res.ok) return;
+          tapAchievements?.unlock?.(ach.id, { silent: true });
           persist?.(true);
           onRewardClaimed?.(res);
           toast(formatRewardToast(res.reward));
@@ -180,6 +182,7 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed } =
         onClick: () => {
           const res = claimAllAchievements(save);
           if (!res.ok) return;
+          tapAchievements?.unlockMany?.(res.claimed, { silent: true });
           persist?.(true);
           onRewardClaimed?.(res);
           const parts = [];
@@ -232,18 +235,36 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed } =
   renderSummaryAndTabs();
   mountRows();
 
+  function handleOpenTapNative() {
+    if (!tapAchievements || !tapAchievements.isAvailable()) {
+      toast('当前环境暂未连接 TapTap 成就面板');
+      return;
+    }
+    const res = tapAchievements.openNativeAchievements(save);
+    if (!res.ok) {
+      toast('当前环境暂不支持唤起原生成就，已为你展示功绩卷');
+    } else if (!res.native) {
+      toast('已唤起 TapTap「守夜功绩」面板');
+    }
+  }
+
   let v = null;
+  const nativeBtn = sealButton('唤起 TapTap 原生成就', handleOpenTapNative, {
+    kind: 'small',
+    cls: 'btn--wide lb-native-btn',
+    dataset: { action: 'open-tap-achievements' },
+  });
+  const closeBtn = sealButton('合卷回去', () => v?.close(), {
+    kind: 'ghost',
+    cls: 'btn--wide',
+    dataset: { action: 'close-achievements' },
+  });
   const panel = scroll({
     title: '守夜功绩',
     sub: '记守夜苦劳 · 赏道门秘器与重彩衣冠',
     cls: 'scroll--dialog scroll--tall achievements-modal',
     body: h('div', { class: 'ach-body' }, summaryBar, catBar, listBox),
-    footer: [
-      sealButton('合卷回去', () => v?.close(), {
-        kind: 'ghost',
-        dataset: { action: 'close-achievements' },
-      }),
-    ],
+    footer: [nativeBtn, closeBtn],
   });
 
   v = veil(root, panel, { onBackdrop: () => v?.close() });
