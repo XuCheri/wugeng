@@ -285,6 +285,8 @@ export const LEGACY_ACHIEVEMENT_IDS = [
 ];
 
 export const PRIMARY_LEADERBOARD_ID = 'c5mzumajes9houq0ra';
+export const DAILY_LEADERBOARD_ID = 'ofuwiinc9n5khd1ehh';
+export const SEASON_LEADERBOARD_ID = 'hxw70v121367vj083y';
 export const SAVE_VERSION = 4;
 
 export const COOP_SPEC = {

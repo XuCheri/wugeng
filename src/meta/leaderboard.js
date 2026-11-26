@@ -196,18 +196,33 @@ function readQueryParams(win) {
   }
 }
 
-function createMockTapLeaderboardManager(mode, getSave) {
-  let submittedBest = 0;
+function createMockTapLeaderboardManager(mode, getSave, boardIds = {}) {
+  const submittedByBoard = new Map();
   let openCalls = 0;
 
-  const buildRankedList = (collection) => {
+  const resolveBoardKind = (leaderboardId) => {
+    const id = typeof leaderboardId === 'string' ? leaderboardId.trim() : '';
+    if (id && id === boardIds.dailyLeaderboardId) return 'daily';
+    if (id && id === boardIds.seasonLeaderboardId) return 'season';
+    return 'primary';
+  };
+
+  const buildRankedList = (collection, leaderboardId) => {
     const save = getSave?.();
     const myName = sanitizeDaoName(save?.daoName || DEFAULT_DAO_NAME);
     const myHero = HERO_IDS.includes(save?.selectedHero) ? save.selectedHero : 'zhou';
-    const myBest = Math.max(submittedBest, sanitizeLeaderboardScore(save?.leaderboard?.bestScore || 0));
+    const lbKey = typeof leaderboardId === 'string' && leaderboardId.trim() ? leaderboardId.trim() : PRIMARY_LEADERBOARD_ID;
+    const kind = resolveBoardKind(lbKey);
+    const savedBest = kind === 'daily'
+      ? sanitizeLeaderboardScore(save?.dailyChallenge?.todayBestScore || save?.dailyChallenge?.bestScore || 0)
+      : kind === 'season'
+        ? sanitizeLeaderboardScore(save?.season?.bestSeasonScore || save?.season?.xp || 0)
+        : sanitizeLeaderboardScore(save?.leaderboard?.bestScore || 0);
+    const myBest = Math.max(submittedByBoard.get(lbKey) || 0, savedBest);
+    const seedMul = kind === 'daily' ? 0.55 : kind === 'season' ? 0.8 : 1;
     const seeds = collection === LEADERBOARD_COLLECTIONS.FRIENDS ? MOCK_FRIENDS_SEEDS : MOCK_PUBLIC_SEEDS;
     const combined = seeds.map((s) => ({
-      score: s.score,
+      score: sanitizeLeaderboardScore(s.score * seedMul),
       user: { name: s.name },
       heroId: s.heroId,
       isCurrentUser: false,
@@ -238,8 +253,11 @@ function createMockTapLeaderboardManager(mode, getSave) {
       }
       const list = Array.isArray(params?.scores) ? params.scores : [];
       for (const item of list) {
+        const lbKey = typeof item?.leaderboardId === 'string' && item.leaderboardId.trim()
+          ? item.leaderboardId.trim()
+          : PRIMARY_LEADERBOARD_ID;
         const s = sanitizeLeaderboardScore(item?.score);
-        if (s > submittedBest) submittedBest = s;
+        if (s > (submittedByBoard.get(lbKey) || 0)) submittedByBoard.set(lbKey, s);
       }
       params?.callback?.onSuccess?.({ results: list.map((x) => ({ leaderboardId: x.leaderboardId, score: x.score })) });
     },
@@ -258,7 +276,7 @@ function createMockTapLeaderboardManager(mode, getSave) {
         params?.callback?.onFailure?.(Number(mode), 'friend permission not granted');
         return;
       }
-      const scores = buildRankedList(col).slice(0, sz);
+      const scores = buildRankedList(col, params?.leaderboardId).slice(0, sz);
       params?.callback?.onSuccess?.({
         scores,
         nextContinuationToken: null,
@@ -274,7 +292,7 @@ function createMockTapLeaderboardManager(mode, getSave) {
         params?.callback?.onFailure?.(Number(mode), 'friend permission not granted');
         return;
       }
-      const ranked = buildRankedList(col);
+      const ranked = buildRankedList(col, params?.leaderboardId);
       const mine = ranked.find((r) => r.isCurrentUser) || ranked[ranked.length - 1];
       params?.callback?.onSuccess?.({
         currentUserScore: mine,
@@ -345,17 +363,18 @@ export function createLeaderboard({
   let cachedMockMgr = null;
   let cachedNativeMgr = null;
   let cachedTapRef = null;
-  let knownPeriodToken = '';
+  const periodTokens = { primary: '', daily: '', season: '' };
   let lastDiagnostics = null;
 
   function resolveManager() {
     const q = readQueryParams(win);
     const mockLb = (q.get('mockLeaderboard') || '').trim();
+    const boardIds = { dailyLeaderboardId, seasonLeaderboardId };
     if (MOCK_PERMISSION_MODES.has(mockLb) || mockLb === '500001' || mockLb === '1' || mockLb === 'true') {
       const normKey = mockLb === 'true' ? '1' : mockLb;
       if (cachedMockKey !== normKey || !cachedMockMgr) {
         cachedMockKey = normKey;
-        cachedMockMgr = createMockTapLeaderboardManager(normKey, getSave);
+        cachedMockMgr = createMockTapLeaderboardManager(normKey, getSave, boardIds);
       }
       return { mgr: cachedMockMgr, mode: `mock:${normKey}` };
     }
@@ -375,7 +394,7 @@ export function createLeaderboard({
     if (q.get('mockTap') === '1') {
       if (cachedMockKey !== 'tap1' || !cachedMockMgr) {
         cachedMockKey = 'tap1';
-        cachedMockMgr = createMockTapLeaderboardManager('1', getSave);
+        cachedMockMgr = createMockTapLeaderboardManager('1', getSave, boardIds);
       }
       return { mgr: cachedMockMgr, mode: 'mock:tap' };
     }
@@ -533,9 +552,11 @@ export function createLeaderboard({
     });
   }
 
-  function rememberPeriod(rawRes) {
+  function rememberPeriod(boardKey, rawRes) {
     const tok = rawRes?.leaderboard?.period?.periodToken;
-    if (typeof tok === 'string' && tok.trim()) knownPeriodToken = tok.trim();
+    if (typeof tok === 'string' && tok.trim()) {
+      periodTokens[boardKey] = tok.trim();
+    }
   }
 
   // 好友榜属隐私接口：宿主若提供 requirePrivacyAuthorize，则先拉起官方隐私授权弹窗（同意过则静默通过）
@@ -561,7 +582,7 @@ export function createLeaderboard({
     });
   }
 
-  function buildFailureNotice(code, col) {
+  function buildFailureNotice(code, col, bLabel = '天榜') {
     if (PRIVACY_DECLARE_CODES.has(code)) {
       return `好友榜尚未开通（码 ${code}）：需在 TapTap 后台「隐私合规」勾选「好友关系」并填写用途，生效后点「重新展卷」即可连通。先为你展示本机荣誉榜。`;
     }
@@ -572,24 +593,48 @@ export function createLeaderboard({
       return `尚未授权读取 TapTap 好友关系（码 ${code}），点「重新展卷」可再次授权。先为你展示本机荣誉榜。`;
     }
     if (code === 500000 || code === '500000') {
-      return '本期天榜已结算，新一期开榜后自动同步，先为你展示本机荣誉榜。';
+      return `本期${bLabel}已结算，新一期开榜后自动同步，先为你展示本机荣誉榜。`;
     }
     if (CONFIG_ERROR_CODES.has(code)) {
-      return `天榜尚未向当前账号开放（码 ${code}），先为你展示本机荣誉榜，榜单发布后自动同步。`;
+      return `${bLabel}尚未向当前账号开放（码 ${code}），先为你展示本机荣誉榜，榜单发布后自动同步。`;
     }
     if (code === 'timeout') {
-      return '天榜回信较缓，先为你展示本机荣誉榜，可点「重新展卷」再试。';
+      return `${bLabel}回信较缓，先为你展示本机荣誉榜，可点「重新展卷」再试。`;
     }
     const codeTxt = code !== undefined && code !== null && code !== -1 && code !== 'exception' ? `（码 ${code}）` : '';
     return col === LEADERBOARD_COLLECTIONS.FRIENDS
       ? `好友榜暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`
-      : `天榜暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`;
+      : `${bLabel}暂未连通${codeTxt}，先为你展示本机荣誉榜，可点「重新展卷」再试。`;
   }
 
   function resolveBoardId(boardType = 'primary') {
     if (boardType === 'daily') return typeof dailyLeaderboardId === 'string' ? dailyLeaderboardId.trim() : '';
     if (boardType === 'season') return typeof seasonLeaderboardId === 'string' ? seasonLeaderboardId.trim() : '';
     return PRIMARY_LEADERBOARD_ID;
+  }
+
+  function getSecondaryPendingScore(boardType, save) {
+    if (!save || typeof save !== 'object') return 0;
+    if (boardType === 'daily') return sanitizeLeaderboardScore(save.dailyChallenge?.pendingScore || 0);
+    if (boardType === 'season') return sanitizeLeaderboardScore(save.season?.pendingScore || 0);
+    return 0;
+  }
+
+  function writeSecondaryPendingScore(boardType, save, nextScore) {
+    if (!save || typeof save !== 'object') return;
+    if (boardType === 'daily' && save.dailyChallenge && typeof save.dailyChallenge === 'object') {
+      save.dailyChallenge.pendingScore = sanitizeLeaderboardScore(nextScore);
+      saveFlush(save);
+    } else if (boardType === 'season' && save.season && typeof save.season === 'object') {
+      save.season.pendingScore = sanitizeLeaderboardScore(nextScore);
+      saveFlush(save);
+    }
+  }
+
+  function queueSecondaryPendingScore(boardType, save, score) {
+    if (!save || score <= 0) return;
+    const prev = getSecondaryPendingScore(boardType, save);
+    writeSecondaryPendingScore(boardType, save, Math.max(prev, score));
   }
 
   function submitSecondaryBoard(boardType, rawScore, targetSave = null) {
@@ -609,15 +654,7 @@ export function createLeaderboard({
     }
     const { mgr } = resolveManager();
     if (!mgr || typeof mgr.submitScores !== 'function') {
-      if (save && score > 0) {
-        if (boardType === 'daily' && save.dailyChallenge) {
-          save.dailyChallenge.pendingScore = Math.max(sanitizeLeaderboardScore(save.dailyChallenge.pendingScore), score);
-          saveFlush(save);
-        } else if (boardType === 'season' && save.season) {
-          save.season.pendingScore = Math.max(sanitizeLeaderboardScore(save.season.pendingScore), score);
-          saveFlush(save);
-        }
-      }
+      queueSecondaryPendingScore(boardType, save, score);
       return Promise.resolve({
         ok: false,
         queued: score > 0,
@@ -635,16 +672,30 @@ export function createLeaderboard({
           scores: [{ leaderboardId: boardId, score }],
           callback: {
             onSuccess(res) {
+              const curPending = getSecondaryPendingScore(boardType, save);
+              if (save && curPending > 0 && score >= curPending) {
+                writeSecondaryPendingScore(boardType, save, 0);
+              }
               done({ ok: true, queued: false, leaderboardId: boardId, boardType, score, raw: res || null });
             },
             onFailure(a1, a2) {
               const err = parseFailureArgs(a1, a2);
-              done({ ok: false, queued: false, code: err.code, reason: 'sdk_failure', leaderboardId: boardId, boardType, score });
+              queueSecondaryPendingScore(boardType, save, score);
+              done({
+                ok: false,
+                queued: score > 0,
+                code: err.code,
+                reason: NOT_FOUND_ERROR_CODES.has(err.code) ? 'not_found' : 'sdk_failure',
+                leaderboardId: boardId,
+                boardType,
+                score,
+              });
             },
           },
         });
       } catch {
-        done({ ok: false, queued: false, reason: 'exception', leaderboardId: boardId, boardType, score });
+        queueSecondaryPendingScore(boardType, save, score);
+        done({ ok: false, queued: score > 0, reason: 'exception', leaderboardId: boardId, boardType, score });
       }
     });
   }
@@ -655,6 +706,33 @@ export function createLeaderboard({
 
   function submitSeasonScore(rawScore, targetSave = null) {
     return submitSecondaryBoard('season', rawScore, targetSave);
+  }
+
+  async function flushSecondaryPendingScore(boardType, targetSave = null) {
+    const save = targetSave || getSave?.() || null;
+    if (!save) return { ok: false, flushed: false };
+    const pending = getSecondaryPendingScore(boardType, save);
+    if (pending <= 0) return { ok: true, flushed: false, score: 0 };
+    const res = await submitSecondaryBoard(boardType, pending, save);
+    if (res.ok) {
+      writeSecondaryPendingScore(boardType, save, 0);
+      return { ok: true, flushed: true, score: pending };
+    }
+    return { ok: false, flushed: false, score: pending, reason: res.reason };
+  }
+
+  async function flushAllPendingScores(targetSave = null) {
+    const save = targetSave || getSave?.() || null;
+    const primary = await flushPendingScore(save);
+    const daily = await flushSecondaryPendingScore('daily', save);
+    const season = await flushSecondaryPendingScore('season', save);
+    return {
+      ok: primary.ok && daily.ok && season.ok,
+      flushed: Boolean(primary.flushed || daily.flushed || season.flushed),
+      primary,
+      daily,
+      season,
+    };
   }
 
   async function fetchBoard({
@@ -694,7 +772,7 @@ export function createLeaderboard({
           nextContinuationToken: null,
         };
       }
-      const { mgr } = resolveManager();
+      const { mgr, mode: subMode } = resolveManager();
       if (!mgr || typeof mgr.loadLeaderboardScores !== 'function') {
         return {
           ok: false,
@@ -702,40 +780,69 @@ export function createLeaderboard({
           boardType: normBoard,
           collection: col,
           leaderboardId: targetId,
-          notice: `当前展示本机${bLabel}战绩（在 TapTap 内打开可同步云端）。`,
+          notice: col === LEADERBOARD_COLLECTIONS.FRIENDS
+            ? `当前处于离线或本机环境，暂无法读取好友关系，以下展示本机${bLabel}战绩。`
+            : `当前展示本机${bLabel}战绩（在 TapTap 内打开可同步云端）。`,
           entries: localSubEntries,
           currentPlayer: localSubCurrent,
           nextContinuationToken: null,
         };
       }
-      const subRes = await callSdk(mgr, 'loadLeaderboardScores', {
-        leaderboardId: targetId,
-        collection: col,
-        maxSize: safeMaxSize,
-      });
+
+      if (getSecondaryPendingScore(normBoard, save) > 0) {
+        await flushSecondaryPendingScore(normBoard, save).catch(() => null);
+      }
+
+      const buildSubScoresReq = (withPeriod) => {
+        const req = { leaderboardId: targetId, collection: col, maxSize: safeMaxSize };
+        if (typeof continuationToken === 'string' && continuationToken) req.continuationToken = continuationToken;
+        if (withPeriod && periodTokens[normBoard]) req.periodToken = periodTokens[normBoard];
+        return req;
+      };
+
+      if (col === LEADERBOARD_COLLECTIONS.FRIENDS && subMode === 'tap') {
+        await ensurePrivacyAuthorized();
+      }
+
+      const subPeriodBefore = periodTokens[normBoard];
+      let subRes = await callSdk(mgr, 'loadLeaderboardScores', buildSubScoresReq(true));
       let subCur = { ok: false };
       if (typeof mgr.loadCurrentPlayerLeaderboardScore === 'function') {
-        subCur = await callSdk(mgr, 'loadCurrentPlayerLeaderboardScore', {
-          leaderboardId: targetId,
-          collection: col,
-        });
+        const curReq = { leaderboardId: targetId, collection: col };
+        if (periodTokens[normBoard]) curReq.periodToken = periodTokens[normBoard];
+        subCur = await callSdk(mgr, 'loadCurrentPlayerLeaderboardScore', curReq);
+        if (subCur.ok) rememberPeriod(normBoard, subCur.data);
       }
+      if (!subRes.ok && !isPermissionCode(subRes.err?.code) && periodTokens[normBoard] && periodTokens[normBoard] !== subPeriodBefore) {
+        subRes = await callSdk(mgr, 'loadLeaderboardScores', buildSubScoresReq(true));
+      }
+      if (!subRes.ok && !isPermissionCode(subRes.err?.code) && !CONFIG_ERROR_CODES.has(subRes.err?.code)) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        subRes = await callSdk(mgr, 'loadLeaderboardScores', buildSubScoresReq(true));
+      }
+      if (subRes.ok) rememberPeriod(normBoard, subRes.data);
+
       const remoteSubCur = subCur.ok ? normalizeCurrentPlayer(subCur.data, daoName) : null;
       if (!subRes.ok) {
+        const subCode = subRes.err?.code;
+        lastDiagnostics = { at: Date.now(), boardType: normBoard, collection: col, code: subCode, message: subRes.err?.rawMessage || '' };
         return {
           ok: false,
-          source: 'error_fallback',
-          retryable: !CONFIG_ERROR_CODES.has(subRes.err?.code),
+          source: isPermissionCode(subCode) ? 'permission_fallback' : 'error_fallback',
+          code: subCode,
+          retryable: !CONFIG_ERROR_CODES.has(subCode),
           boardType: normBoard,
           collection: col,
           leaderboardId: targetId,
-          notice: `${bLabel}暂未连通，先为你展示本机战绩。`,
+          notice: buildFailureNotice(subCode, col, bLabel),
           entries: localSubEntries,
           currentPlayer: remoteSubCur || localSubCurrent,
           nextContinuationToken: null,
         };
       }
+      lastDiagnostics = { at: Date.now(), boardType: normBoard, collection: col, code: 0, message: 'ok' };
       const normSub = normalizeRemoteScores(subRes.data);
+      const effectiveSubCur = remoteSubCur || (bestSub > 0 ? { rank: null, score: bestSub, name: daoName } : localSubCurrent);
       return {
         ok: true,
         source: normSub.entries.length > 0 ? 'tap' : 'tap_empty_local',
@@ -744,7 +851,7 @@ export function createLeaderboard({
         leaderboardId: targetId,
         notice: normSub.entries.length === 0 ? `${bLabel}已连通，当期虚位以待。` : '',
         entries: normSub.entries.length > 0 ? normSub.entries : localSubEntries,
-        currentPlayer: remoteSubCur || localSubCurrent,
+        currentPlayer: effectiveSubCur,
         nextContinuationToken: normSub.nextContinuationToken,
       };
     }
@@ -780,7 +887,7 @@ export function createLeaderboard({
     const buildScoresReq = (withPeriod) => {
       const req = { leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col, maxSize: safeMaxSize };
       if (typeof continuationToken === 'string' && continuationToken) req.continuationToken = continuationToken;
-      if (withPeriod && knownPeriodToken) req.periodToken = knownPeriodToken;
+      if (withPeriod && periodTokens.primary) req.periodToken = periodTokens.primary;
       return req;
     };
 
@@ -789,18 +896,18 @@ export function createLeaderboard({
     }
 
     // 顺序调用（部分宿主桥接不支持同时挂起多个排行榜回调）
-    const periodBefore = knownPeriodToken;
+    const periodBefore = periodTokens.primary;
     let scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
     let curRes = { ok: false };
     if (typeof mgr.loadCurrentPlayerLeaderboardScore === 'function') {
       const curReq = { leaderboardId: PRIMARY_LEADERBOARD_ID, collection: col };
-      if (knownPeriodToken) curReq.periodToken = knownPeriodToken;
+      if (periodTokens.primary) curReq.periodToken = periodTokens.primary;
       curRes = await callSdk(mgr, 'loadCurrentPlayerLeaderboardScore', curReq);
-      if (curRes.ok) rememberPeriod(curRes.data);
+      if (curRes.ok) rememberPeriod('primary', curRes.data);
     }
 
     // 有重置周期的榜单：借「我的排名」返回的当期 periodToken 重拉一次
-    if (!scoresRes.ok && !isPermissionCode(scoresRes.err?.code) && knownPeriodToken && knownPeriodToken !== periodBefore) {
+    if (!scoresRes.ok && !isPermissionCode(scoresRes.err?.code) && periodTokens.primary && periodTokens.primary !== periodBefore) {
       scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
     }
     // 偶发网络错误 / 超时：静默退避重试一次（确定性的配置错误与权限错误不重试）
@@ -808,13 +915,13 @@ export function createLeaderboard({
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       scoresRes = await callSdk(mgr, 'loadLeaderboardScores', buildScoresReq(true));
     }
-    if (scoresRes.ok) rememberPeriod(scoresRes.data);
+    if (scoresRes.ok) rememberPeriod('primary', scoresRes.data);
 
     const remoteCurrent = curRes.ok ? normalizeCurrentPlayer(curRes.data, daoName) : null;
 
     if (!scoresRes.ok) {
       const code = scoresRes.err?.code;
-      lastDiagnostics = { at: Date.now(), collection: col, code, message: scoresRes.err?.rawMessage || '' };
+      lastDiagnostics = { at: Date.now(), boardType: 'primary', collection: col, code, message: scoresRes.err?.rawMessage || '' };
       try { console.info?.('[wugeng] leaderboard fallback', col, code); } catch { /* noop */ }
       return {
         ok: false,
@@ -832,7 +939,7 @@ export function createLeaderboard({
       };
     }
 
-    lastDiagnostics = { at: Date.now(), collection: col, code: 0, message: 'ok' };
+    lastDiagnostics = { at: Date.now(), boardType: 'primary', collection: col, code: 0, message: 'ok' };
     const norm = normalizeRemoteScores(scoresRes.data);
     const effectiveCurrent = remoteCurrent || (bestLocal > 0 ? { rank: null, score: bestLocal, name: daoName } : null);
     const entries = norm.entries.length > 0 ? norm.entries : localEntries;
@@ -904,6 +1011,8 @@ export function createLeaderboard({
     submitSeasonScore,
     submitScores: submitScoresBatch,
     flushPendingScore,
+    flushSecondaryPendingScore,
+    flushAllPendingScores,
     fetchBoard,
     loadScores: fetchBoard,
     buildLocalSeasonEntries,

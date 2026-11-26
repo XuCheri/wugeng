@@ -3,6 +3,11 @@
 
 import assert from 'node:assert/strict';
 import {
+  DAILY_LEADERBOARD_ID,
+  PRIMARY_LEADERBOARD_ID,
+  SEASON_LEADERBOARD_ID,
+} from './contracts.mjs';
+import {
   analyzeCanvasSpriteBox,
   bootToHub,
   closeActiveModal,
@@ -246,7 +251,7 @@ export const TIER1_F18 = [
     id: 'T1-F18-05',
     tier: 1,
     feature: 'F18',
-    name: '[M3.2/M3.3] .leaderboard-modal switches cleanly across 守夜总榜 / 每日异事榜 / 守夜令榜 with local fallback',
+    name: '[M3.2/M3.3] .leaderboard-modal switches across 守夜总榜 / 每日异事榜 (ofuwiinc9n5khd1ehh) / 守夜令榜 (hxw70v121367vj083y) with SDK + local fallback',
     run: async ({ browser, baseUrl }) => {
       const s = await createIsolatedPage(browser);
       try {
@@ -273,18 +278,91 @@ export const TIER1_F18 = [
         await fastClick(s.page, '[data-board="daily"]', 'Switch to 每日异事榜');
         const dailyTxt = await s.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
         assert.ok(dailyTxt.includes('8420'), `Expected daily score 8420 on 每日异事榜, got: ${dailyTxt}`);
+        assert.ok(dailyTxt.includes(DAILY_LEADERBOARD_ID), `Expected header to include ${DAILY_LEADERBOARD_ID}`);
 
         await fastClick(s.page, '[data-board="season"]', 'Switch to 守夜令榜');
         const seasonTxt = await s.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
         assert.ok(seasonTxt.includes('14600'), `Expected season score 14600 on 守夜令榜, got: ${seasonTxt}`);
+        assert.ok(seasonTxt.includes(SEASON_LEADERBOARD_ID), `Expected header to include ${SEASON_LEADERBOARD_ID}`);
 
         await fastClick(s.page, '[data-board="primary"]', 'Switch back to 守夜总榜');
         await requireOpenSelector(s.page, '[data-collection="public"]', 'Expected public tab visible on primary board');
         await requireOpenSelector(s.page, '[data-collection="friends"]', 'Expected friends tab visible on primary board');
         await closeActiveModal(s.page);
-        s.assertNoErrors('T1-F18-05');
+        s.assertNoErrors('T1-F18-05-local');
       } finally {
         await s.close();
+      }
+
+      const sTap = await createIsolatedPage(browser, {
+        beforeBootInitScript: () => {
+          window.__subLbCalls = [];
+          window.tap = {
+            getLeaderboardManager() {
+              return {
+                loadLeaderboardScores(p) {
+                  window.__subLbCalls.push({ method: 'loadLeaderboardScores', leaderboardId: p?.leaderboardId, collection: p?.collection });
+                  const score = p?.leaderboardId === 'ofuwiinc9n5khd1ehh' ? 21_300 : p?.leaderboardId === 'hxw70v121367vj083y' ? 46_800 : 59_900;
+                  p?.callback?.onSuccess?.({
+                    scores: [{ rank: 1, score, user: { name: '云端魁首' } }],
+                  });
+                },
+                loadCurrentPlayerLeaderboardScore(p) {
+                  window.__subLbCalls.push({ method: 'loadCurrentPlayerLeaderboardScore', leaderboardId: p?.leaderboardId });
+                  p?.callback?.onSuccess?.({
+                    currentUserScore: { rank: 2, score: 12_500, user: { name: '剑清道友' } },
+                  });
+                },
+                submitScores(p) {
+                  window.__subLbCalls.push({ method: 'submitScores', scores: p?.scores });
+                  p?.callback?.onSuccess?.({ results: [] });
+                },
+                openLeaderboard(p) {
+                  window.__subLbCalls.push({ method: 'openLeaderboard', leaderboardId: p?.leaderboardId, collection: p?.collection });
+                  p?.callback?.onSuccess?.({});
+                },
+              };
+            },
+          };
+        },
+      });
+      try {
+        await bootToHub(sTap.page, baseUrl);
+        await fastClick(sTap.page, '[data-action="open-leaderboard"]', 'Open live leaderboard modal');
+        await requireOpenSelector(sTap.page, '.leaderboard-modal', 'Expected .leaderboard-modal');
+
+        await fastClick(sTap.page, '[data-board="daily"]', 'Switch to live 每日异事榜');
+        await sTap.page.waitForFunction(
+          (id) => (window.__subLbCalls || []).some((c) => c.method === 'loadLeaderboardScores' && c.leaderboardId === id),
+          DAILY_LEADERBOARD_ID,
+          { timeout: 3000 },
+        );
+        const liveDailyTxt = await sTap.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
+        assert.ok(liveDailyTxt.includes('21300'), `Expected live daily score 21300, got: ${liveDailyTxt}`);
+
+        await fastClick(sTap.page, '[data-board="season"]', 'Switch to live 守夜令榜');
+        await sTap.page.waitForFunction(
+          (id) => (window.__subLbCalls || []).some((c) => c.method === 'loadLeaderboardScores' && c.leaderboardId === id),
+          SEASON_LEADERBOARD_ID,
+          { timeout: 3000 },
+        );
+        const liveSeasonTxt = await sTap.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
+        assert.ok(liveSeasonTxt.includes('46800'), `Expected live season score 46800, got: ${liveSeasonTxt}`);
+
+        await fastClick(sTap.page, '[data-action="open-native-leaderboard"]', 'Open native season leaderboard');
+        const calls = await sTap.page.evaluate(() => window.__subLbCalls || []);
+        assert.ok(
+          calls.some((c) => c.method === 'openLeaderboard' && c.leaderboardId === SEASON_LEADERBOARD_ID),
+          `Expected openLeaderboard with ${SEASON_LEADERBOARD_ID}`,
+        );
+        assert.ok(
+          calls.some((c) => c.method === 'loadLeaderboardScores' && c.leaderboardId === PRIMARY_LEADERBOARD_ID),
+          `Expected initial loadLeaderboardScores with ${PRIMARY_LEADERBOARD_ID}`,
+        );
+        await closeActiveModal(sTap.page);
+        sTap.assertNoErrors('T1-F18-05-tap');
+      } finally {
+        await sTap.close();
       }
     },
   },

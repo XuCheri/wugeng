@@ -47,6 +47,40 @@ export function openLeaderboardModal(root, opts = {}) {
   const statusLine = h('p', { class: 'lb-status' }, '正在连通 TapTap 天榜');
   const listBox = h('div', { class: 'lb-list' });
 
+  let panelEl = null;
+
+  function boardHeaderMeta(boardId) {
+    if (boardId === 'daily') {
+      return {
+        title: DAILY_LEADERBOARD_NAME,
+        sub: DAILY_LEADERBOARD_ID
+          ? `榜单编号 ${DAILY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`
+          : `计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
+      };
+    }
+    if (boardId === 'season') {
+      return {
+        title: SEASON_LEADERBOARD_NAME,
+        sub: SEASON_LEADERBOARD_ID
+          ? `榜单编号 ${SEASON_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`
+          : `计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
+      };
+    }
+    return {
+      title: PRIMARY_LEADERBOARD_NAME,
+      sub: `总榜编号 ${PRIMARY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
+    };
+  }
+
+  function syncModalHeader() {
+    if (!panelEl) return;
+    const meta = boardHeaderMeta(activeBoard);
+    const titleEl = panelEl.querySelector('.scroll__title');
+    const subEl = panelEl.querySelector('.scroll__sub');
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.sub;
+  }
+
   function renderBoardTabs() {
     clear(boardBar);
     const boards = [
@@ -65,6 +99,7 @@ export function openLeaderboardModal(root, opts = {}) {
         onClick: () => {
           if (activeBoard === bId) return;
           activeBoard = bId;
+          syncModalHeader();
           renderBoardTabs();
           renderTabs();
           loadCurrentTab();
@@ -95,7 +130,7 @@ export function openLeaderboardModal(root, opts = {}) {
         },
       }, label));
     }
-    tabBar.hidden = activeBoard !== 'primary';
+    tabBar.hidden = false;
   }
 
   function localBestForActiveBoard() {
@@ -139,9 +174,13 @@ export function openLeaderboardModal(root, opts = {}) {
     if (pending) {
       statusLine.textContent = `正在连通${bName}……`;
     } else if (res?.ok) {
-      statusLine.textContent = activeBoard === 'primary'
-        ? (activeCol === LEADERBOARD_COLLECTIONS.FRIENDS ? '已连通 TapTap 好友榜' : '已连通 TapTap 全服天榜')
-        : `已连通 TapTap ${bName}`;
+      if (activeBoard === 'primary') {
+        statusLine.textContent = activeCol === LEADERBOARD_COLLECTIONS.FRIENDS ? '已连通 TapTap 好友榜' : '已连通 TapTap 全服天榜';
+      } else {
+        statusLine.textContent = activeCol === LEADERBOARD_COLLECTIONS.FRIENDS
+          ? `已连通 TapTap ${bName}·好友榜`
+          : `已连通 TapTap ${bName}`;
+      }
     } else if (res?.source === 'local') {
       statusLine.textContent = activeBoard === 'daily' ? '本机异事榜' : activeBoard === 'season' ? '本机守夜令榜' : '本机荣誉榜';
     } else {
@@ -190,7 +229,7 @@ export function openLeaderboardModal(root, opts = {}) {
         subParts.push(nightLabel(row.nightLevel || 0));
         subParts.push(`斩祟 ${row.kills}`);
         if (row.timeSec > 0) subParts.push(formatTime(row.timeSec));
-      } else if (activeBoard === 'primary' && activeCol === LEADERBOARD_COLLECTIONS.FRIENDS) {
+      } else if (activeCol === LEADERBOARD_COLLECTIONS.FRIENDS) {
         subParts.push('TapTap 好友');
       } else {
         subParts.push('五更守夜人');
@@ -226,7 +265,7 @@ export function openLeaderboardModal(root, opts = {}) {
     const res = leaderboard
       ? await leaderboard.fetchBoard({
         boardType: activeBoard,
-        collection: activeBoard === 'primary' ? activeCol : LEADERBOARD_COLLECTIONS.PUBLIC,
+        collection: activeCol,
         maxSize: 20,
         save,
       })
@@ -254,7 +293,7 @@ export function openLeaderboardModal(root, opts = {}) {
     }
     const res = await leaderboard.openNativeLeaderboard({
       boardType: activeBoard,
-      collection: activeBoard === 'primary' ? activeCol : LEADERBOARD_COLLECTIONS.PUBLIC,
+      collection: activeCol,
     });
     if (!res.ok) {
       toast('当前环境暂不支持唤起原生榜单，已为你展示榜文');
@@ -270,11 +309,7 @@ export function openLeaderboardModal(root, opts = {}) {
     opts.onClose?.();
   }
 
-  renderBoardTabs();
-  renderTabs();
-  renderMyCard(null);
-  loadCurrentTab();
-
+  const initHeader = boardHeaderMeta(activeBoard);
   const nativeBtn = sealButton('唤起 TapTap 原生榜单', handleOpenNative, {
     kind: 'small',
     cls: 'btn--wide lb-native-btn',
@@ -286,17 +321,20 @@ export function openLeaderboardModal(root, opts = {}) {
     dataset: { action: 'close-leaderboard' },
   });
 
-  const subBoardHint = DAILY_LEADERBOARD_ID || SEASON_LEADERBOARD_ID
-    ? `总榜编号 ${PRIMARY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`
-    : `总榜编号 ${PRIMARY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`;
-
-  v = veil(root, scroll({
-    title: PRIMARY_LEADERBOARD_NAME,
-    sub: subBoardHint,
+  panelEl = scroll({
+    title: initHeader.title,
+    sub: initHeader.sub,
     cls: 'scroll--dialog scroll--tall leaderboard-modal',
     body: h('div', { class: 'lb-body' }, boardBar, tabBar, statusLine, meBox, noticeBox, listBox),
     footer: [nativeBtn, closeBtn],
-  }), { cls: 'veil--top', onBackdrop: closeModal });
+  });
+
+  renderBoardTabs();
+  renderTabs();
+  renderMyCard(null);
+  loadCurrentTab();
+
+  v = veil(root, panelEl, { cls: 'veil--top', onBackdrop: closeModal });
 
   return { close: closeModal };
 }

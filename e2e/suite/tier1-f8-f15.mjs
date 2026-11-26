@@ -12,6 +12,7 @@ import {
   ATTACK_VFX_NAMES,
   CODEX_TAB_COUNTS,
   COOP_SPEC,
+  DAILY_LEADERBOARD_ID,
   DEFAULT_UNLOCKED_WEAPON_IDS,
   HERO_IDS,
   LEGACY_ACHIEVEMENT_IDS,
@@ -20,6 +21,7 @@ import {
   NEW_REGULAR_ENEMY_IDS,
   PRIMARY_LEADERBOARD_ID,
   SAVE_VERSION,
+  SEASON_LEADERBOARD_ID,
   TAPTAP,
   V3_BASE_WEAPON_NAMES,
   V3_RELIC_NAMES,
@@ -2145,7 +2147,7 @@ export const TIER1_F8_F15 = [
         await s.page.goto(`${baseUrl}/privacy.html`);
         await s.page.waitForSelector('h1');
         const pageText = (await s.page.textContent('body')) || '';
-        for (const term of ['剑清酱工作室', PRIMARY_LEADERBOARD_ID, '云存档', '好友', '联机']) {
+        for (const term of ['剑清酱工作室', PRIMARY_LEADERBOARD_ID, DAILY_LEADERBOARD_ID, SEASON_LEADERBOARD_ID, '云存档', '好友', '联机']) {
           assert.ok(pageText.includes(term), `Expected privacy.html to disclose '${term}'`);
         }
 

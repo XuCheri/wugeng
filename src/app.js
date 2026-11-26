@@ -496,22 +496,26 @@ export async function startApp(bootOpts = {}) {
     const recorded = recordRun(save, summary, nowTs);
     recordDailyRun(save, summary, nowTs);
     const seasonRes = recordSeasonRun(save, summary, nowTs);
-    if (summary.seasonRuleActive && seasonRes.seasonScore > 0) {
-      leaderboard.submitSeasonScore(seasonRes.seasonScore, save);
-    }
     let dcResult = null;
     if (summary.isDailyChallenge) {
       dcResult = recordDailyChallengeRun(save, summary, summary.dailyDate || nowTs);
       if (dcResult.ok) {
         recorded.coinsEarned += dcResult.coins;
-        leaderboard.submitDailyScore(dcResult.dailyScore, save);
         if (dcResult.rewarded) {
           toast(`今日异事首胜入账：铜钱 +${dcResult.coins} · 周分 +${dcResult.weeklyPointsAdded}`, 2600);
         }
       }
     }
     persist(true);
-    leaderboard.submitScore(summary.score, save);
+    (async () => {
+      await leaderboard.submitScore(summary.score, save);
+      if (summary.seasonRuleActive && seasonRes.seasonScore > 0) {
+        await leaderboard.submitSeasonScore(seasonRes.seasonScore, save);
+      }
+      if (dcResult?.ok && dcResult.dailyScore > 0) {
+        await leaderboard.submitDailyScore(dcResult.dailyScore, save);
+      }
+    })();
     coach.reset();
     runUI.teardown();
     audio.setMusicMode('menu');
@@ -649,7 +653,12 @@ export async function startApp(bootOpts = {}) {
     showTitle();
   }
   if (cloud.isAvailable()) handleCloudPull(true);
-  if ((save.leaderboard?.pendingScore || 0) > 0 && leaderboard.isAvailable()) {
-    leaderboard.flushPendingScore(save);
+  if (
+    ((save.leaderboard?.pendingScore || 0) > 0
+      || (save.dailyChallenge?.pendingScore || 0) > 0
+      || (save.season?.pendingScore || 0) > 0)
+    && leaderboard.isAvailable()
+  ) {
+    leaderboard.flushAllPendingScores(save);
   }
 }

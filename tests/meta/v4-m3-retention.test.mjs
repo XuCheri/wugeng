@@ -34,6 +34,11 @@ import {
   setSeasonRuleActive,
 } from '../../src/meta/season.js';
 import { buyCosmetic, equipHeroSkin, getEquippedHeroSkin, isCosmeticOwned } from '../../src/meta/cosmetics.js';
+import {
+  DAILY_LEADERBOARD_ID,
+  SEASON_LEADERBOARD_ID,
+  getLeaderboardConfig,
+} from '../../src/meta/leaderboard-config.js';
 import { createLeaderboard } from '../../src/meta/leaderboard.js';
 import { createRun, stepRun, endRun } from '../../src/sim/run.js';
 import { candidateChoices } from '../../src/sim/levelup.js';
@@ -242,24 +247,84 @@ test('M3.3 守夜令 30 档通行证、老周·血月限定皮肤、血月开关
   assert.equal(merged.season.claimedTiers.length, 30);
   assert.equal(saveProgressScore(merged), saveProgressScore(mergeSaves(merged, merged)));
 
-  // 副榜未配置 ID 时优雅回退本机榜，配置 ID 后可连通 SDK
-  const lbLocal = createLeaderboard({ getSave: () => merged, persistSave: () => {} });
-  const dailyBoardLocal = await lbLocal.fetchBoard({ boardType: 'daily', save: merged });
-  const seasonBoardLocal = await lbLocal.fetchBoard({ boardType: 'season', save: merged });
+  // 线上真实副榜 ID 校验 + 未配置回退 + pendingScore 队列冲刷 + 周期令牌 periodToken 自动发现重试
+  assert.equal(DAILY_LEADERBOARD_ID, 'ofuwiinc9n5khd1ehh');
+  assert.equal(SEASON_LEADERBOARD_ID, 'hxw70v121367vj083y');
+  assert.equal(getLeaderboardConfig().dailyLeaderboardId, 'ofuwiinc9n5khd1ehh');
+  assert.equal(getLeaderboardConfig().seasonLeaderboardId, 'hxw70v121367vj083y');
+
+  const lbUnconfigured = createLeaderboard({
+    win: { location: { search: '?mockLeaderboard=1' } },
+    getSave: () => merged,
+    persistSave: () => {},
+    dailyLeaderboardId: '',
+    seasonLeaderboardId: '',
+  });
+  const dailyBoardLocal = await lbUnconfigured.fetchBoard({ boardType: 'daily', save: merged });
+  const seasonBoardLocal = await lbUnconfigured.fetchBoard({ boardType: 'season', save: merged });
   assert.equal(dailyBoardLocal.source, 'local');
   assert.equal(seasonBoardLocal.source, 'local');
   assert.ok(seasonBoardLocal.entries.length >= 1);
 
-  const lbConfigured = createLeaderboard({
-    win: { location: { search: '?mockLeaderboard=1' } },
+  const lbOffline = createLeaderboard({ getSave: () => merged, persistSave: () => {} });
+  const queuedDaily = await lbOffline.submitDailyScore(9120, merged);
+  const queuedSeason = await lbOffline.submitSeasonScore(18400, merged);
+  assert.equal(queuedDaily.ok, false);
+  assert.equal(queuedDaily.queued, true);
+  assert.equal(queuedSeason.ok, false);
+  assert.equal(queuedSeason.queued, true);
+  assert.equal(merged.dailyChallenge.pendingScore, 9120);
+  assert.equal(merged.season.pendingScore, 18400);
+
+  let seenDailyPeriod = '';
+  const submittedBatches = [];
+  const lbLive = createLeaderboard({
+    win: {
+      location: { search: '' },
+      tap: {
+        getLeaderboardManager() {
+          return {
+            submitScores(p) {
+              submittedBatches.push(p.scores);
+              p.callback?.onSuccess?.({ results: p.scores });
+            },
+            loadLeaderboardScores(p) {
+              if (p.leaderboardId === DAILY_LEADERBOARD_ID && !p.periodToken) {
+                p.callback?.onFailure?.(500101, 'missing periodToken');
+                return;
+              }
+              seenDailyPeriod = p.periodToken || seenDailyPeriod;
+              p.callback?.onSuccess?.({
+                scores: [{ rank: 1, score: p.leaderboardId === DAILY_LEADERBOARD_ID ? 9120 : 18400, user: { name: '魁首道友' } }],
+              });
+            },
+            loadCurrentPlayerLeaderboardScore(p) {
+              p.callback?.onSuccess?.({
+                leaderboard: { period: { periodToken: p.leaderboardId === DAILY_LEADERBOARD_ID ? 'daily_tok_1125' : 'season_tok_11' } },
+                currentUserScore: { rank: 1, score: p.leaderboardId === DAILY_LEADERBOARD_ID ? 9120 : 18400, user: { name: '魁首道友' } },
+              });
+            },
+            openLeaderboard(p) {
+              p.callback?.onSuccess?.({ opened: true });
+            },
+          };
+        },
+      },
+    },
     getSave: () => merged,
     persistSave: () => {},
-    dailyLeaderboardId: 'daily_test_id',
-    seasonLeaderboardId: 'season_test_id',
   });
-  const subDaily = await lbConfigured.submitDailyScore(8888, merged);
-  assert.equal(subDaily.ok, true);
-  const remoteDaily = await lbConfigured.fetchBoard({ boardType: 'daily', save: merged });
+
+  const remoteDaily = await lbLive.fetchBoard({ boardType: 'daily', save: merged });
   assert.equal(remoteDaily.ok, true);
-  assert.equal(remoteDaily.leaderboardId, 'daily_test_id');
+  assert.equal(remoteDaily.leaderboardId, 'ofuwiinc9n5khd1ehh');
+  assert.equal(seenDailyPeriod, 'daily_tok_1125');
+  assert.equal(merged.dailyChallenge.pendingScore, 0);
+
+  const remoteSeason = await lbLive.fetchBoard({ boardType: 'season', save: merged });
+  assert.equal(remoteSeason.ok, true);
+  assert.equal(remoteSeason.leaderboardId, 'hxw70v121367vj083y');
+  assert.equal(merged.season.pendingScore, 0);
+  assert.ok(submittedBatches.some((b) => b[0]?.leaderboardId === 'ofuwiinc9n5khd1ehh' && b[0]?.score === 9120));
+  assert.ok(submittedBatches.some((b) => b[0]?.leaderboardId === 'hxw70v121367vj083y' && b[0]?.score === 18400));
 });
