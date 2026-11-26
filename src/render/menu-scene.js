@@ -751,15 +751,7 @@ export function renderStagePreviewFrame(ctx, w, h, tSec, state = {}) {
     targetScale: isTall ? 0.95 : 0.8,
   });
 
-  // 起手兵刃铭牌（本命兵刃加朱印）
-  if (isTall && starterWeapon) {
-    ctx.save();
-    ctx.font = '12px "WenKai", serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = isSignature ? lanternA(0.85) : paperA(0.55);
-    ctx.fillText(isSignature ? '本命 · 演武' : '演武', cx, daisY + daisRy + 16);
-    ctx.restore();
-  }
+  // 起手兵刃铭牌已移除：本命加成由更房铭牌徽章统一呈现，避免矮屏与人物名重叠
 }
 
 export function createHeroStage(canvas, getState) {
