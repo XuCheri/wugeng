@@ -3,17 +3,12 @@ import { h, clear, scroll, sealButton, veil, toast, formatCoins, formatTime } fr
 import { applyStagger } from './motion.js';
 import { heroInfo, nightLabel } from './copy.js';
 import {
-  DAILY_LEADERBOARD_ID,
   DAILY_LEADERBOARD_NAME,
   LEADERBOARD_COLLECTIONS,
-  PRIMARY_LEADERBOARD_ID,
   PRIMARY_LEADERBOARD_NAME,
   PRIMARY_LEADERBOARD_UNIT,
-  SEASON_LEADERBOARD_ID,
   SEASON_LEADERBOARD_NAME,
 } from '../meta/leaderboard-config.js';
-import { buildLocalHonorEntries } from '../meta/leaderboard.js';
-import { buildLocalDailyEntries } from '../meta/daily-challenge.js';
 
 const RANK_SEALS = ['魁', '贰', '叁'];
 
@@ -42,34 +37,23 @@ export function openLeaderboardModal(root, opts = {}) {
     dataset: { action: 'refresh-leaderboard' },
     hidden: true,
     onClick: () => loadCurrentTab({ manual: true }),
-  }, '重新展卷');
+  }, '重试');
   const noticeBox = h('div', { class: 'lb-notice', hidden: true }, noticeText, refreshBtn);
-  const statusLine = h('p', { class: 'lb-status' }, '正在连通 TapTap 天榜');
+  // 仅在加载中给出轻提示；成功后整行隐藏，失败交由 noticeBox 简短提示「加载失败」
+  const statusLine = h('p', { class: 'lb-status is-pending', hidden: true }, '加载中…');
   const listBox = h('div', { class: 'lb-list' });
 
   let panelEl = null;
 
+  // 玩家视角的榜单标题与一句话说明（不展示榜单编号、计分单位等后台信息）
   function boardHeaderMeta(boardId) {
     if (boardId === 'daily') {
-      return {
-        title: DAILY_LEADERBOARD_NAME,
-        sub: DAILY_LEADERBOARD_ID
-          ? `榜单编号 ${DAILY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`
-          : `计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
-      };
+      return { title: DAILY_LEADERBOARD_NAME, sub: '今日异事最高分 · 每日换新' };
     }
     if (boardId === 'season') {
-      return {
-        title: SEASON_LEADERBOARD_NAME,
-        sub: SEASON_LEADERBOARD_ID
-          ? `榜单编号 ${SEASON_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`
-          : `计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
-      };
+      return { title: SEASON_LEADERBOARD_NAME, sub: '本期守夜令积分排行' };
     }
-    return {
-      title: PRIMARY_LEADERBOARD_NAME,
-      sub: `总榜编号 ${PRIMARY_LEADERBOARD_ID} · 计分单位：${PRIMARY_LEADERBOARD_UNIT}`,
-    };
+    return { title: PRIMARY_LEADERBOARD_NAME, sub: '单局守夜最高分排行' };
   }
 
   function syncModalHeader() {
@@ -111,8 +95,8 @@ export function openLeaderboardModal(root, opts = {}) {
   function renderTabs() {
     clear(tabBar);
     const tabs = [
-      [LEADERBOARD_COLLECTIONS.PUBLIC, '全服总榜'],
-      [LEADERBOARD_COLLECTIONS.FRIENDS, '好友榜'],
+      [LEADERBOARD_COLLECTIONS.PUBLIC, '全服'],
+      [LEADERBOARD_COLLECTIONS.FRIENDS, '好友'],
     ];
     for (const [colId, label] of tabs) {
       const on = activeCol === colId;
@@ -148,19 +132,15 @@ export function openLeaderboardModal(root, opts = {}) {
     const bestLocal = localBestForActiveBoard();
     const cur = res?.currentPlayer;
     const scoreVal = cur && Number.isFinite(cur.score) ? Math.max(bestLocal, cur.score) : bestLocal;
-    const rankLabel = cur && Number.isFinite(cur.rank) && cur.rank > 0
-      ? (cur.isLocal ? '本机荣誉首席' : `第 ${cur.rank} 名`)
-      : (scoreVal > 0 ? '已记入本机最高' : '暂未登榜');
-    const titleLabel = activeBoard === 'daily'
-      ? '我的今日异事最高分'
-      : activeBoard === 'season'
-        ? '我的当期守夜令战绩'
-        : '我的最高守夜战绩';
+    // 只有拿到真实名次才显示「第 N 名」，否则统一为「未上榜」，不出现「本机」等技术字眼
+    const rankLabel = cur && !cur.isLocal && Number.isFinite(cur.rank) && cur.rank > 0
+      ? `第 ${cur.rank} 名`
+      : '未上榜';
 
     meBox.append(
       h('div', { class: 'lb-me-card__left' },
-        h('span', { class: 'lb-me-card__label' }, titleLabel),
-        h('span', { class: 'lb-me-card__rank' }, `${save?.daoName || '守夜打更人'} · ${rankLabel}`)),
+        h('span', { class: 'lb-me-card__label' }, save?.daoName || '守夜打更人'),
+        h('span', { class: 'lb-me-card__rank' }, rankLabel)),
       h('div', { class: 'lb-me-card__score' },
         h('b', {}, formatCoins(scoreVal)),
         h('small', {}, PRIMARY_LEADERBOARD_UNIT)),
@@ -168,47 +148,39 @@ export function openLeaderboardModal(root, opts = {}) {
   }
 
   function renderStatus(res, pending = false) {
-    statusLine.classList.toggle('is-pending', pending);
-    statusLine.classList.toggle('is-live', !pending && Boolean(res?.ok));
-    const bName = activeBoard === 'daily' ? DAILY_LEADERBOARD_NAME : activeBoard === 'season' ? SEASON_LEADERBOARD_NAME : 'TapTap 天榜';
-    if (pending) {
-      statusLine.textContent = `正在连通${bName}……`;
-    } else if (res?.ok) {
-      if (activeBoard === 'primary') {
-        statusLine.textContent = activeCol === LEADERBOARD_COLLECTIONS.FRIENDS ? '已连通 TapTap 好友榜' : '已连通 TapTap 全服天榜';
-      } else {
-        statusLine.textContent = activeCol === LEADERBOARD_COLLECTIONS.FRIENDS
-          ? `已连通 TapTap ${bName}·好友榜`
-          : `已连通 TapTap ${bName}`;
-      }
-    } else if (res?.source === 'local') {
-      statusLine.textContent = activeBoard === 'daily' ? '本机异事榜' : activeBoard === 'season' ? '本机守夜令榜' : '本机荣誉榜';
-    } else {
-      statusLine.textContent = '本机荣誉榜 · 天榜稍后同步';
+    // 加载中仅淡化列表，不再出现「已连通 / 正在连通」等提示
+    listBox.classList.toggle('is-loading', pending);
+    statusLine.hidden = !(pending && !listBox.querySelector('.lb-row'));
+  }
+
+  function friendlyNotice(res) {
+    if (!res || res.ok) return '';
+    if (res.source === 'permission_fallback' && activeCol === LEADERBOARD_COLLECTIONS.FRIENDS) {
+      return '好友榜需授权后查看';
     }
+    return '加载失败，请稍后重试';
   }
 
   function renderRows(res) {
-    if (res?.notice) {
-      noticeBox.hidden = false;
-      noticeText.textContent = res.notice;
-      refreshBtn.hidden = !(res.source === 'error_fallback' || res.retryable);
-    } else {
-      noticeBox.hidden = true;
-      noticeText.textContent = '';
-      refreshBtn.hidden = true;
-    }
+    // 成功时不提示任何连通信息；失败只给一句「加载失败」+ 重试
+    const notice = friendlyNotice(res);
+    noticeBox.hidden = !notice;
+    noticeText.textContent = notice;
+    refreshBtn.hidden = !notice;
+    refreshBtn.textContent = res?.source === 'permission_fallback' ? '去授权' : '重试';
 
     clear(listBox);
+    // 加载失败时不展示本机替代数据，避免误以为是全服名次
+    if (notice) return;
     const entries = Array.isArray(res?.entries) ? res.entries.slice(0, 10) : [];
     if (entries.length === 0) {
       const emptyTxt = activeBoard === 'daily'
-        ? '今日尚无异事战绩，点更房顶部「今日异事」出更即可登榜。'
+        ? '今日还没有人上榜，快去挑战今日异事'
         : activeBoard === 'season'
-          ? '当期尚无守夜令战绩，开启血月守夜或积攒令火即可登榜。'
+          ? '本期还没有人上榜，守一局就能上榜'
           : activeCol === LEADERBOARD_COLLECTIONS.FRIENDS
-            ? '暂无好友守夜记录，快邀道友同守五更登榜较量。'
-            : '尚无登榜战绩，出门守过一局即刻记入五更守夜总榜。';
+            ? '还没有好友上榜，快邀请好友一起守夜'
+            : '还没有人上榜，守一局就能上榜';
       listBox.appendChild(h('p', { class: 'lb-empty muted' }, emptyTxt));
       return;
     }
@@ -220,20 +192,11 @@ export function openLeaderboardModal(root, opts = {}) {
         : rank <= 3 ? 'stamp stamp--sm lb-rank lb-rank--top'
           : 'stamp stamp--sm stamp--ink lb-rank';
       const heroTxt = row.heroId ? ` · ${heroInfo(row.heroId).short}` : '';
-      const subParts = [`第 ${rank} 名`];
-      if (row.date) {
-        subParts.push(row.date);
-        if (row.kills !== undefined) subParts.push(`斩祟 ${row.kills}`);
-        if (row.timeSec > 0) subParts.push(formatTime(row.timeSec));
-      } else if (row.nightLevel !== undefined && row.kills !== undefined) {
-        subParts.push(nightLabel(row.nightLevel || 0));
-        subParts.push(`斩祟 ${row.kills}`);
-        if (row.timeSec > 0) subParts.push(formatTime(row.timeSec));
-      } else if (activeCol === LEADERBOARD_COLLECTIONS.FRIENDS) {
-        subParts.push('TapTap 好友');
-      } else {
-        subParts.push('五更守夜人');
-      }
+      // 名次已由左侧印章表达，副行只保留对玩家有意义的战绩细节；没有就不显示
+      const subParts = [];
+      if (row.nightLevel !== undefined && row.nightLevel !== null && !row.date) subParts.push(nightLabel(row.nightLevel || 0));
+      if (row.kills !== undefined) subParts.push(`斩祟 ${row.kills}`);
+      if (row.timeSec > 0) subParts.push(formatTime(row.timeSec));
 
       listBox.appendChild(h('div', {
         class: `lb-row${row.isSelf ? ' is-self' : ''}`,
@@ -242,23 +205,19 @@ export function openLeaderboardModal(root, opts = {}) {
       h('span', { class: stampCls }, topSeal),
       h('div', { class: 'lb-row__main' },
         h('p', { class: 'lb-row__name' }, `${row.name || '守夜道友'}${heroTxt}`),
-        h('p', { class: 'lb-row__meta' }, subParts.join(' · '))),
+        subParts.length ? h('p', { class: 'lb-row__meta' }, subParts.join(' · ')) : null),
       h('div', { class: 'lb-row__score' },
-        h('b', {}, formatCoins(row.score || 0)),
-        h('small', {}, PRIMARY_LEADERBOARD_UNIT))));
+        h('b', {}, formatCoins(row.score || 0)))));
     });
     applyStagger(listBox, '.lb-row', 8);
   }
 
   async function loadCurrentTab({ manual = false } = {}) {
     const seq = ++reqSeq;
-    if (!listBox.children.length || manual) {
-      const localEntries = activeBoard === 'daily'
-        ? buildLocalDailyEntries(save)
-        : activeBoard === 'season'
-          ? (leaderboard?.buildLocalSeasonEntries?.(save) || [])
-          : buildLocalHonorEntries(save);
-      renderRows({ entries: localEntries, notice: '' });
+    if (!manual) {
+      // 切换榜单/范围时先清空旧数据，只显示「加载中…」
+      clear(listBox);
+      noticeBox.hidden = true;
     }
     renderStatus(null, true);
     if (manual) refreshBtn.disabled = true;
@@ -274,7 +233,6 @@ export function openLeaderboardModal(root, opts = {}) {
         source: 'local',
         boardType: activeBoard,
         collection: activeCol,
-        notice: '当前展示本机五更守夜荣誉榜。',
         entries: [],
         currentPlayer: { rank: null, score: localBestForActiveBoard() },
       };
@@ -283,24 +241,19 @@ export function openLeaderboardModal(root, opts = {}) {
     renderStatus(res, false);
     renderMyCard(res);
     renderRows(res);
-    if (manual && res?.ok) toast('天榜已刷新');
+    if (manual && res?.ok) toast('已刷新');
   }
 
   async function handleOpenNative() {
     if (!leaderboard) {
-      toast('当前环境暂未连接 TapTap 原生榜单面板');
+      toast('暂时无法打开，请稍后重试');
       return;
     }
     const res = await leaderboard.openNativeLeaderboard({
       boardType: activeBoard,
       collection: activeCol,
     });
-    if (!res.ok) {
-      toast('当前环境暂不支持唤起原生榜单，已为你展示榜文');
-    } else if (!window.tap?.getLeaderboardManager) {
-      const bName = activeBoard === 'daily' ? DAILY_LEADERBOARD_NAME : activeBoard === 'season' ? SEASON_LEADERBOARD_NAME : PRIMARY_LEADERBOARD_NAME;
-      toast(`已唤起 TapTap「${bName}」面板`);
-    }
+    if (!res.ok) toast('暂时无法打开，请稍后重试');
   }
 
   function closeModal() {
@@ -310,11 +263,13 @@ export function openLeaderboardModal(root, opts = {}) {
   }
 
   const initHeader = boardHeaderMeta(activeBoard);
-  const nativeBtn = sealButton('唤起 TapTap 原生榜单', handleOpenNative, {
-    kind: 'small',
-    cls: 'btn--wide lb-native-btn',
+  // 次级入口：文字链样式，不与「合卷回去」抢主焦点
+  const nativeBtn = h('button', {
+    type: 'button',
+    class: 'link-btn lb-native-btn',
     dataset: { action: 'open-native-leaderboard' },
-  });
+    onClick: handleOpenNative,
+  }, '在 TapTap 查看完整榜单 ›');
   const closeBtn = sealButton('合卷回去', closeModal, {
     kind: 'ghost',
     cls: 'btn--wide',
@@ -325,8 +280,8 @@ export function openLeaderboardModal(root, opts = {}) {
     title: initHeader.title,
     sub: initHeader.sub,
     cls: 'scroll--dialog scroll--tall leaderboard-modal',
-    body: h('div', { class: 'lb-body' }, boardBar, tabBar, statusLine, meBox, noticeBox, listBox),
-    footer: [nativeBtn, closeBtn],
+    body: h('div', { class: 'lb-body' }, boardBar, tabBar, noticeBox, meBox, statusLine, listBox, nativeBtn),
+    footer: [closeBtn],
   });
 
   renderBoardTabs();

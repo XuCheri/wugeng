@@ -18,8 +18,7 @@ import { MAPS, MAP_IDS, normalizeMapId } from '../sim/maps.js';
 import { getShopItems, getLevel, nextCost, buyLevel, describeLevel } from '../meta/shop.js';
 import { heroUnlockProgress } from '../meta/unlocks.js';
 import { getCheckinState, claimCheckin } from '../meta/checkin.js';
-import { getCodexCounts } from '../meta/codex.js';
-import { getEquippedAttackVfx, getEquippedHeroSkin, getSkinDef, getAttackVfxDef } from '../meta/cosmetics.js';
+import { getEquippedAttackVfx, getEquippedHeroSkin } from '../meta/cosmetics.js';
 import { getUnclaimedAchievementCount, reconcileAchievements } from '../meta/achievements.js';
 import { canShowCheckinDouble } from '../ads/ad-policy.js';
 import { createHeroStage } from '../render/menu-scene.js';
@@ -173,12 +172,13 @@ export function renderHub(root, ctx) {
 
   function cloudLabelText() {
     const st = ctx.cloudState?.() || { available: false };
-    if (!st.available) return '本机';
+    // 玩家视角：只表达「存档是否安全」，不出现「本机/待传」等技术词
+    if (!st.available) return '存档';
     if (st.syncing) return '同步中';
-    if (st.lastError) return '重试';
-    if (st.dirty) return '待传';
+    if (st.lastError) return '同步失败';
+    if (st.dirty) return '待同步';
     if (st.lastSyncAt > 0 || st.lastUploadAt > 0) return '已同步';
-    return '云同步';
+    return '同步';
   }
 
   function destroyStage() {
@@ -237,34 +237,32 @@ export function renderHub(root, ctx) {
           dataset: { action: 'open-daily-challenge' },
           onClick: () => openDailyChallenge(),
         },
-        h('i', { class: 'stamp stamp--xs' }, '异'),
-        h('span', { class: 'hub-daily-pill__txt' }, `今日异事 · ${heroInfo(dcSt.heroId).short}`),
-        h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? '首胜+200钱' : (dcRuleShort || '试手冲榜'))),
+        h('span', { class: 'hub-daily-pill__txt' }, '今日异事'),
+        h('small', { class: 'hub-daily-pill__sub' }, dcSt.canEarnFirstReward ? `首胜+${dcSt.firstReward?.coins || 200}` : (dcRuleShort || '冲榜'))),
         h('button', {
           type: 'button',
           class: `hub-daily-pill${snSt.claimableCount > 0 || snSt.activeRule ? ' has-reward' : ''}`,
           dataset: { action: 'open-season' },
           onClick: () => openSeason(),
         },
-        h('i', { class: 'stamp stamp--xs' }, '令'),
-        h('span', { class: 'hub-daily-pill__txt' }, `守夜令·${snSt.season.name}`),
+        h('span', { class: 'hub-daily-pill__txt' }, '守夜令'),
         h('small', { class: 'hub-daily-pill__sub' }, snSt.claimableCount > 0
-          ? `领${snSt.claimableCount}档`
-          : snSt.activeRule ? '血月已开' : `${snSt.currentTier}/${snSt.maxTier}档`)),
+          ? `可领${snSt.claimableCount}档`
+          : `${snSt.currentTier}/${snSt.maxTier}档`)),
       );
 
       ribbonBox.appendChild(
-        ribbonItem('差事', unclaimedDaily > 0 ? `领${unclaimedDaily}` : '周赏', 'open-daily', () => openDaily(), unclaimedDaily, false),
+        ribbonItem('差事', '', 'open-daily', () => openDaily(), unclaimedDaily, false),
       );
     }
     ribbonBox.append(
-      ribbonItem('鬼市', lkMarket.locked ? lkMarket.label : '衣冠', 'open-market', () => guardFeature('market', () => openMarket(getActiveHero())), 0, lkMarket.locked),
-      ribbonItem('功绩', lkAch.locked ? lkAch.label : (unclaimedAch > 0 ? `领${unclaimedAch}` : '秘器'), 'open-achievements', () => guardFeature('achievements', () => openAchievements()), lkAch.locked ? 0 : unclaimedAch, lkAch.locked),
-      ribbonItem('天榜', lkLb.locked ? lkLb.label : '排行', 'open-leaderboard', () => guardFeature('leaderboard', () => {
+      ribbonItem('鬼市', lkMarket.locked ? lkMarket.label : '', 'open-market', () => guardFeature('market', () => openMarket(getActiveHero())), 0, lkMarket.locked),
+      ribbonItem('功绩', lkAch.locked ? lkAch.label : '', 'open-achievements', () => guardFeature('achievements', () => openAchievements()), lkAch.locked ? 0 : unclaimedAch, lkAch.locked),
+      ribbonItem('天榜', lkLb.locked ? lkLb.label : '', 'open-leaderboard', () => guardFeature('leaderboard', () => {
         if (ctx.onOpenLeaderboard) ctx.onOpenLeaderboard();
         else openLocalLeaderboardFallback();
       }), 0, lkLb.locked),
-      ribbonItem('同守', lkCoop.locked ? lkCoop.label : '联机', 'open-coop', () => guardFeature('coop', () => {
+      ribbonItem('同守', lkCoop.locked ? lkCoop.label : '', 'open-coop', () => guardFeature('coop', () => {
         if (ctx.onOpenCoop) ctx.onOpenCoop();
         else openCoopFallback();
       }), 0, lkCoop.locked),
@@ -282,7 +280,7 @@ export function renderHub(root, ctx) {
       onClick,
     },
     h('b', {}, title),
-    h('small', {}, sub),
+    sub ? h('small', {}, sub) : null,
     dot);
   }
 
@@ -317,14 +315,11 @@ export function renderHub(root, ctx) {
     save.selectedStarterWeapon = activeStarter;
     const isSig = isHeroSignatureWeapon(activeHero, activeStarter);
     const hero = heroInfo(activeHero);
-    const skinDef = getSkinDef(getEquippedHeroSkin(save, activeHero), activeHero);
-    const vfxDef = getAttackVfxDef(getEquippedAttackVfx(save));
 
     // 1. 舞台浮层人物铭牌 + 换装标签 + 本命专精徽章
     const sigBadge = isSig
       ? h('div', { class: 'signature-badge' },
-        h('i', { class: 'stamp stamp--xs' }, '本'),
-        h('span', {}, '本命专精 · 伤+25% 速+10% 域+15%'))
+        h('span', {}, '本命加成'))
       : h('div', { class: 'signature-badge is-hidden', hidden: true });
 
     clear(heroSpotlightEl).append(
@@ -334,12 +329,10 @@ export function renderHub(root, ctx) {
           type: 'button',
           class: 'hero-stage__wardrobe',
           onClick: () => guardFeature('market', () => openMarket(activeHero)),
-        }, `${skinDef.name} · 换装`)),
-      sigBadge,
+        }, '换装'),
+        sigBadge),
       h('p', { class: 'hero-spotlight__trait' },
-        `绝技「${hero.ultName}」· ${hero.trait}`),
-      h('p', { class: 'hero-spotlight__vfx' },
-        `${hero.flavor} · ${vfxDef.name}`));
+        `绝技「${hero.ultName}」· ${hero.trait}`));
 
     if (animateSwitch) {
       pulseClass(heroSpotlightEl, 'is-popping', 240);
@@ -355,11 +348,12 @@ export function renderHub(root, ctx) {
       const mCfg = MAPS[mid];
       const mUnlocked = unlockedMaps.includes(mid);
       const mSel = activeMap === mid;
+      // 未解锁只显示「未解锁」，条件在点击时提示；普通地图不加副标题
       const subText = !mUnlocked
-        ? mCfg.unlockText
+        ? '未解锁'
         : mCfg.scoreMul > 1
           ? `积分×${mCfg.scoreMul.toFixed(2)}`
-          : '古巷长街';
+          : '';
       const card = h('button', {
         type: 'button',
         role: 'radio',
@@ -378,9 +372,8 @@ export function renderHub(root, ctx) {
           stageCtl?.triggerBurst();
         },
       },
-      h('i', { class: 'stamp stamp--xs' }, mCfg.stamp),
       h('span', { class: 'hub-map-card__name' }, mCfg.name),
-      h('small', { class: 'hub-map-card__sub' }, subText));
+      subText ? h('small', { class: 'hub-map-card__sub' }, subText) : null);
       mapStripBox.appendChild(card);
     }
 
@@ -414,15 +407,14 @@ export function renderHub(root, ctx) {
       },
       icon('hero', id, 34, HERO_GLYPH[id]),
       h('span', { class: 'hero-tile__name' }, info.short),
-      sel ? h('i', { class: 'stamp stamp--xs hero-tile__stamp' }, '选') : null,
       unlocked ? null : h('i', { class: 'hero-tile__lock' }, '锁'));
       heroRowEl.appendChild(tile);
     }
 
     // 3. 横向滑动起手兵刃架（本命兵刃与当前已选兵刃置前，切换角色立即可见且永不半截裁切）
     starterHeadSubEl.textContent = isSig
-      ? `已携「${weaponName(activeStarter)}」· 本命加成`
-      : `已携「${weaponName(activeStarter)}」· 择「${weaponName(hero.weapon)}」享本命`;
+      ? '本命加成：伤害+25% 攻速+10%'
+      : `选「${weaponName(hero.weapon)}」可得本命加成`;
 
     const rawWeaponIds = [
       ...unlockedWeapons,
@@ -513,17 +505,16 @@ export function renderHub(root, ctx) {
   function renderNav() {
     clear(navBox);
     const st = getCheckinState(save, ctx.now());
-    const cc = getCodexCounts(save);
     const lkShop = getHubFeatureLock(save, 'shop');
     const lkCodex = getHubFeatureLock(save, 'codex');
     navBox.append(
-      navSeal('加点', lkShop.locked ? lkShop.label : '长本事', () => guardFeature('shop', () => openShop()), false, undefined, lkShop.locked),
-      navSeal('图鉴', lkCodex.locked ? lkCodex.label : `${cc.have}/${cc.total}`, () => guardFeature('codex', () => openCodex(root, save)), false, '百物谱图鉴', lkCodex.locked),
-      navSeal('更簿', st.canClaim ? '可画押' : '签到', () => openCheckin(), st.canClaim),
-      navSeal('设置', '杂项', () => openSettings()));
+      navSeal('加点', lkShop.locked ? lkShop.label : '', () => guardFeature('shop', () => openShop()), false, undefined, lkShop.locked),
+      navSeal('图鉴', lkCodex.locked ? lkCodex.label : '', () => guardFeature('codex', () => openCodex(root, save)), false, '百物谱图鉴', lkCodex.locked),
+      navSeal('更簿', st.canClaim ? '可签到' : '签到', () => openCheckin(), st.canClaim),
+      navSeal('设置', '', () => openSettings()));
   }
   function navSeal(text, sub, onClick, dot = false, label = undefined, locked = false) {
-    return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), h('small', {}, sub)), onClick, {
+    return sealButton(h('span', { class: 'nav-seal' }, h('b', {}, text), sub ? h('small', {}, sub) : null), onClick, {
       kind: 'square',
       cls: `hub-dock-btn${dot ? ' has-dot' : ''}${locked ? ' is-coach-locked' : ''}`,
       label,

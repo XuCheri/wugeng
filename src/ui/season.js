@@ -43,15 +43,15 @@ export function openSeasonModal(root, opts = {}) {
     headerCard.append(
       h('div', { class: 'season-head-card__top' },
         h('div', {},
-          h('span', { class: 'season-badge' }, `守夜令 · ${st.season.name}`),
-          h('p', { class: 'season-sub' }, `${st.season.subtitle} · 剩余 ${st.season.daysLeft} 日`)),
+          h('span', { class: 'season-badge' }, `本期剩余 ${st.season.daysLeft} 日`),
+          h('p', { class: 'season-sub' }, st.season.subtitle)),
         h('div', { class: 'season-tier-num' },
           h('b', {}, `${st.currentTier}`),
           h('small', {}, `/${st.maxTier}档`))),
       h('div', { class: 'ach-bar season-xp-bar' },
         h('i', { class: 'ach-bar__fill', style: { width: `${pct}%` } })),
       h('div', { class: 'season-head-card__foot' },
-        h('span', {}, `令火 ${formatCoins(st.xp)}（当前档 ${st.tierProgressXp}/${st.xpPerTier}）`),
+        h('span', {}, st.currentTier >= st.maxTier ? `令火 ${formatCoins(st.xp)} · 已满档` : `距下一档 ${st.tierProgressXp}/${st.xpPerTier} 令火`),
         skinOwned
           ? h('button', {
             type: 'button',
@@ -76,8 +76,8 @@ export function openSeasonModal(root, opts = {}) {
     const rule = st.season.rule || {};
     ruleCard.append(
       h('div', { class: 'season-rule-card__main' },
-        h('p', { class: 'season-rule-card__title' }, `${rule.name || '血月守夜'}（自选开启）`),
-        h('p', { class: 'season-rule-card__desc' }, `${rule.desc || ''} · 关闭时寻常守夜不受影响`)),
+        h('p', { class: 'season-rule-card__title' }, rule.name || '血月守夜'),
+        h('p', { class: 'season-rule-card__desc' }, `${rule.desc || ''} · 可随时关闭`)),
       h('button', {
         type: 'button',
         role: 'switch',
@@ -133,7 +133,7 @@ export function openSeasonModal(root, opts = {}) {
     for (const row of st.tiers) {
       let rightNode = null;
       if (row.claimed) {
-        rightNode = h('span', { class: 'stamp stamp--xs' }, '领');
+        rightNode = h('span', { class: 'daily-task__done' }, '已领取');
       } else if (row.canClaim) {
         rightNode = sealButton('领取', () => {
           const res = claimSeasonTier(save, row.tier, now());
@@ -147,7 +147,7 @@ export function openSeasonModal(root, opts = {}) {
           dataset: { action: 'claim-season-tier', tier: String(row.tier) },
         });
       } else {
-        rightNode = h('span', { class: 'season-tier__lock' }, `${row.tier * st.xpPerTier}火`);
+        rightNode = h('span', { class: 'season-tier__lock' }, `${row.tier * st.xpPerTier} 令火`);
       }
 
       tierListBox.appendChild(h('div', {
@@ -157,7 +157,7 @@ export function openSeasonModal(root, opts = {}) {
       h('span', { class: `stamp stamp--sm${row.milestone ? '' : ' stamp--ink'}` }, String(row.tier)),
       h('div', { class: 'shop-row__main' },
         h('p', { class: 'shop-row__name' }, row.name),
-        h('p', { class: 'shop-row__flavor' }, row.milestone ? '五档重赏 · 典藏好物' : '守夜令免费赏格')),
+        row.milestone ? h('p', { class: 'shop-row__flavor' }, '重赏') : null),
       rightNode));
     }
 
@@ -174,10 +174,15 @@ export function openSeasonModal(root, opts = {}) {
       }, { cls: 'btn--wide', dataset: { action: 'claim-all-season' } }));
     }
     if (typeof onOpenBoard === 'function') {
-      claimAllWrap.appendChild(sealButton('查看守夜令榜', () => {
-        closeModal();
-        onOpenBoard();
-      }, { kind: 'small', cls: 'btn--wide', dataset: { action: 'open-season-board' } }));
+      claimAllWrap.appendChild(h('button', {
+        type: 'button',
+        class: 'link-btn lb-native-btn',
+        dataset: { action: 'open-season-board' },
+        onClick: () => {
+          closeModal();
+          onOpenBoard();
+        },
+      }, '查看守夜令排行 ›'));
     }
 
     if (stagger) applyStagger(tierListBox, '.season-tier', 6);
@@ -191,7 +196,7 @@ export function openSeasonModal(root, opts = {}) {
   render(true);
   v = veil(root, scroll({
     title: '守夜令 · 血月',
-    sub: '三十档全部免费 · 积令火得「老周·血月」',
+    sub: '守夜攒令火，30 档奖励全部免费',
     cls: 'scroll--dialog scroll--tall season-modal',
     body: h('div', { class: 'season-body' }, headerCard, ruleCard, titleBar, tierListBox),
     footer: [

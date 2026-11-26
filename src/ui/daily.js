@@ -53,35 +53,40 @@ export function openDailyModal(root, opts = {}) {
   function render(stagger = false) {
     const st = getDailyState(save, now());
 
+    // 0. 顶部：今日异事入口（整条可点，不再显示日期等无用信息）
     clear(topBannerBox);
+    topBannerBox.hidden = typeof onOpenChallenge !== 'function';
     if (typeof onOpenChallenge === 'function') {
-      topBannerBox.appendChild(h('div', { class: 'daily-jump-bar' },
-        h('span', { class: 'daily-jump-bar__txt' }, `今日更簿 · ${st.today}`),
-        h('button', {
-          type: 'button',
-          class: 'link-btn daily-jump-bar__btn',
-          dataset: { action: 'jump-daily-challenge' },
-          onClick: () => {
-            closeModal();
-            onOpenChallenge();
-          },
-        }, '今日异事挑战 ›')));
-    } else {
-      topBannerBox.appendChild(h('p', { class: 'daily-date-line muted' }, `今日更簿 · ${st.today}`));
+      const dc = getDailyChallengeState(save, now());
+      topBannerBox.appendChild(h('button', {
+        type: 'button',
+        class: `daily-jump-bar${dc.canEarnFirstReward ? ' has-reward' : ''}`,
+        dataset: { action: 'jump-daily-challenge' },
+        onClick: () => {
+          closeModal();
+          onOpenChallenge();
+        },
+      },
+      h('i', { class: 'stamp stamp--xs' }, '异'),
+      h('span', { class: 'daily-jump-bar__txt' },
+        h('b', {}, '今日异事'),
+        h('small', {}, dc.canEarnFirstReward ? `首胜奖励 ${dc.firstReward.coins} 铜钱` : '再战一局冲击排行')),
+      h('span', { class: 'daily-jump-bar__btn' }, '去挑战 ›')));
     }
 
-    // 1. 周赏供盒进度条与四档供盒
+    // 1. 周赏供盒：积分进度条（含四档刻度）+ 四档供盒
     clear(weeklyBox);
     const pct = Math.min(100, Math.round((st.weeklyPoints / st.weeklyMax) * 100));
     const chestRow = h('div', { class: 'weekly-chest-grid' });
+    const ticks = h('div', { class: 'weekly-bar__ticks', 'aria-hidden': 'true' });
     for (const c of st.chests) {
       const giftTxt = c.cosmetic
-        ? (c.cosmeticItem ? c.cosmeticItem.name : `${c.coins + 150}钱`)
-        : `${c.coins}钱·符×${c.charms}`;
+        ? [c.cosmeticItem ? c.cosmeticItem.name : `${c.coins + 150} 铜钱`]
+        : [`${c.coins} 铜钱`, h('br'), `护身符×${c.charms}`];
       const doClaimChest = (doubled = false) => {
         const res = claimWeeklyChest(save, c.points, now(), { doubled });
         if (!res.ok) {
-          toast('供盒尚不可开启');
+          toast('积分还不够，再完成几个差事');
           return;
         }
         persist(true);
@@ -92,7 +97,7 @@ export function openDailyModal(root, opts = {}) {
 
       let actNode = null;
       if (c.claimed) {
-        actNode = h('span', { class: 'stamp stamp--xs weekly-chest__stamp' }, '领');
+        actNode = h('span', { class: 'weekly-chest__done' }, '已领取');
       } else if (c.canClaim) {
         actNode = h('button', {
           type: 'button',
@@ -101,7 +106,7 @@ export function openDailyModal(root, opts = {}) {
           onClick: () => doClaimChest(false),
         }, '开启');
       } else {
-        actNode = h('span', { class: 'weekly-chest__need' }, `${c.points}分`);
+        actNode = h('span', { class: 'weekly-chest__need' }, `${c.points} 分`);
       }
 
       chestRow.appendChild(h('div', {
@@ -109,43 +114,64 @@ export function openDailyModal(root, opts = {}) {
         dataset: { weeklyChest: String(c.points) },
       },
       h('span', { class: 'weekly-chest__title' }, c.name),
-      h('span', { class: 'weekly-chest__gift' }, giftTxt),
+      h('span', { class: 'weekly-chest__gift' }, ...giftTxt),
       actNode));
+
+      const tickPct = Math.min(100, (c.points / st.weeklyMax) * 100);
+      ticks.appendChild(h('i', {
+        class: `weekly-bar__tick${st.weeklyPoints >= c.points ? ' is-reached' : ''}`,
+        style: { left: `${tickPct}%` },
+      }));
     }
 
     weeklyBox.append(
       h('div', { class: 'daily-weekly__head' },
         h('span', { class: 'daily-weekly__title' }, '周赏供盒'),
-        h('span', { class: 'daily-weekly__pts' }, `本周积分 ${st.weeklyPoints}/${st.weeklyMax} · 周一刷新`)),
-      h('div', { class: 'ach-bar daily-weekly__bar' },
-        h('i', { class: 'ach-bar__fill', style: { width: `${pct}%` } })),
+        h('span', { class: 'daily-weekly__reset muted' }, '每周一重置')),
+      h('div', { class: 'weekly-bar' },
+        h('div', {
+          class: 'weekly-bar__track',
+          role: 'progressbar',
+          'aria-label': '本周积分',
+          'aria-valuemin': '0',
+          'aria-valuemax': String(st.weeklyMax),
+          'aria-valuenow': String(Math.min(st.weeklyPoints, st.weeklyMax)),
+        },
+        h('i', { class: 'weekly-bar__fill', style: { width: `${pct}%` } }),
+        ticks),
+        h('span', { class: 'weekly-bar__num' },
+          h('b', {}, String(Math.min(st.weeklyPoints, st.weeklyMax))),
+          `/${st.weeklyMax}`)),
       chestRow,
     );
 
-    // 2. 今日三条差事
+    // 2. 今日三条差事：进度条只反映真实进度；已完成显示「已完成」，可领显示「领取」
     clear(taskListBox);
+    taskListBox.appendChild(h('div', { class: 'daily-tasks__head' },
+      h('span', { class: 'daily-weekly__title' }, '今日差事'),
+      h('span', { class: 'daily-weekly__reset muted' }, `完成 ${st.tasks.filter((t) => t.done).length}/${st.tasks.length}`)));
     if (st.rollback) {
-      taskListBox.appendChild(h('p', { class: 'lb-notice__text muted' }, '簿上记着上次日期比今天还晚，待日子走到了再来领赏。'));
+      taskListBox.appendChild(h('p', { class: 'lb-notice__text muted' }, '手机日期有变动，日期恢复后即可领取。'));
     }
     for (const t of st.tasks) {
       const barPct = Math.min(100, Math.round((t.have / Math.max(1, t.need)) * 100));
       const doClaimTask = (doubled = false) => {
         const res = claimDailyTask(save, t.id, now(), { doubled });
         if (!res.ok) {
-          toast('差事尚未达成');
+          toast('差事还没完成');
           return;
         }
         persist(true);
         onRewardClaimed?.(res);
-        toast(`领赏：铜钱 ${res.coins} · 周分 +${res.weeklyPointsAdded} · 令火 +${res.seasonXp}`);
+        toast(`领取成功：铜钱 +${res.coins} · 周分 +${res.weeklyPointsAdded} · 令火 +${res.seasonXp}`);
         render(false);
       };
 
       const actBox = h('div', { class: 'daily-task__act' });
       if (t.claimed) {
-        actBox.appendChild(h('span', { class: 'stamp stamp--sm' }, '押'));
+        actBox.appendChild(h('span', { class: 'daily-task__done' }, '已完成'));
       } else if (t.canClaim) {
-        actBox.appendChild(sealButton('领赏', () => doClaimTask(false), {
+        actBox.appendChild(sealButton('领取', () => doClaimTask(false), {
           kind: 'small',
           dataset: { action: 'claim-daily-task', taskId: t.id },
         }));
@@ -155,9 +181,14 @@ export function openDailyModal(root, opts = {}) {
             if (adRes === 'completed') doClaimTask(true);
           }, { cls: 'btn--small daily-ad-btn' }));
         }
-      } else {
-        actBox.appendChild(h('span', { class: 'daily-task__prog-tag' }, `${t.have}/${t.need}`));
       }
+
+      const progRow = t.claimed
+        ? null
+        : h('div', { class: 'daily-task__prog' },
+          h('div', { class: 'ach-bar daily-task__bar' },
+            h('i', { class: 'ach-bar__fill', style: { width: `${barPct}%` } })),
+          h('span', { class: 'daily-task__prog-tag' }, `${t.have}/${t.need}`));
 
       taskListBox.appendChild(h('div', {
         class: `shop-row daily-task${t.claimed ? ' is-claimed' : ''}${t.canClaim ? ' is-ready' : ''}`,
@@ -170,8 +201,7 @@ export function openDailyModal(root, opts = {}) {
           h('span', { class: 'daily-reward-chip' }, h('span', { html: COIN_SVG }), h('b', {}, String(t.coins))),
           h('span', { class: 'daily-reward-chip' }, `周分 +${t.weeklyPoints}`),
           h('span', { class: 'daily-reward-chip' }, `令火 +${t.seasonXp}`)),
-        h('div', { class: 'ach-bar daily-task__bar' },
-          h('i', { class: 'ach-bar__fill', style: { width: `${barPct}%` } }))),
+        progRow),
       actBox));
     }
 
@@ -186,7 +216,7 @@ export function openDailyModal(root, opts = {}) {
   render(true);
   v = veil(root, scroll({
     title: '每日差事',
-    sub: '日清三件巡街务 · 积攒周分启供盒',
+    sub: '完成差事攒周分，开启周赏供盒',
     cls: 'scroll--dialog scroll--tall daily-modal',
     body: h('div', { class: 'daily-body' }, topBannerBox, weeklyBox, taskListBox),
     footer: [sealButton('合卷回去', closeModal, { kind: 'ghost', cls: 'btn--wide', dataset: { action: 'close-daily' } })],

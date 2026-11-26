@@ -111,7 +111,7 @@ export function openCoopLobbyModal(root, opts = {}) {
         h('div', { class: 'coop-entry-grid' },
           h('div', { class: 'coop-entry-card' },
             h('span', { class: 'coop-entry-card__title' }, '建房邀友'),
-            h('span', { class: 'coop-entry-card__sub' }, '生成 6 位房号 · 分享拉起好友'),
+            h('span', { class: 'coop-entry-card__sub' }, '创建房间，邀请好友同守'),
             h('div', { class: 'coop-entry-card__acts' },
               sealButton('创建房间', () => {
                 coop.createRoom();
@@ -124,7 +124,7 @@ export function openCoopLobbyModal(root, opts = {}) {
               }))),
           h('div', { class: 'coop-entry-card' },
             h('span', { class: 'coop-entry-card__title' }, '快速匹配'),
-            h('span', { class: 'coop-entry-card__sub' }, '自动寻访同更道友 · 20秒补齐'),
+            h('span', { class: 'coop-entry-card__sub' }, '自动匹配路人队友'),
             h('div', { class: 'coop-entry-card__acts' },
               sealButton('快速匹配', async () => {
                 await coop.quickMatch();
@@ -144,10 +144,10 @@ export function openCoopLobbyModal(root, opts = {}) {
 
     // 2. 状态提示语（含无联机宿主环境优雅提示）
     const defaultNotice = st.onlineSupported === false
-      ? '当前环境暂不支持联机，可添加道友 AI 单机同守'
+      ? '当前环境暂不支持联机，可添加人机队友同守'
       : st.tapMode
-        ? '已就绪 TapTap 多人联机专线 · 二至四人同守五更'
-        : '二至四人结伴巡街 · 队友倒地踏入朱砂八卦阵即可扶起救援';
+        ? '二至四人同守 · 队友倒地可入阵扶起'
+        : '二至四人同守 · 队友倒地可入阵扶起';
     const statusMsg = st.lastError || st.statusText || defaultNotice;
     statusNoticeEl.textContent = statusMsg;
     statusNoticeEl.className = `coop-status${st.lastError ? ' is-error' : ''}`;
@@ -168,7 +168,7 @@ export function openCoopLobbyModal(root, opts = {}) {
 
     const subTools = h('div', { class: 'coop-subtools' });
     if (st.role !== 'guest') {
-      subTools.appendChild(sealButton('添加道友 AI', () => {
+      subTools.appendChild(sealButton('添加人机', () => {
         const r = coop.addBot();
         if (!r.ok && r.message) toast(r.message);
         render();
@@ -202,7 +202,7 @@ export function openCoopLobbyModal(root, opts = {}) {
         const hInfo = heroInfo(m.heroId);
         const skinDef = getSkinDef(m.skinId, m.heroId);
         const vfxDef = getAttackVfxDef(m.attackVfx);
-        const badgeTxt = m.isHost ? '房主' : m.isBot ? '道友AI' : (m.ready ? '已就绪' : '候更');
+        const badgeTxt = m.isHost ? '房主' : m.isBot ? '人机' : (m.ready ? '已就绪' : '候更');
         partyGrid.appendChild(h('div', {
           class: `coop-member is-occupied${m.ready ? ' is-ready' : ''}`,
           dataset: { slot: String(slot), heroId: m.heroId },
@@ -266,12 +266,12 @@ export function openCoopLobbyModal(root, opts = {}) {
       return;
     }
     friendsBox.hidden = false;
-    friendsBox.appendChild(h('p', { class: 'coop-sec-title' }, 'TapTap 同行好友'));
+    friendsBox.appendChild(h('p', { class: 'coop-sec-title' }, '好友'));
     if (list.length === 0) {
       friendsBox.appendChild(h('p', { class: 'coop-friends-empty muted' },
         friends?.hasNativeFriendApi?.()
-          ? '已唤起 TapTap 好友面板，亦可直接点击「邀请好友」发送组队卡片。'
-          : '在 TapTap 客户端内可读取在线好友，当前可直接发送 6 位房号口令组队。'));
+          ? '暂无在线好友，可点击「邀请好友」发送邀请。'
+          : '暂无在线好友，可点击「邀请好友」发送邀请。'));
       return;
     }
     const ul = h('div', { class: 'coop-friends-list' });
@@ -334,7 +334,7 @@ export function openCoopLobbyModal(root, opts = {}) {
 
   const panel = scroll({
     title: '同守五更',
-    sub: '二至四人联机巡街 · 倒地入阵扶起 · 结算敕封魁首',
+    sub: '邀好友或匹配路人，一起守夜',
     cls: 'scroll--dialog scroll--tall coop-scroll',
     body,
     footer: [footBox],

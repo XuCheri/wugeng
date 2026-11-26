@@ -278,12 +278,12 @@ export const TIER1_F18 = [
         await fastClick(s.page, '[data-board="daily"]', 'Switch to 每日异事榜');
         const dailyTxt = await s.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
         assert.ok(dailyTxt.includes('8420'), `Expected daily score 8420 on 每日异事榜, got: ${dailyTxt}`);
-        assert.ok(dailyTxt.includes(DAILY_LEADERBOARD_ID), `Expected header to include ${DAILY_LEADERBOARD_ID}`);
+        assert.ok(!dailyTxt.includes(DAILY_LEADERBOARD_ID), `玩家视角：榜单弹窗不应展示后台榜单编号 ${DAILY_LEADERBOARD_ID}`);
 
         await fastClick(s.page, '[data-board="season"]', 'Switch to 守夜令榜');
         const seasonTxt = await s.page.evaluate(() => (document.querySelector('.leaderboard-modal')?.textContent || '').replace(/,/g, ''));
         assert.ok(seasonTxt.includes('14600'), `Expected season score 14600 on 守夜令榜, got: ${seasonTxt}`);
-        assert.ok(seasonTxt.includes(SEASON_LEADERBOARD_ID), `Expected header to include ${SEASON_LEADERBOARD_ID}`);
+        assert.ok(!seasonTxt.includes(SEASON_LEADERBOARD_ID), `玩家视角：榜单弹窗不应展示后台榜单编号 ${SEASON_LEADERBOARD_ID}`);
 
         await fastClick(s.page, '[data-board="primary"]', 'Switch back to 守夜总榜');
         await requireOpenSelector(s.page, '[data-collection="public"]', 'Expected public tab visible on primary board');

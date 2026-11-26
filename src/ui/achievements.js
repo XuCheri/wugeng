@@ -68,6 +68,33 @@ function renderRewardIcon(ach) {
   return icon('coin', 'coin', 38, '赏');
 }
 
+// 进度数字按玩家习惯显示：大数用「万/亿」，时长用「分:秒」，只有达成/未达成两态的不显示数字
+const TIME_ACH_OFFSET = { endless10: 'endless', endless15: 0 };
+const BINARY_ACH = new Set(['noBun480', 'firstClear']);
+
+function shortNum(n) {
+  const v = Math.max(0, Math.floor(Number(n) || 0));
+  if (v >= 1e8) return `${+(v / 1e8).toFixed(v % 1e8 ? 1 : 0)} 亿`;
+  if (v >= 1e4) return `${+(v / 1e4).toFixed(v % 1e4 ? 1 : 0)} 万`;
+  return formatCoins(v);
+}
+
+function mmss(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function formatProgress(ach, st) {
+  if (BINARY_ACH.has(ach.id)) return '';
+  if (Object.hasOwn(TIME_ACH_OFFSET, ach.id)) {
+    // 残夜十分钟：只计进入残夜之后的时长（目标 = 主线时长 + 600 秒）
+    const offset = TIME_ACH_OFFSET[ach.id] === 'endless' ? Math.max(0, st.target - 600) : 0;
+    const cur = Math.min(st.target, st.current) - offset;
+    return `${mmss(Math.max(0, cur))} / ${mmss(st.target - offset)}`;
+  }
+  return `${shortNum(Math.min(st.current, st.target))} / ${shortNum(st.target)}`;
+}
+
 export function openAchievementsModal(root, { save, persist, onRewardClaimed, tapAchievements } = {}) {
   reconcileAchievements(save);
   tapAchievements?.syncUnlocked?.(save, { silent: true });
@@ -134,7 +161,7 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed, ta
 
     barTrack.setAttribute('aria-valuenow', String(Math.min(st.current, st.target)));
     barFill.style.width = `${pct.toFixed(1)}%`;
-    progText.textContent = `${st.current} / ${st.target}`;
+    progText.textContent = formatProgress(ach, st);
 
     clear(actHolder);
     if (st.claimed) {
@@ -154,12 +181,6 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed, ta
           refreshAll();
         },
       }, '领赏'));
-    } else {
-      actHolder.appendChild(h('button', {
-        type: 'button',
-        class: 'btn btn--ghost btn--small ach-claim-btn',
-        disabled: true,
-      }, '未达成'));
     }
   }
 
@@ -237,23 +258,23 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed, ta
 
   function handleOpenTapNative() {
     if (!tapAchievements || !tapAchievements.isAvailable()) {
-      toast('当前环境暂未连接 TapTap 成就面板');
+      toast('暂时无法打开，请稍后重试');
       return;
     }
     const res = tapAchievements.openNativeAchievements(save);
-    if (!res.ok) {
-      toast('当前环境暂不支持唤起原生成就，已为你展示功绩卷');
-    } else if (!res.native) {
-      toast('已唤起 TapTap「守夜功绩」面板');
-    }
+    if (!res.ok) toast('暂时无法打开，请稍后重试');
   }
 
   let v = null;
-  const nativeBtn = sealButton('唤起 TapTap 原生成就', handleOpenTapNative, {
-    kind: 'small',
-    cls: 'btn--wide lb-native-btn',
-    dataset: { action: 'open-tap-achievements' },
-  });
+  // 次级入口：仅在 TapTap 内可用时显示为文字链，不与「一键领赏」抢焦点
+  const nativeBtn = tapAchievements?.isAvailable?.()
+    ? h('button', {
+      type: 'button',
+      class: 'link-btn lb-native-btn',
+      dataset: { action: 'open-tap-achievements' },
+      onClick: handleOpenTapNative,
+    }, '在 TapTap 查看成就 ›')
+    : null;
   const closeBtn = sealButton('合卷回去', () => v?.close(), {
     kind: 'ghost',
     cls: 'btn--wide',
@@ -261,10 +282,10 @@ export function openAchievementsModal(root, { save, persist, onRewardClaimed, ta
   });
   const panel = scroll({
     title: '守夜功绩',
-    sub: '记守夜苦劳 · 赏道门秘器与重彩衣冠',
+    sub: '完成功绩，领取兵刃与衣冠',
     cls: 'scroll--dialog scroll--tall achievements-modal',
-    body: h('div', { class: 'ach-body' }, summaryBar, catBar, listBox),
-    footer: [nativeBtn, closeBtn],
+    body: h('div', { class: 'ach-body' }, summaryBar, catBar, listBox, nativeBtn),
+    footer: [closeBtn],
   });
 
   v = veil(root, panel, { onBackdrop: () => v?.close() });

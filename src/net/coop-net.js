@@ -821,7 +821,7 @@ export function createCoopManager({
 
     if (!isBroadcastAvailable()) {
       state.transport = 'none';
-      state.statusText = '当前环境暂不支持联机，可添加道友 AI 并肩守夜';
+      state.statusText = '当前环境暂不支持联机，可添加人机队友同守';
       emitChange();
       return { ok: true, offlineOnly: true, roomCode: code, party: getParty(), ready: Promise.resolve({ ok: true }) };
     }
