@@ -38,7 +38,7 @@ import { PRIMARY_LEADERBOARD_ID } from './meta/leaderboard-config.js';
 import { createLeaderboard } from './meta/leaderboard.js';
 import { createFriends } from './meta/friends.js';
 import { createCoopManager } from './net/coop-net.js';
-import { adsEnabled, watchAd } from './ads/ads.js';
+import { adsEnabled, preloadAds, watchAd } from './ads/ads.js';
 import { adResultMessage } from './ads/ad-policy.js';
 import { createAudio } from './audio/synth.js';
 import { createHaptics } from './platform/haptics.js';
@@ -641,6 +641,7 @@ export async function startApp(bootOpts = {}) {
   };
 
   preloadIcons();
+  preloadAds();
   bootOpts?.onIntroMounted?.();
   if (!bootOpts?.skipBootIntro) {
     await runBootIntro({ audio });

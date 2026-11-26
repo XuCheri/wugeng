@@ -1,6 +1,7 @@
-// 激励视频广告位配置（ICP 开关）。
-// rewardedAdUnitId 为空字符串 = 离线模式：所有广告入口直接隐藏，游戏照常可玩。
-// ICP 办好后在 TapTap 开发者后台创建激励视频广告位，把 ID 填到这里再发版。
+// 激励视频广告位配置（TapTap H5 竖屏激励视频广告位真实 ID：1054324）。
+// 非 TapTap 宿主（无 window.tap.createRewardedVideoAd）下自动隐藏所有广告入口，游戏照常可玩。
+export const REWARDED_AD_UNIT_ID = '1054324';
+
 export const ADS_CONFIG = {
-  rewardedAdUnitId: '',
+  rewardedAdUnitId: REWARDED_AD_UNIT_ID,
 };

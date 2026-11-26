@@ -8,7 +8,7 @@ import { ADS_CONFIG } from './ads-config.js';
 
 export const LOAD_TIMEOUT_MS = 10_000;
 export const CLOSE_TIMEOUT_MS = 5 * 60_000;
-export const PLACEMENTS = ['reroll', 'revive', 'resultDouble', 'checkinDouble'];
+export const PLACEMENTS = ['reroll', 'revive', 'resultDouble', 'checkinDouble', 'dailyTaskDouble'];
 
 /** 从 URL 查询串解析模拟模式：'complete' | 'skip' | 'fail' | null */
 export function parseMockMode(search) {
@@ -87,6 +87,19 @@ export function createAds(opts = {}) {
 
   function isBusy() { return activeRequest !== null; }
 
+  // 启动时静默预热激励视频素材，减少首次点击等待
+  function preload() {
+    if (mockMode() || !getAdUnitId() || !hasSdk()) return false;
+    try {
+      const ad = getWin().tap.createRewardedVideoAd({ adUnitId: getAdUnitId() });
+      const p = ad?.load?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function watchAd(placement = 'reroll') {
     if (activeRequest) return Promise.resolve('unavailable');
     const mode = mockMode();
@@ -154,10 +167,11 @@ export function createAds(opts = {}) {
     });
   }
 
-  return { adsEnabled, watchAd, isBusy };
+  return { adsEnabled, watchAd, isBusy, preload };
 }
 
 const defaultAds = createAds();
 export const adsEnabled = () => defaultAds.adsEnabled();
 export const watchAd = (placement) => defaultAds.watchAd(placement);
 export const adBusy = () => defaultAds.isBusy();
+export const preloadAds = () => defaultAds.preload();

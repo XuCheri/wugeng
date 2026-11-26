@@ -166,3 +166,28 @@ test('mock 模式默认遮罩在无 DOM 时也能结束', async () => {
   const ads = createAds({ win: {}, config: { rewardedAdUnitId: '' }, search: '?mockAds=1' });
   assert.equal(await ads.watchAd('reroll'), 'completed');
 });
+
+test('线上默认激励广告配置锁定为 TapTap 竖屏广告位 1054324，宿主内预热与播放正常、离线自动隐藏', async () => {
+  const { ADS_CONFIG, REWARDED_AD_UNIT_ID } = await import('../../src/ads/ads-config.js');
+  assert.equal(REWARDED_AD_UNIT_ID, '1054324');
+  assert.equal(ADS_CONFIG.rewardedAdUnitId, '1054324');
+
+  const offlineAds = createAds({ win: {}, search: '' });
+  assert.equal(offlineAds.adsEnabled(), false);
+  assert.equal(offlineAds.preload(), false);
+
+  const { tap, log } = fakeTap({
+    show: (ad) => {
+      later(() => ad.emitClose({ isEnded: true }));
+      return Promise.resolve();
+    },
+  });
+  const liveAds = createAds({ win: { tap }, search: '' });
+  assert.equal(liveAds.adsEnabled(), true);
+  assert.equal(liveAds.preload(), true);
+  assert.equal(log.load, 1);
+  assert.deepEqual(log.unitIds, ['1054324']);
+
+  assert.equal(await liveAds.watchAd('dailyTaskDouble'), 'completed');
+  assert.deepEqual(log.unitIds, ['1054324', '1054324']);
+});
