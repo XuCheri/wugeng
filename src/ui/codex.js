@@ -1,5 +1,6 @@
 // 百物图鉴：查看已解锁 / 未解锁的 16 兵刃、16 开光神兵、16 法器、12 百鬼夜主（共 60 项百物）及 6 名打更人（共 66 项）与守夜印记。
 import * as B from '../sim/balance.js';
+import { FUSIONS, FUSION_IDS } from '../sim/fusions.js';
 import { HERO_IDS, WEAPON_IDS, RELIC_IDS, ENEMY_IDS } from '../meta/save.js';
 import { ensureCodex, getCodexCounts } from '../meta/codex.js';
 import { heroUnlockProgress } from '../meta/unlocks.js';
@@ -115,6 +116,26 @@ export function openCodex(root, save) {
           ? h('p', { class: 'codex-row__meta' }, `由「${weaponName(id, false)}」敕封开光（本命法器：${relicName(pair)}）`)
           : null)));
     }
+
+    listBox.appendChild(h('p', { class: 'codex-sec-title' }, `阴阳合契 · 宗师超武（双开光二合一腾槽 · 共${FUSION_IDS.length}式）`));
+    for (const fid of FUSION_IDS) {
+      const f = FUSIONS[fid];
+      const bothKnown = codex.evolutions.includes(f.primaryId) && codex.evolutions.includes(f.secondaryId);
+      const tags = [...new Set([...weaponTags(f.primaryId), ...weaponTags(f.secondaryId)])];
+      listBox.appendChild(h('div', {
+        class: `codex-fusion-card${bothKnown ? '' : ' is-locked'}`,
+        dataset: { fusionId: fid },
+      },
+      h('div', { class: 'codex-row__ico' }, icon('evo', f.primaryId, 46, f.name[0])),
+      h('div', { class: 'codex-row__main' },
+        h('p', { class: 'codex-row__head' },
+          h('span', { class: 'codex-row__name' }, f.name),
+          schoolPills(tags),
+          bothKnown ? badge('合', true, true) : badge('双开光可合', false)),
+        h('p', { class: 'codex-row__desc' }, f.desc),
+        h('p', { class: 'codex-row__meta' },
+          `合契条件：同局集齐「${weaponName(f.primaryId, true)}」与「${weaponName(f.secondaryId, true)}」后拾取供盒`))));
+    }
   }
 
   function renderRelics() {
@@ -123,6 +144,7 @@ export function openCodex(root, save) {
       const rName = relicName(id);
       const pair = pairOf(id);
       const tags = relicTags(id);
+      const cap = B.RELIC_CAPSTONES?.[id] || null;
       listBox.appendChild(h('div', {
         class: `codex-row${unlocked ? '' : ' is-locked'}`,
         dataset: { codexKind: 'relics', itemId: id },
@@ -137,6 +159,9 @@ export function openCodex(root, save) {
           unlocked
             ? `一级：${relicTotalDesc(id, 1)} · 满级：${relicTotalDesc(id, 5)}`
             : '尚未收录：局内抽签或更簿签到护身符可得'),
+        cap
+          ? h('p', { class: 'codex-row__meta' }, `五阶觉醒【${cap.name}】：${cap.desc}`)
+          : null,
         pair
           ? h('p', { class: 'codex-row__meta' }, `本命配对：「${weaponName(pair, false)}」→「${weaponName(pair, true)}」（共鸣 +18%）`)
           : null)));

@@ -3,12 +3,12 @@
 
 import {
   DT, MAIN_DURATION, WATCH_DURATION, DARKNESS, REROLL, REVIVE, HEROES, WEAPONS, RELICS, WEAPON_IDS, ENDLESS, COIN_REWARD, LEVELUP,
-  SCORE_TUNING, sanitizeNightLevel, nightModifiers, emptyMetaBonuses, isHeroSignatureWeapon,
+  SCORE_TUNING, sanitizeNightLevel, nightModifiers, emptyExtendedMetaBonuses, isHeroSignatureWeapon,
 } from './balance.js';
 import { Rng, hashSeed } from '../core/rng.js';
 import { SpatialHash } from '../core/spatial-hash.js';
 import { lerp } from '../core/math.js';
-import { createPlayer, recomputeMods, updatePlayer, healPlayer } from './player.js';
+import { createPlayer, recomputeMods, updatePlayer, healPlayer, pushEnemiesFromPlayer } from './player.js';
 import { addOrUpgradeWeapon, updateWeapons, getEvolutionRecipe, canEvolve } from './weapons.js';
 import { addOrUpgradeRelic } from './relics.js';
 import { updateEnemies, flushSpawnQueue, compactEnemies, rebuildHash } from './enemies.js';
@@ -71,15 +71,21 @@ function isOwnWeapon(id) {
   return typeof id === 'string' && Object.hasOwn(WEAPONS, id);
 }
 
+const INT_META_KEYS = new Set([
+  'freeRerolls', 'armor', 'bonusBanishes', 'bonusPierce', 'flatMaxHp',
+  'startUlt', 'dashThunderSeal', 'firstChestBonusRelic', 'eliteSlayerStack',
+  'waterWalk', 'cheatDeathJade',
+]);
+
 function sanitizeMetaBonuses(meta) {
-  const out = emptyMetaBonuses();
+  const out = emptyExtendedMetaBonuses();
   if (!meta || typeof meta !== 'object') return out;
   for (const k of Object.keys(out)) {
     const rawV = meta[k];
     if (rawV == null || typeof rawV === 'boolean') continue;
     const num = typeof rawV === 'string' && rawV.trim() === '' ? NaN : +rawV;
     if (!Number.isFinite(num)) continue;
-    if (k === 'freeRerolls' || k === 'armor') {
+    if (INT_META_KEYS.has(k)) {
       out[k] = Math.max(0, Math.min(999, Math.floor(num)));
     } else {
       out[k] = Math.max(-0.9, Math.min(100, num));
@@ -185,7 +191,7 @@ export function createRun(rawOpts = {}) {
     blessings: [],
     choices: null,
     chestChoices: [],
-    banishesLeft: LEVELUP.baseBanishes,
+    banishesLeft: LEVELUP.baseBanishes + (metaB.bonusBanishes | 0),
     banished: [],
     lockedChoice: null,
     coinsEarned: 0,
@@ -285,6 +291,9 @@ export function createRun(rawOpts = {}) {
   initCoopPlayers(run, coop, charm);
   run._initializing = false;
   run.player.hp = run.player.maxHp;
+  if ((metaB.startUlt || 0) > 0) {
+    run.player.ult = Math.min(run.player.ultMax, metaB.startUlt);
+  }
   updateProps(run);
   updateShrines(run, 0, null);
   return run;
@@ -314,12 +323,20 @@ function updateWatch(run, dt) {
     run.watch = w;
     run.events.push({ type: 'watchChange', watch: w });
 
-    // 添油续命命签：换更回血
+    // 添油续命命签与长明灯油五阶觉醒：换更回血与净场
     const oilStacks = run.mods?.lanternOilStacks || 0;
     if (oilStacks > 0 && !run.player.downed && run.player.hp > 0) {
       const healed = healPlayer(run, Math.round(run.player.maxHp * BLESSING_TUNING.lantern_oil.watchHealPct * oilStacks));
       if (healed > 0) {
         run.events.push({ type: 'heal', amount: healed, source: 'lantern_oil', x: run.player.x, y: run.player.y });
+      }
+    }
+    if (run.mods?.capstones?.lamp_oil && !run.player.downed && run.player.hp > 0) {
+      const missing = Math.max(0, run.player.maxHp - run.player.hp);
+      const healed = healPlayer(run, Math.max(6, Math.round(missing * 0.25)));
+      pushEnemiesFromPlayer(run, 110, 220);
+      if (healed > 0) {
+        run.events.push({ type: 'heal', amount: healed, source: 'lamp_oil', x: run.player.x, y: run.player.y });
       }
     }
 

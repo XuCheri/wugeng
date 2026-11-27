@@ -43,6 +43,14 @@ import {
 } from './vfx-themes.js';
 import { createGround } from './ground.js';
 import { createFx } from './fx.js';
+import {
+  setEntitySpriteScale,
+  computeEnemyGait,
+  drawRegularEnemyImage,
+  drawShrineImage,
+  drawHazardImage,
+  HAZARD_ASSET_IDS,
+} from './entity-images.js';
 import { createDamageTexts } from './damage-text.js';
 import { createHud } from './hud.js';
 import { computeHeroMotion, drawBossImage, drawHeroImage } from './hero-images.js';
@@ -201,6 +209,7 @@ export function createRenderer(canvas, opts = {}) {
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     setSpriteScale(dpr);
+    setEntitySpriteScale(low ? 1 : dpr);
     ground.setScale(low ? 1 : dpr);
     hud.setScale(dpr);
     fx.setViewport(W, H, dpr);
@@ -215,6 +224,7 @@ export function createRenderer(canvas, opts = {}) {
     low = !!v;
     setMisregistration(!low);
     clearSpriteCache();
+    setEntitySpriteScale(low ? 1 : dpr);
     ground.setScale(low ? 1 : dpr);
     fx.setLowQuality(low);
   }
@@ -250,6 +260,7 @@ export function createRenderer(canvas, opts = {}) {
       const e = events[i];
       if (!e || typeof e !== 'object') continue;
       if (e.type === 'hit') dmg.add(e, clock);
+      else if (e.type === 'graze') dmg.addCallout('破煞', e.x, e.y, clock);
       fx.onEvent(e);
     }
   }
@@ -280,10 +291,16 @@ export function createRenderer(canvas, opts = {}) {
     let sy = s;
     let rot = 0;
     let oy = 0;
-    if (FLOAT_TYPES.has(e.type)) oy = -2 - Math.sin(clock * 3 + id) * 1.6 * s;
-    else if (e.type === 'paperkid') oy = -Math.abs(Math.sin(clock * 9 + id)) * 2.2;
-    else rot = Math.sin(clock * 7 + id) * 0.05;
-    if (e.type === 'paperkid' || e.type === 'lanternghost') rot = Math.sin(clock * 3.2 + id) * 0.07;
+    if (e.boss) {
+      if (FLOAT_TYPES.has(e.type)) oy = -2 - Math.sin(clock * 3 + id) * 1.6 * s;
+      else rot = Math.sin(clock * 5 + id) * 0.04;
+    } else {
+      const gait = computeEnemyGait(e.type, clock, id, s);
+      oy = gait.oy;
+      rot = gait.rot * flip;
+      sx *= gait.gx;
+      sy *= gait.gy;
+    }
 
     if (e.state === 'windup' || (e.type === 'weasel' && e.state === 'pause')) {
       sx *= 1.15;
@@ -416,8 +433,12 @@ export function createRenderer(canvas, opts = {}) {
     // 精英词缀辨识度（F10 5种词缀）
     if (e.affix && !low) {
       if (e.affix === 'mirror_twin') {
-        const ghostSpr = enemySprite(e.type, frame, false, e.type === 'umbrella' ? e.state : '');
-        blit(ctx, ghostSpr, x - flip * 7, feetY + oy - 2, sx, sy, rot, 0.32 * alpha);
+        if (!drawRegularEnemyImage(ctx, {
+          enemyType: e.type, x: x - flip * 7, y: feetY + oy - 2, baseR: d.r, sx, sy, rot, flash: false, alpha: 0.32 * alpha,
+        })) {
+          const ghostSpr = enemySprite(e.type, frame, false, e.type === 'umbrella' ? e.state : '');
+          blit(ctx, ghostSpr, x - flip * 7, feetY + oy - 2, sx, sy, rot, 0.32 * alpha);
+        }
       } else if (e.affix === 'swift_step') {
         ctx.strokeStyle = vermA(0.65);
         ctx.lineWidth = 1.6;
@@ -452,17 +473,15 @@ export function createRenderer(canvas, opts = {}) {
     }
     const stateVariant = e.type === 'umbrella' ? (e.state === 'shield' ? 'shield' : 'open') : '';
     const bossH = e.type === 'youshen' ? 104 : e.type === 'hebo_wedding' ? 100 : e.type === 'horse' ? 96 : 90;
-    if (!(e.boss && drawBossImage(ctx, {
-      bossType: e.type,
-      x,
-      y: feetY + oy,
-      logicalH: bossH,
-      sx,
-      sy,
-      rot,
-      flash,
-      alpha,
-    }))) {
+    if (e.boss) {
+      if (!drawBossImage(ctx, {
+        bossType: e.type, x, y: feetY + oy, logicalH: bossH, sx, sy, rot, flash, alpha,
+      })) {
+        blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
+      }
+    } else if (!drawRegularEnemyImage(ctx, {
+      enemyType: e.type, x, y: feetY + oy, baseR: d.r, sx, sy, rot, flash, alpha, fastBlit: crowded,
+    })) {
       blit(ctx, enemySprite(e.type, frame, flash, stateVariant), x, feetY + oy, sx, sy, rot, alpha);
     }
 
@@ -579,7 +598,9 @@ export function createRenderer(canvas, opts = {}) {
       ctx.restore();
     }
 
-    blit(ctx, shrineSprite(s.kind, used, active), s.x, s.y);
+    if (!drawShrineImage(ctx, { kind: s.kind, x: s.x, y: s.y + 4, logicalH: 68, used, alpha: 1 })) {
+      blit(ctx, shrineSprite(s.kind, used, active), s.x, s.y);
+    }
 
     if (near || active) {
       const label = active ? `镇邪试炼 · ${Math.ceil(s.timer || 0)}` : SHRINE_TITLE[s.kind] || '奇遇';
@@ -607,7 +628,7 @@ export function createRenderer(canvas, opts = {}) {
     const motion = computeHeroMotion(clock, moving, flip);
     const bob = motion.bob;
     let alpha = a;
-    if (p.invulnT > 0) alpha *= 0.55 + 0.45 * (Math.sin(clock * 30) > 0 ? 1 : 0.3);
+    if (p.invulnT > 0 && !(p.dashT > 0)) alpha *= 0.55 + 0.45 * (Math.sin(clock * 30) > 0 ? 1 : 0.3);
     if (run.status === 'dead') alpha *= 0.5;
 
     // 开光常驻脚底朱砂八卦法环（T1-F11-02；神兵渐多时主动收敛透明度避免遮眼）
@@ -633,23 +654,56 @@ export function createRenderer(canvas, opts = {}) {
       }
     }
 
-    // 脚底清晰受击判定定位圈（纯暖墨金双线，混战中一眼锁定自己脚下圆心）
+    // 脚底清晰受击判定定位圈 + 踏罡步无按钮冷却金弧（满蓄亮金印，冷却中顺时针回充）
     ctx.save();
     ctx.strokeStyle = inkA(0.58 * alpha);
-    ctx.lineWidth = 2.6;
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
-    ctx.ellipse(x, feetY - 2, 14, 8.2, 0, 0, TAU);
+    ctx.ellipse(x, feetY - 2, 14.5, 8.5, 0, 0, TAU);
     ctx.stroke();
-    ctx.strokeStyle = lanternA(0.76 * alpha);
-    ctx.lineWidth = 1.35;
-    ctx.beginPath();
-    ctx.ellipse(x, feetY - 2, 14, 8.2, 0, 0, TAU);
-    ctx.stroke();
+    const dashCd = p.dashCd || 0;
+    const dashMax = p.dashMaxCd || 3.4;
+    if (dashCd > 0 && dashMax > 0) {
+      const readyFrac = Math.max(0.05, Math.min(1, 1 - dashCd / dashMax));
+      ctx.strokeStyle = vermA(0.68 * alpha);
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(x, feetY - 2, 14.5, 8.5, 0, -Math.PI / 2, -Math.PI / 2 + TAU * readyFrac);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = lanternA(0.84 * alpha);
+      ctx.lineWidth = 1.65;
+      ctx.beginPath();
+      ctx.ellipse(x, feetY - 2, 14.5, 8.5, 0, 0, TAU);
+      ctx.stroke();
+    }
     ctx.restore();
 
     const rawSkin = p.skinId || cosmetics?.heroSkins?.[heroId] || null;
-    const lean = motion.lean;
+    const lean = motion.lean + (p.dashT > 0 ? 0.16 * flip : 0);
     const swing = Math.sin(clock * 3.1) * 0.12 + (moving ? -0.32 * flip : 0) + Math.sin(clock * 10) * (moving ? 0.06 : 0);
+
+    // 踏罡步瞬闪期间：绘制两道朱砂宣纸残影
+    if (p.dashT > 0 && !low) {
+      const skinForGhost = rawSkin || `${heroId}_default`;
+      for (let g = 2; g >= 1; g--) {
+        const dist = g * 13;
+        drawHeroImage(ctx, {
+          heroId,
+          skinId: skinForGhost,
+          x: x - (p.dashDirX || 0) * dist,
+          y: feetY + bob - (p.dashDirY || 0) * dist,
+          logicalH: 56,
+          scale: 1,
+          flip,
+          lean,
+          squashX: 1.06,
+          squashY: 0.95,
+          flash: true,
+          alpha: (g === 1 ? 0.42 : 0.22) * alpha,
+        });
+      }
+    }
 
     if (isNonDefaultSkin(heroId, rawSkin)) {
       blit(ctx, shadowSprite(12), x, feetY, 1.12, 1.05, 0, alpha);
@@ -2400,7 +2454,7 @@ export function createRenderer(canvas, opts = {}) {
       if (inView(s.x, s.y, 140)) drawList.push({ t: 3, o: s, y: s.y, x: s.x });
     }
     const ens = run.enemies || [];
-    const crowded = low || ens.length > 160;
+    const crowded = low || ens.length > 100;
     for (let i = 0; i < ens.length; i++) {
       const e = ens[i];
       const s = track(e.id, e.x, e.y, newStep);
@@ -2444,8 +2498,23 @@ export function createRenderer(canvas, opts = {}) {
     let lantern = { lx: pxI + 7, ly: pyI };
     for (let i = 0; i < drawList.length; i++) {
       const d = drawList[i];
-      if (d.t === 0) blit(ctx, propSprite(d.o.kind), d.x, d.y);
-      else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
+      if (d.t === 0) {
+        if (HAZARD_ASSET_IDS.has(d.o.kind)) {
+          blit(ctx, shadowSprite(16), d.x, d.y + 3, 1, 1, 0, 0.78);
+          ctx.save();
+          ctx.strokeStyle = d.o.kind === 'hazard_barrel' ? vermA(0.58) : lanternA(0.58);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.ellipse(d.x, d.y + 1, 19, 9.5, 0, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+          if (!drawHazardImage(ctx, { kind: d.o.kind, x: d.x, y: d.y + 3, clock, id: d.o.id || i, alpha: 1 })) {
+            blit(ctx, propSprite('lanternpost'), d.x, d.y);
+          }
+        } else {
+          blit(ctx, propSprite(d.o.kind), d.x, d.y);
+        }
+      } else if (d.t === 3) drawShrine(d.o, pxI, pyI, nearbyShrineId);
       else if (d.t === 1) drawEnemy(d.o, d.x, d.y, pxI, 1, crowded, run);
     }
     if (run.watchEvent) drawWatchEventActors(run.watchEvent);

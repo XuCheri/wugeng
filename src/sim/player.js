@@ -1,7 +1,7 @@
 // 玩家：创建、属性汇总（法器 + 羁绊 + 命签 + 英雄 + 更房）、移动、受伤（含无敌帧与震退脉冲）与治疗。
 
-import { PLAYER_BASE, HEROES, WEAPONS, ULT, DAMAGE, xpForLevel, cooldownMul, damageTaken } from './balance.js';
-import { relicTotals } from './relics.js';
+import { PLAYER_BASE, DASH, HEROES, WEAPONS, ULT, DAMAGE, xpForLevel, cooldownMul, damageTaken } from './balance.js';
+import { relicTotals, relicCapstones } from './relics.js';
 import { syncSynergies, synergyStatMods } from './synergies.js';
 import { computeBlessingMods, BLESSING_TUNING } from './blessings.js';
 import { terrainMoveMul, isRiverWater } from './maps.js';
@@ -49,6 +49,16 @@ export function createPlayer(heroId, extra = {}) {
     ultMax: ULT.max,
     invulnT: 0,
     hurtT: 0,
+    dashT: 0,
+    dashCd: 0,
+    dashMaxCd: DASH.cd,
+    dashDirX: 0,
+    dashDirY: -1,
+    _grazeCd: 0,
+    _dashBoostT: 0,
+    _fivecoinsBuffT: 0,
+    _altarMirrorT: 0,
+    _folkRiceBonusHp: 0,
     soulBarrier: 0,
     soulBarrierMax: 0,
     downed: false,
@@ -105,37 +115,34 @@ export function spendCoins(run, cost) {
  */
 export function recomputeMods(run, opts = {}) {
   const rel = relicTotals(run.relics);
+  const capstones = relicCapstones(run.relics);
   const synRes = syncSynergies(run, { emit: opts.emit !== undefined ? opts.emit : !run._initializing });
   const syn = synergyStatMods(synRes);
   const bl = computeBlessingMods(run);
   const activeHeroId = run.player?.heroId || run.heroId;
   const hero = (typeof activeHeroId === 'string' && Object.hasOwn(HEROES, activeHeroId) ? HEROES[activeHeroId]?.mods : null) || {};
-  const meta = run.meta;
-  const prevMax = run.player.maxHp;
+  const meta = run.meta || {};
+  const p = run.player;
+  const prevMax = p.maxHp;
   const overflowMult = run.mods ? run.mods.overflowMult : 1;
   const overflowStacks = run.mods ? run.mods.overflowStacks : 0;
 
   const lanternEvo = run.weapons.some((w) => w.id === 'lantern' && w.evolved);
   const frenzyActive = (run._ultFrenzyT || 0) > 0;
+  const wuseMaskActive = capstones.wuse_mask && (run._wuseMaskT || 0) > 0;
   const summonFrenzyActive = (run._summonFrenzyT || 0) > 0;
   const nuoDanceActive = (run._nuoDanceT || 0) > 0;
 
   const cooldownFloor = Math.min(DAMAGE.cooldownFloor, syn.cooldownFloor, bl.cooldownFloor);
-  const cdr = rel.cdr + (hero.cdr || 0) + syn.cdr + bl.cdr;
-  let cdMul = cooldownMul(cdr, cooldownFloor);
-  if (frenzyActive && bl.thunderDecreeStacks > 0) {
-    cdMul = Math.max(BLESSING_TUNING.thunder_decree.frenzyCdFloor, cdMul * BLESSING_TUNING.thunder_decree.frenzyCdMul);
-  }
-  if (nuoDanceActive) {
-    cdMul = Math.max(0.46, cdMul * ULT.nuoxi.danceCdMul);
-  }
-
   const rr = run.runRules || null;
   const lightMul = (1 + rel.lightPct + (lanternEvo ? WEAPONS.lantern.evo.lightBonusPct : 0)) * syn.lightMul * bl.lightMul * (rr ? rr.lightMul : 1);
   const lightRadius = Math.round(118 * lightMul);
+  const fivecoinsCritBonus = capstones.fivecoins && (p._fivecoinsBuffT || 0) > 0 ? 0.25 : 0;
   const critMult =
     PLAYER_BASE.critMult +
     rel.critDmg +
+    (meta.critDmg || 0) +
+    fivecoinsCritBonus +
     syn.critMultBonus +
     bl.critMultBonus +
     (rr ? rr.critDmg : 0) +
@@ -150,23 +157,27 @@ export function recomputeMods(run, opts = {}) {
     cdMulFinal = Math.max(0.46, cdMulFinal * ULT.nuoxi.danceCdMul);
   }
 
-  const waveStacks = activeHeroId === 'weier' ? clamp(Math.floor(run.player?.waveStacks || 0), 0, HEROES.weier.waveMaxStacks || 5) : 0;
+  const waveStacks = activeHeroId === 'weier' ? clamp(Math.floor(p?.waveStacks || 0), 0, HEROES.weier.waveMaxStacks || 5) : 0;
   const waveDmgBonus = waveStacks > 0 ? waveStacks * (HEROES.weier.waveDmgPerStack || 0.07) : 0;
   const waveAreaBonus = waveStacks > 0 ? waveStacks * (HEROES.weier.waveAreaPerStack || 0.04) : 0;
+  const slayerBonus = (meta.eliteSlayerStack > 0 ? Math.min(0.20, (run._eliteSlayerStacks || 0) * 0.02) : 0);
+  const wuseDmgBonus = wuseMaskActive ? 0.12 : 0;
+  const wuseAreaBonus = wuseMaskActive ? 0.15 : 0;
+  const strawCapeActive = Boolean(capstones.straw_cape && (p.inWater || (run._auraSlow ?? 1) < 1));
 
   const mods = {
-    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + waveDmgBonus + (meta.dmgPct || 0) + bl.dmgPct + (rr ? rr.dmgPct : 0),
+    dmgPct: rel.dmgPct + (hero.dmgPct || 0) + waveDmgBonus + slayerBonus + wuseDmgBonus + (meta.dmgPct || 0) + bl.dmgPct + (rr ? rr.dmgPct : 0),
     summonDmgPct: (hero.summonDmgPct || 0) + syn.summonDmgPct,
     zhizhaDmgPct: syn.zhizhaDmgPct,
     summonHasteMul: syn.summonHasteMul * (summonFrenzyActive ? ULT.mian.frenzyMul : 1),
     cdr: cdrTotal,
     cooldownFloor,
     cdMul: cdMulFinal,
-    areaMul: softAreaMul(1 + rel.areaPct + (hero.areaPct || 0) + waveAreaBonus + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
-    durMul: Math.max(0.4, 1 + rel.durPct + (hero.durPct || 0) + syn.durPct),
+    areaMul: softAreaMul(1 + rel.areaPct + (hero.areaPct || 0) + waveAreaBonus + wuseAreaBonus + syn.areaPct + bl.areaPct + (rr ? rr.areaPct : 0)),
+    durMul: Math.max(0.4, 1 + rel.durPct + (meta.durPct || 0) + (hero.durPct || 0) + syn.durPct),
     amount: rel.amount + syn.amount + bl.amount + (rr ? rr.amount : 0),
-    bonusPierce: (rel.bonusPierce || 0) + syn.bonusPierce,
-    critChance: PLAYER_BASE.critChance + rel.critChance + (hero.critChance || 0) + syn.critChance + bl.critChance + (rr ? rr.critChance : 0),
+    bonusPierce: (rel.bonusPierce || 0) + (meta.bonusPierce || 0) + syn.bonusPierce,
+    critChance: PLAYER_BASE.critChance + rel.critChance + (meta.critChance || 0) + (hero.critChance || 0) + syn.critChance + bl.critChance + (rr ? rr.critChance : 0),
     critMult,
     xpMul: (1 + rel.xpPct + (meta.xpPct || 0) + bl.xpPct) * run.night.xpMul * (rr ? rr.xpMul : 1),
     pickupRange: PLAYER_BASE.pickupRange * (1 + rel.pickupPct + (meta.pickupPct || 0) + bl.pickupPct + (rr ? rr.pickupPct : 0)),
@@ -177,13 +188,23 @@ export function recomputeMods(run, opts = {}) {
     hurtInvuln: PLAYER_BASE.hurtInvuln + rel.hurtInvuln + bl.bonusHurtInvuln,
     killHeal: rel.killHeal,
     slowResist: clamp(rel.slowResist, 0, 0.9),
-    relicCoinPct: rel.coinPct,
+    relicCoinPct: rel.coinPct + (meta.coinPct || 0),
     coinDropMul: bl.coinDropMul * (rr ? rr.coinDropMul : 1),
     spawnRateMul: bl.spawnRateMul * (rr ? rr.spawnRateMul : 1),
     eliteChanceMul: bl.eliteChanceMul * (rr ? rr.eliteChanceMul : 1),
-    knockbackMul: syn.knockbackMul * bl.knockbackMul,
+    knockbackMul: syn.knockbackMul * bl.knockbackMul * (1 + (meta.knockbackPct || 0)),
     controlDurMul: syn.controlDurMul * (1 + (rel.controlDurPct || 0)),
     takenDmgMul: bl.takenDmgMul,
+    bulletDmgReduct: meta.bulletDmgReduct || 0,
+    grazeRadiusPct: meta.grazeRadiusPct || 0,
+    grazeUltPct: meta.grazeUltPct || 0,
+    evolvedDmgPct: meta.evolvedDmgPct || 0,
+    bossDmgPct: meta.bossDmgPct || 0,
+    hazardPowerPct: meta.hazardPowerPct || 0,
+    dashThunderSeal: meta.dashThunderSeal || 0,
+    cheatDeathJade: meta.cheatDeathJade || 0,
+    waterWalk: meta.waterWalk || 0,
+    capstones,
     bunHealMul: bl.bunHealMul,
     hpRegen: bl.hpRegen,
     hpDrain: bl.hpDrain,
@@ -211,21 +232,31 @@ export function recomputeMods(run, opts = {}) {
   };
   run.mods = mods;
 
-  const p = run.player;
   if ((p.slot ?? 0) === 0) {
     p.weapons = run.weapons;
     p.relics = run.relics;
   }
-  p.armor = bl.zeroArmor ? 0 : PLAYER_BASE.armor + rel.armor + (hero.armor || 0) + (meta.armor || 0) + syn.bonusArmor + bl.bonusArmor;
-  const rawMaxHp = (PLAYER_BASE.maxHp + rel.maxHp + bl.bonusMaxHp) * (1 + (meta.maxHpPct || 0) + (hero.maxHpPct || 0)) * bl.maxHpMul * (rr ? rr.maxHpMul : 1);
+  const strawArmor = strawCapeActive ? 2 : 0;
+  p.armor = bl.zeroArmor ? 0 : PLAYER_BASE.armor + rel.armor + strawArmor + (hero.armor || 0) + (meta.armor || 0) + syn.bonusArmor + bl.bonusArmor;
+  const flatHpAdd = (meta.flatMaxHp || 0) + (p._folkRiceBonusHp || 0);
+  const rawMaxHp = (PLAYER_BASE.maxHp + rel.maxHp + flatHpAdd + bl.bonusMaxHp) * (1 + (meta.maxHpPct || 0) + (hero.maxHpPct || 0)) * bl.maxHpMul * (rr ? rr.maxHpMul : 1);
   p.maxHp = Math.max(10, Math.round(rawMaxHp));
+  const dashBoostPct = (p._dashBoostT || 0) > 0 ? DASH.strawshoesSpeedBonus : 0;
+  const strawSpeedPct = strawCapeActive ? 0.12 : 0;
   p.speed = Math.max(
     40,
-    PLAYER_BASE.speed * (1 + rel.speedPct + (hero.speedPct || 0) + (meta.speedPct || 0) + bl.speedPct) * (nuoDanceActive ? ULT.nuoxi.danceSpeedMul : 1) * (rr ? rr.playerSpeedMul : 1),
+    PLAYER_BASE.speed
+      * (1 + rel.speedPct + dashBoostPct + strawSpeedPct + (hero.speedPct || 0) + (meta.speedPct || 0) + bl.speedPct)
+      * (nuoDanceActive ? ULT.nuoxi.danceSpeedMul : 1)
+      * (rr ? rr.playerSpeedMul : 1),
   );
 
   const sb = run.weapons.find((w) => w.id === 'soulbanner');
-  p.soulBarrierMax = sb ? (sb.evolved ? WEAPONS.soulbanner.evo.shieldMax : WEAPONS.soulbanner.shieldMax) : 0;
+  const decreeFusion = run.weapons.some((w) => w.fusionId === 'grand_underworld_decree');
+  let barrierMax = sb ? (sb.evolved ? WEAPONS.soulbanner.evo.shieldMax : WEAPONS.soulbanner.shieldMax) : 0;
+  if (decreeFusion) barrierMax = Math.max(barrierMax, 3);
+  if (capstones.altar_mirror || capstones.glutinous) barrierMax = Math.max(barrierMax, 1);
+  p.soulBarrierMax = barrierMax;
   if (p.soulBarrier > p.soulBarrierMax) p.soulBarrier = p.soulBarrierMax;
 
   if (p.downed) {
@@ -239,11 +270,40 @@ export function recomputeMods(run, opts = {}) {
   return mods;
 }
 
-/** 移动：input.moveX/moveY 已归一化（长度 ≤ 1） */
+/** 移动：input.moveX/moveY 已归一化（长度 ≤ 1），同时驱动「踏罡步」瞬闪与法器时序 */
 export function updatePlayer(run, input, dt) {
   if (!run || !run.player) return;
   dt = typeof dt === 'number' && Number.isFinite(dt) && dt > 0 ? Math.min(dt, 1) : 0;
   const p = run.player;
+  const meta = run.meta || {};
+  const capstones = run.mods?.capstones || {};
+
+  if (p.dashCd > 0) p.dashCd = Math.max(0, p.dashCd - dt);
+  if (p._grazeCd > 0) p._grazeCd = Math.max(0, p._grazeCd - dt);
+  if (run._baguaReflectCd > 0) run._baguaReflectCd = Math.max(0, run._baguaReflectCd - dt);
+  if (p._dashBoostT > 0) {
+    p._dashBoostT = Math.max(0, p._dashBoostT - dt);
+    if (p._dashBoostT === 0) recomputeMods(run);
+  }
+  if (p._fivecoinsBuffT > 0) {
+    p._fivecoinsBuffT = Math.max(0, p._fivecoinsBuffT - dt);
+    if (p._fivecoinsBuffT === 0) recomputeMods(run);
+  }
+  if (run._wuseMaskT > 0) {
+    run._wuseMaskT = Math.max(0, run._wuseMaskT - dt);
+    if (run._wuseMaskT === 0) recomputeMods(run);
+  }
+  if (capstones.altar_mirror && p.hp > 0 && !p.downed) {
+    p._altarMirrorT = (p._altarMirrorT || 0) + dt;
+    if (p._altarMirrorT >= 18) {
+      p._altarMirrorT -= 18;
+      if (p.soulBarrier < Math.max(1, p.soulBarrierMax)) {
+        p.soulBarrier++;
+        run.events.push({ type: 'shieldGain', x: p.x, y: p.y, stacks: p.soulBarrier });
+      }
+    }
+  }
+
   const rawMx = input != null && typeof input.moveX !== 'boolean' ? +input.moveX : 0;
   const rawMy = input != null && typeof input.moveY !== 'boolean' ? +input.moveY : 0;
   let mx = Number.isFinite(rawMx) ? rawMx || 0 : 0;
@@ -262,25 +322,75 @@ export function updatePlayer(run, input, dt) {
       my /= l;
     }
   }
-  p.moving = l > 0.05;
-  if (p.moving) {
+  p.moving = l > 0.05 || p.dashT > 0;
+  if (l > 0.05) {
     const inv = 1 / Math.max(l, 1e-6);
     p.facingX = mx * inv;
     p.facingY = my * inv;
   }
 
-  const rawSlow = run._auraSlow ?? 1;
-  const resist = clamp(run.mods?.slowResist || 0, 0, 0.9);
-  const effSlow = rawSlow < 1 ? 1 - (1 - rawSlow) * (1 - resist) : rawSlow;
-  const waterMul = terrainMoveMul(run.mapId, p.x, p.y, run._seedNum, resist);
-  const spd = p.speed * effSlow * waterMul;
-  const dx = mx * spd * dt;
-  const dy = my * spd * dt;
+  // 触发「踏罡步」瞬闪
+  if (input && input.dash && p.dashCd <= 0 && !(p.dashT > 0) && p.hp > 0 && !p.downed) {
+    const ddx = l > 0.05 ? p.facingX : (p.facingX || 0);
+    const ddy = l > 0.05 ? p.facingY : (p.facingY || -1);
+    const dNorm = Math.hypot(ddx, ddy) || 1;
+    const nx = ddx / dNorm;
+    const ny = ddy / dNorm;
+    const rawCd = DASH.cd - (meta.dashCdReduce || 0) - (capstones.strawshoes ? DASH.strawshoesCdReduce : 0);
+    const effCd = Math.max(1.15, rawCd * (run.mods?.cdMul || 1));
+    p.dashT = DASH.duration;
+    p.dashCd = effCd;
+    p.dashMaxCd = effCd;
+    p.dashDirX = nx;
+    p.dashDirY = ny;
+    p.facingX = nx;
+    p.facingY = ny;
+    p.invulnT = Math.max(p.invulnT, DASH.invuln + (meta.dashInvulnBonus || 0));
+    if (capstones.strawshoes) {
+      p._dashBoostT = DASH.strawshoesSpeedDur;
+      recomputeMods(run);
+    }
+    run.events.push({ type: 'dash', x: p.x, y: p.y, dx: nx, dy: ny });
+    if ((run.mods?.dashThunderSeal || 0) > 0 && Array.isArray(run._scheduled)) {
+      run._scheduled.push({
+        delay: 0.08,
+        type: 'dashThunderSeal',
+        x: p.x + nx * 28,
+        y: p.y + ny * 28,
+        radius: DASH.sealRadius * (run.mods?.areaMul || 1),
+        dmg: DASH.sealDmgBase + (p.level || 1) * DASH.sealDmgPerLv,
+        stun: DASH.sealStun,
+        ownerSlot: p.slot || 0,
+      });
+    }
+  }
+
+  let dx = 0;
+  let dy = 0;
+  if (p.dashT > 0) {
+    const stepDt = Math.min(dt, p.dashT);
+    p.dashT = Math.max(0, p.dashT - dt);
+    const dashSpd = p.speed * DASH.speedMul;
+    dx = p.dashDirX * dashSpd * stepDt;
+    dy = p.dashDirY * dashSpd * stepDt;
+  } else {
+    const rawSlow = run._auraSlow ?? 1;
+    const resist = clamp(run.mods?.slowResist || 0, 0, 0.9);
+    const effSlow = rawSlow < 1 ? 1 - (1 - rawSlow) * (1 - resist) : rawSlow;
+    const waterMul = (run.mods?.waterWalk || 0) > 0 ? 1 : terrainMoveMul(run.mapId, p.x, p.y, run._seedNum, resist);
+    const spd = p.speed * effSlow * waterMul;
+    dx = mx * spd * dt;
+    dy = my * spd * dt;
+  }
   p.vx = dt > 0 ? dx / dt : 0;
   p.vy = dt > 0 ? dy / dt : 0;
   p.x += dx;
   p.y += dy;
+  const prevInWater = p.inWater;
   p.inWater = run.mapId === 'hedeng' && isRiverWater(p.x, p.y, run._seedNum);
+  if (capstones.straw_cape && prevInWater !== p.inWater) {
+    recomputeMods(run);
+  }
 
   // 芦二娘被动「推浪」：持续行步叠起身后水浪（最多 5 层），停步渐消；带层行步时身后周期溅起水浪伤敌
   if ((p.heroId || run.heroId) === 'weier') {
@@ -399,8 +509,24 @@ export function pushEnemiesFromPlayer(run, pushR, pushF) {
   }
 }
 
+export function triggerBaguaCounterIfReady(run, p) {
+  if (!run?.mods?.capstones?.bagua || (run._baguaReflectCd || 0) > 0) return;
+  run._baguaReflectCd = 2.5;
+  if (Array.isArray(run._scheduled)) {
+    run._scheduled.push({
+      delay: 0,
+      type: 'baguaCounter',
+      x: p.x,
+      y: p.y,
+      radius: 94 * (run.mods?.areaMul || 1),
+      dmg: 32 + (p.level || 1) * 6,
+      ownerSlot: p.slot || 0,
+    });
+  }
+}
+
 /** 玩家受伤：max(1, 原始 − 护甲)；触发受击无敌帧与护体震退脉冲；返回实际伤害 */
-export function hurtPlayer(run, raw) {
+export function hurtPlayer(run, raw, opts = null) {
   if (!run || !run.player || typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return 0;
   raw = Math.min(raw, 1e9);
   const p = run.player;
@@ -411,12 +537,26 @@ export function hurtPlayer(run, raw) {
     p.soulBarrier--;
     p.invulnT = Math.max(p.invulnT, 0.45);
     pushEnemiesFromPlayer(run, PLAYER_BASE.hurtPushRadius, PLAYER_BASE.hurtPushForce);
+    triggerBaguaCounterIfReady(run, p);
     run.events.push({ type: 'shieldBlock', x: p.x, y: p.y, remaining: p.soulBarrier });
     return 0;
   }
 
-  const effRaw = raw * (run.mods?.takenDmgMul || 1);
+  const bulletMul = opts && opts.isBullet ? Math.max(0.2, 1 - (run.mods?.bulletDmgReduct || 0)) : 1;
+  const effRaw = raw * bulletMul * (run.mods?.takenDmgMul || 1);
   const dmg = damageTaken(effRaw, p.armor);
+
+  // 守夜镇魂玉（永久镇物）：致命伤触发 1.5 秒镇魂金身免死
+  if (p.hp - dmg <= 0 && (run.mods?.cheatDeathJade || 0) > 0 && !run._guardianJadeUsed) {
+    run._guardianJadeUsed = true;
+    p.hp = Math.max(1, Math.ceil(p.maxHp * 0.35));
+    p.invulnT = Math.max(p.invulnT, 1.5);
+    p.hurtT = PLAYER_BASE.hurtFlash;
+    for (const pr of run.projectiles) if (pr.kind === 'enemyBullet') pr.dead = true;
+    pushEnemiesFromPlayer(run, 150, 300);
+    run.events.push({ type: 'revive', source: 'guardian_jade', x: p.x, y: p.y });
+    return 0;
+  }
 
   // 借纸还魂命签：致命伤时纸人替死一次并回半血
   if (p.hp - dmg <= 0 && run.mods?.paperSoul && !run._paperSoulUsed) {
@@ -437,6 +577,7 @@ export function hurtPlayer(run, raw) {
     if (p.hp > 0 || (run.players?.length || 1) <= 1) {
       pushEnemiesFromPlayer(run, PLAYER_BASE.hurtPushRadius, PLAYER_BASE.hurtPushForce);
     }
+    triggerBaguaCounterIfReady(run, p);
   }
   p.hurtT = PLAYER_BASE.hurtFlash;
   run.events.push({ type: 'playerHurt', amount: dmg, x: p.x, y: p.y });

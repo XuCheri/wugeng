@@ -9,6 +9,7 @@ import { hasRelic } from './relics.js';
 import { hitPropsCircle } from './props.js';
 import { wrapAngle, fsin, fcos, fatan2 } from '../core/math.js';
 import { clearBulletsNear, weaponClearBullets } from './bullet-clear.js';
+import { FUSION_DMG_MUL } from './fusions.js';
 
 /** 取武器某项属性在 level 级时的数值（数组按级取，标量直接返回） */
 export function wstat(id, key, level) {
@@ -144,6 +145,9 @@ function baseDmg(w, run = null, owner = null) {
     const hasPair = (run && def.pair && hasRelic(run, def.pair)) || w.evolvedRecipe === 'paired';
     if (hasPair) d *= EVOLUTION.pairedMasteryMul;
   }
+  if (w.fusionId) {
+    d *= FUSION_DMG_MUL;
+  }
   return d;
 }
 
@@ -154,7 +158,7 @@ export function weaponFullCooldown(run, w, owner = null) {
   const cdMul = run?.mods?.cdMul ?? 1;
   const cd = wstat(w.id, 'cd', w.level);
   if (typeof cd === 'number' && cd > 0) {
-    return cd * cdMul * sigMul * (w.evolved ? EVOLUTION.evoCdMul : 1);
+    return cd * cdMul * sigMul * (w.evolved ? EVOLUTION.evoCdMul : 1) * (w.fusionId ? 0.90 : 1);
   }
   const def = WEAPONS[w.id];
   if (def && typeof def.tick === 'number' && def.tick > 0) {
@@ -175,12 +179,30 @@ export function emitFire(run, w, x = run.player.x, y = run.player.y, angle = 0, 
     type: 'fire',
     weaponId: w.id,
     evolved: !!w.evolved,
+    fused: !!w.fusionId,
     slot: run._activeSlot || 0,
     x,
     y,
     angle,
     ...(extra || {}),
   });
+  // 梆子五阶满级觉醒【五更定拍】：每施放 5 次兵刃震出一道镇更音波
+  if (run.mods?.capstones?.clapper && Array.isArray(run._scheduled)) {
+    run._clapperCasts = (run._clapperCasts || 0) + 1;
+    if (run._clapperCasts >= 5) {
+      run._clapperCasts = 0;
+      const p = run.player;
+      run._scheduled.push({
+        delay: 0,
+        type: 'clapperPulse',
+        x: p.x,
+        y: p.y,
+        radius: 72 * (run.mods?.areaMul || 1),
+        dmg: 18 + (p.level || 1) * 3,
+        ownerSlot: run._activeSlot || 0,
+      });
+    }
+  }
 }
 
 function newProj(run, kind, x, y, r, angle, life, extra) {
@@ -1687,12 +1709,13 @@ function updateGoldAbacus(run, w, dt) {
 
 function summonKey(run, w) {
   const sigBit = isWeaponSignature(w, run) ? 1 : 0;
+  const fusBit = w.fusionId ? 1 : 0;
   if (w.id === 'lantern') {
-    const cnt = (wstat('lantern', 'count', w.level) + run.mods.amount) & 0xff;
-    return (cnt << 21) | ((w.evolved ? 1 : 0) << 20) | (sigBit << 19) | ((Math.round(weaponAreaMul(run, w) * 1000)) & 0x7ffff);
+    const cnt = (wstat('lantern', 'count', w.level) + run.mods.amount + (fusBit ? 2 : 0)) & 0xff;
+    return (fusBit << 29) | (cnt << 21) | ((w.evolved ? 1 : 0) << 20) | (sigBit << 19) | ((Math.round(weaponAreaMul(run, w) * 1000)) & 0x7ffff);
   }
   if (w.id === 'paperman') {
-    return ((wstat('paperman', 'count', w.level) & 0xff) << 13) | (((run.mods.amount + 32) & 0xff) << 3) | (sigBit << 1) | (w.evolved ? 1 : 0);
+    return (fusBit << 24) | ((wstat('paperman', 'count', w.level) & 0xff) << 13) | (((run.mods.amount + 32) & 0xff) << 3) | (sigBit << 1) | (w.evolved ? 1 : 0);
   }
   return 0;
 }
@@ -1710,7 +1733,7 @@ function syncSummons(run, w) {
     run.projectiles = run.projectiles.filter(
       (pr) => (pr.ownerSlot || 0) !== activeSlot || (pr.kind !== 'lantern' && pr.kind !== 'flameRing'),
     );
-    const n = wstat('lantern', 'count', w.level) + run.mods.amount;
+    const n = wstat('lantern', 'count', w.level) + run.mods.amount + (w.fusionId ? 2 : 0);
     for (let i = 0; i < n; i++) {
       newProj(run, 'lantern', p.x, p.y, WEAPONS.lantern.hitR * sigScale, 0, 1, {
         weaponId: 'lantern',
@@ -1718,6 +1741,7 @@ function syncSummons(run, w) {
         orbitCount: n,
         persistent: true,
         evolved: w.evolved,
+        fused: !!w.fusionId,
       });
     }
     if (w.evolved) {
@@ -1731,6 +1755,7 @@ function syncSummons(run, w) {
         dualLotus: true,
         persistent: true,
         evolved: true,
+        fused: !!w.fusionId,
       });
     }
   } else if (w.id === 'paperman') {
@@ -1773,9 +1798,10 @@ function syncSummons(run, w) {
           sigCdMul,
           persistent: true,
           evolved: true,
+          fused: !!w.fusionId,
         });
       }
-      const cN = evo.cavalry + run.mods.amount;
+      const cN = evo.cavalry + run.mods.amount + (w.fusionId ? 2 : 0);
       for (let c = 0; c < cN; c++) {
         const a = (c / cN) * Math.PI * 2;
         newProj(run, 'paperman', p.x + fcos(a) * 84, p.y + fsin(a) * 84, (def.r + 1) * sigScale, a, 1, {
@@ -1792,6 +1818,7 @@ function syncSummons(run, w) {
           sigCdMul,
           persistent: true,
           evolved: true,
+          fused: !!w.fusionId,
           _hitUntil: new Map(),
         });
       }
@@ -1829,6 +1856,27 @@ export function updateWeapons(run, dt) {
     if (w.id === 'lantern' || w.id === 'paperman') syncSummons(run, w);
     const fn = UPDATERS[w.id];
     if (fn) fn(run, w, dt);
+
+    // 阴阳合契：在单一兵刃槽内同步驱动被合契副神兵的满阶开光招式！
+    if (w.fusionId && w.fusedSecondaryId) {
+      if (!w._fusionSub || w._fusionSub.id !== w.fusedSecondaryId) {
+        w._fusionSub = {
+          id: w.fusedSecondaryId,
+          level: MAX_WEAPON_LEVEL,
+          evolved: true,
+          evolvedRecipe: 'paired',
+          fusionId: w.fusionId,
+          signature: !!w.signature,
+          cd: typeof w._fusionSubCd === 'number' ? w._fusionSubCd : 0.25,
+        };
+      }
+      w._fusionSub.signature = !!w.signature;
+      const subFn = UPDATERS[w.fusedSecondaryId];
+      if (subFn) {
+        subFn(run, w._fusionSub, dt);
+        w._fusionSubCd = w._fusionSub.cd;
+      }
+    }
   }
 }
 

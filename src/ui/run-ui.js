@@ -12,7 +12,8 @@ import { icon } from './icons.js';
 import { settingsBody } from './settings.js';
 import { confirmDialog } from './dialogs.js';
 import { canShowRerollAd, canShowReviveAd } from '../ads/ad-policy.js';
-import { MAX_WEAPONS, MAX_RELICS, MAX_WEAPON_LEVEL, PLAYER_BASE } from '../sim/balance.js';
+import { MAX_WEAPONS, MAX_RELICS, MAX_WEAPON_LEVEL, PLAYER_BASE, RELIC_CAPSTONES } from '../sim/balance.js';
+import { FUSIONS } from '../sim/fusions.js';
 import { BOSS_NAMES, BOSS_EPITHETS } from '../render/fx.js';
 
 const KIND_GLYPH = { coin: '钱', bun: '包', overflow: '溢' };
@@ -26,6 +27,10 @@ function schoolPills(tags) {
 function computeCardHint(r, c, d) {
   if (!r || !c) return '';
   if (d.kind === 'blessing') return d.evolveHint || '不占兵刃法器栏位';
+  if (c.kind === 'relic' && c.level === 5 && RELIC_CAPSTONES[c.id]) {
+    const cap = RELIC_CAPSTONES[c.id];
+    return `五阶觉醒【${cap.name}】· ${cap.desc}`;
+  }
   if (d.evolvable) {
     const targetName = weaponName(d.evolveTargetId || c.id, true);
     return `可开光 · 供盒敕封「${targetName}」`;
@@ -219,14 +224,14 @@ export function createRunUI(root, deps) {
     for (let i = 0; i < MAX_WEAPONS; i++) {
       const w = weapons[i];
       if (w) {
-        const nm = weaponName(w.id, !!w.evolved);
+        const nm = w.fusionName || weaponName(w.id, !!w.evolved);
         wRow.appendChild(h('div', {
-          class: `owned-slot${w.evolved ? ' is-evo' : ' is-filled'}`,
+          class: `owned-slot${w.fusionId ? ' is-evo is-fusion' : w.evolved ? ' is-evo' : ' is-filled'}`,
           dataset: { slotKind: 'weapon', slotIndex: String(i), itemId: w.id },
-          title: `${nm} ${w.evolved ? '已开光' : w.level + '级'}`,
+          title: `${nm} ${w.fusionId ? '宗师合契' : w.evolved ? '已开光' : w.level + '级'}`,
         },
         icon(w.evolved ? 'evo' : 'weapon', w.id, 22, nm[0] || '刃'),
-        h('span', { class: 'owned-slot__lv' }, w.evolved ? '开' : String(w.level || 1))));
+        h('span', { class: 'owned-slot__lv' }, w.fusionId ? '合' : w.evolved ? '开' : String(w.level || 1))));
       } else {
         wRow.appendChild(h('div', {
           class: 'owned-slot is-empty',
@@ -240,13 +245,14 @@ export function createRunUI(root, deps) {
       const rel = relics[i];
       if (rel) {
         const nm = relicName(rel.id);
+        const isCap = rel.level >= 5;
         rRow.appendChild(h('div', {
-          class: 'owned-slot is-filled',
+          class: `owned-slot${isCap ? ' is-evo' : ' is-filled'}`,
           dataset: { slotKind: 'relic', slotIndex: String(i), itemId: rel.id },
-          title: `${nm} ${rel.level}级`,
+          title: `${nm} ${rel.level}级${isCap && RELIC_CAPSTONES[rel.id] ? ` · 觉醒【${RELIC_CAPSTONES[rel.id].name}】` : ''}`,
         },
         icon('relic', rel.id, 22, nm[0] || '器'),
-        h('span', { class: 'owned-slot__lv' }, String(rel.level || 1))));
+        h('span', { class: 'owned-slot__lv' }, isCap ? '觉' : String(rel.level || 1))));
       } else {
         rRow.appendChild(h('div', {
           class: 'owned-slot is-empty',
@@ -584,9 +590,11 @@ export function createRunUI(root, deps) {
 
         const leftTag = isLocked
           ? h('i', { class: 'qian__evo is-lock-tag' }, '已留')
-          : d.evolvable
-            ? h('i', { class: 'qian__evo' }, '可开光')
-            : null;
+          : c.capstone
+            ? h('i', { class: 'qian__evo' }, '五阶觉醒')
+            : d.evolvable
+              ? h('i', { class: 'qian__evo' }, '可开光')
+              : null;
 
         const cardIcon = isBlessing
           ? icon('blessing', d.id, 40, isCursed ? '凶' : '吉', { tone: isCursed ? 'cursed' : 'auspicious' })
@@ -595,7 +603,7 @@ export function createRunUI(root, deps) {
         const card = h('div', {
           role: 'button',
           tabindex: '0',
-          class: `${cardCls}${isReroll ? ' is-redealt' : ''}`,
+          class: `${cardCls}${c.capstone ? ' is-evo' : ''}${isReroll ? ' is-redealt' : ''}`,
           style: { '--qian-i': String(i), '--qian-tilt': `${(i - 1) * 2.2}deg` },
           dataset: cardDataset,
           'aria-label': `${d.name}${d.level ? ' ' + d.level + '级' : ''}：${d.desc}`,
@@ -612,7 +620,7 @@ export function createRunUI(root, deps) {
         h('span', { class: `qian__name${(d.name || '').length >= 5 ? ' is-long' : ''}` }, d.name),
         h('span', { class: 'qian__meta' }, lvBadge, schoolPills(d.tags)),
         h('span', { class: 'qian__desc' }, d.desc),
-        hint ? h('span', { class: `qian__hint${d.evolvable ? ' is-ready' : ''}` }, hint) : null,
+        hint ? h('span', { class: `qian__hint${d.evolvable || c.capstone ? ' is-ready' : ''}` }, hint) : null,
         actsEl,
         rightStamp,
         leftTag);
@@ -696,14 +704,21 @@ export function createRunUI(root, deps) {
     render();
   }
 
-  // ───────── 供盒（自选开光卷轴仪式 & 常规强化 + 已携6+6栏 + 查看行囊）─────────
+  // ───────── 供盒（宗师阴阳合契 / 自选开光卷轴仪式 & 常规强化 + 已携6+6栏 + 查看行囊）─────────
   function buildEvoChoiceCard(c, selected, interactive, onSelect) {
-    const recipeText = RECIPE_LABELS[c.recipe] || '神兵敕封';
-    const tags = weaponTags(c.id);
-    const evoTitle = `${c.name || weaponName(c.id)} → ${c.evoName || weaponName(c.id, true)}`;
-    const desc = c.evoDesc || EVOLVE_INTRO[c.id] || '';
+    const isFusion = c.kind === 'fusion' || c.recipe === 'fusion';
+    const fDef = isFusion ? FUSIONS[c.id] : null;
+    const iconId = isFusion ? (c.primaryId || fDef?.primaryId || 'gong') : c.id;
+    const recipeText = isFusion
+      ? '阴阳合契 · 双神兵二合一（腾出 1 个兵刃槽！）'
+      : (RECIPE_LABELS[c.recipe] || '神兵敕封');
+    const tags = isFusion
+      ? [...new Set([...weaponTags(iconId), ...weaponTags(c.secondaryId || fDef?.secondaryId || iconId)])]
+      : weaponTags(c.id);
+    const evoTitle = `${c.name || weaponName(iconId)} → ${c.evoName || weaponName(iconId, true)}`;
+    const desc = c.evoDesc || EVOLVE_INTRO[iconId] || '';
     const inner = [
-      h('div', { class: 'chest-choice__ico' }, icon('evo', c.id, 46, (c.evoName || c.name || '开')[0])),
+      h('div', { class: 'chest-choice__ico' }, icon('evo', iconId, 46, (c.evoName || c.name || '合')[0])),
       h('div', { class: 'chest-choice__main' },
         h('p', { class: 'chest-choice__head' },
           h('b', {}, evoTitle),
@@ -712,13 +727,13 @@ export function createRunUI(root, deps) {
         h('p', { class: 'chest-choice__desc' }, desc)),
       h('div', { class: 'chest-choice__mark' },
         selected
-          ? h('i', { class: 'stamp stamp--sm' }, '敕')
+          ? h('i', { class: 'stamp stamp--sm' }, isFusion ? '合' : '敕')
           : h('span', { class: 'chest-choice__radio' }, '择')),
     ];
 
     if (!interactive) {
       return h('div', {
-        class: 'chest-choice is-selected is-single',
+        class: `chest-choice is-selected is-single${isFusion ? ' is-fusion-choice' : ''}`,
         dataset: { evoWeapon: c.id, recipe: c.recipe || '' },
       }, ...inner);
     }
@@ -726,7 +741,7 @@ export function createRunUI(root, deps) {
       type: 'button',
       role: 'radio',
       'aria-checked': selected ? 'true' : 'false',
-      class: `chest-choice${selected ? ' is-selected' : ''}`,
+      class: `chest-choice${selected ? ' is-selected' : ''}${isFusion ? ' is-fusion-choice' : ''}`,
       dataset: { evoWeapon: c.id, recipe: c.recipe || '' },
       onClick: onSelect,
     }, ...inner);
@@ -736,10 +751,11 @@ export function createRunUI(root, deps) {
     const r = run();
     const choices = Array.isArray(r?.chestChoices) ? r.chestChoices.map((x) => ({ ...x })) : [];
 
-    // 分支 1：2 把及以上满阶兵刃满足开光条件 → 自选开光敕封卷轴
+    // 分支 1：2 项及以上合契/开光候选 → 自选敕封卷轴
     if (choices.length >= 2) {
       let selectedId = choices[0].id;
-      const listBox = h('div', { class: 'chest-choices', role: 'radiogroup', 'aria-label': '选择开光神兵' });
+      const hasFusion = choices.some((c) => c.kind === 'fusion' || c.recipe === 'fusion');
+      const listBox = h('div', { class: 'chest-choices', role: 'radiogroup', 'aria-label': '选择开光或合契神兵' });
       const renderChoices = () => {
         clear(listBox);
         for (const c of choices) {
@@ -753,19 +769,21 @@ export function createRunUI(root, deps) {
       renderChoices();
 
       const ceremonyBanner = h('div', { class: 'chest-ceremony' },
-        h('i', { class: 'stamp' }, '开光'),
-        h('p', { class: 'chest-ceremony__note' }, '敕封礼成：大招攒气 +50 · 震散周身敌弹'));
+        h('i', { class: 'stamp' }, hasFusion ? '合契' : '开光'),
+        h('p', { class: 'chest-ceremony__note' },
+          hasFusion ? '阴阳合契可二合一腾出兵刃槽 · 大招攒气 +50 · 震散敌弹' : '敕封礼成：大招攒气 +50 · 震散周身敌弹'));
 
       open('chest', scroll({
-        title: '供盒敕封',
-        sub: '多器齐备 · 择一兵刃开光',
+        title: hasFusion ? '阴阳合契' : '供盒敕封',
+        sub: hasFusion ? '双神兵共鸣 · 可敕封宗师超武' : '多器齐备 · 择一兵刃开光',
         cls: 'scroll--dialog chest chest--ceremony',
         body: h('div', { class: 'chest-body' }, buildSelectionOwnedBar(r), ceremonyBanner, listBox),
         footer: [
-          sealButton('敕封开光', () => {
+          sealButton(hasFusion ? '敕封礼成' : '敕封开光', () => {
             const res = sim.openChest(run(), selectedId) || { evolved: null };
             deps.onCodexSync?.(run());
-            if (res.evolved) deps.audio?.play('evolve');
+            if (res.fused) deps.audio?.play('fusion');
+            else if (res.evolved) deps.audio?.play('evolve');
             proceed();
           }, { cls: 'btn--wide', dataset: { action: 'confirm-chest' } }),
         ],
@@ -773,26 +791,29 @@ export function createRunUI(root, deps) {
       return;
     }
 
-    // 分支 2：恰好 1 把兵刃满足开光条件 → 打开供盒即完成敕封（兼容旧烟测）
+    // 分支 2：恰好 1 项合契或开光候选 → 打开供盒即完成敕封（兼容旧烟测）
     if (choices.length === 1) {
       const snap = choices[0];
       const res = sim.openChest(r, snap.id) || { evolved: snap.id, recipe: snap.recipe, upgrades: [] };
       deps.onCodexSync?.(run());
-      if (res.evolved) deps.audio?.play('evolve');
+      const isFusion = Boolean(res.fused || snap.kind === 'fusion');
+      if (isFusion) deps.audio?.play('fusion');
+      else if (res.evolved) deps.audio?.play('evolve');
 
       const card = buildEvoChoiceCard({
         ...snap,
-        id: res.evolved || snap.id,
+        id: isFusion ? (res.fused || snap.id) : (res.evolved || snap.id),
         recipe: res.recipe || snap.recipe,
       }, true, false, null);
 
       const ceremonyBanner = h('div', { class: 'chest-ceremony' },
-        h('i', { class: 'stamp stamp--big' }, '开光'),
-        h('p', { class: 'chest-ceremony__note' }, '神兵出匣 · 大招攒气 +50 · 震散周身敌弹'));
+        h('i', { class: 'stamp stamp--big' }, isFusion ? '合契' : '开光'),
+        h('p', { class: 'chest-ceremony__note' },
+          isFusion ? '双神兵二合一腾出 1 兵刃槽 · 大招攒气 +50 · 净场震波' : '神兵出匣 · 大招攒气 +50 · 震散周身敌弹'));
 
       open('chest', scroll({
-        title: '供盒敕封',
-        sub: '夜主供奉 · 神兵开光',
+        title: isFusion ? '阴阳合契' : '供盒敕封',
+        sub: isFusion ? '宗师超武降世 · 腾出兵刃槽位' : '夜主供奉 · 神兵开光',
         cls: 'scroll--dialog chest chest--ceremony',
         body: h('div', { class: 'chest-body' }, buildSelectionOwnedBar(run()), ceremonyBanner, card),
         footer: [
@@ -945,10 +966,11 @@ export function createRunUI(root, deps) {
       }
       const pair = weaponPairRelic(w.id);
       const recipe = !w.evolved ? sim.getEvolutionRecipe?.(r, w) : null;
-      const wTitle = weaponName(w.id, !!w.evolved);
-      const tags = weaponTags(w.id);
+      const wTitle = w.fusionName || weaponName(w.id, !!w.evolved);
+      const tags = [...new Set([...weaponTags(w.id), ...(w.bonusSynergyTags || [])])];
       let hint = '';
-      if (w.evolved) hint = EVOLVE_INTRO[w.id] || '已开光';
+      if (w.fusionId && FUSIONS[w.fusionId]) hint = FUSIONS[w.fusionId].desc;
+      else if (w.evolved) hint = EVOLVE_INTRO[w.id] || '已开光';
       else if (recipe && w.level >= MAX_WEAPON_LEVEL) hint = `已齐备（${RECIPE_SHORT[recipe.recipe] || '可开光'}）· 拾供盒开光`;
       else if (recipe) hint = `条件已备（${RECIPE_SHORT[recipe.recipe] || '共鸣'}）· 伍级开光`;
       else if (pair) hint = `配「${relicName(pair)}」或三件同门开光`;
@@ -959,9 +981,11 @@ export function createRunUI(root, deps) {
           h('p', { class: 'pause-slot__head' },
             h('b', {}, wTitle),
             schoolPills(tags),
-            w.evolved
-              ? h('i', { class: 'stamp stamp--xs' }, '开')
-              : h('span', { class: 'pause-slot__lv' }, `${cnNum(w.level)}级`)),
+            w.fusionId
+              ? h('i', { class: 'stamp stamp--xs' }, '合')
+              : w.evolved
+                ? h('i', { class: 'stamp stamp--xs' }, '开')
+                : h('span', { class: 'pause-slot__lv' }, `${cnNum(w.level)}级`)),
           hint ? h('p', { class: 'pause-slot__sub' }, hint) : null)));
     }
 
@@ -974,14 +998,16 @@ export function createRunUI(root, deps) {
       }
       const rTitle = relicName(rel.id);
       const tags = relicTags(rel.id);
-      rGrid.appendChild(h('div', { class: 'pause-slot' },
+      const cap = rel.level >= 5 ? RELIC_CAPSTONES[rel.id] : null;
+      rGrid.appendChild(h('div', { class: `pause-slot${cap ? ' is-evo' : ''}` },
         h('div', { class: 'pause-slot__ico' }, icon('relic', rel.id, 36, rTitle[0])),
         h('div', { class: 'pause-slot__info' },
           h('p', { class: 'pause-slot__head' },
             h('b', {}, rTitle),
             schoolPills(tags),
-            h('span', { class: 'pause-slot__lv' }, `${cnNum(rel.level)}级`)),
-          h('p', { class: 'pause-slot__sub' }, relicTotalDesc(rel.id, rel.level)))));
+            cap ? h('i', { class: 'stamp stamp--xs' }, '觉') : h('span', { class: 'pause-slot__lv' }, `${cnNum(rel.level)}级`)),
+          h('p', { class: 'pause-slot__sub' },
+            `${relicTotalDesc(rel.id, rel.level)}${cap ? ` · 觉醒【${cap.name}】${cap.desc}` : ''}`))));
     }
 
     // 四门流派羁绊
@@ -1172,7 +1198,7 @@ export function createRunUI(root, deps) {
   function showFirstRunHint() {
     hintEl?.remove();
     hintEl = h('div', { class: 'run-hint', 'aria-live': 'polite' },
-      h('p', {}, '按住任意处拖动走位'),
+      h('p', {}, '按住拖动走位 · 快速甩指踏罡瞬闪'),
       h('p', {}, '器物自会出手，吃魂火升级'),
       h('p', {}, '攒满气，点右下角敲更锣'));
     root.appendChild(hintEl);

@@ -1,7 +1,17 @@
 // Web Audio 实时合成（PLAN §2.6）：不放任何音频文件。
-// 音效：15 种基础民俗音效 + 12 种武器开火专属音色（含开光泛音增强）+ 爆炸/尸潮/神龛/羁绊/命签；
-// 背景乐：五声音阶类古琴拨弦（Karplus-Strong 预渲染），按更次变密。
-// API：createAudio() → { unlock, play, onEvents, setWatch, setEnabled, suspend, resume, setMusicMode, state }
+// 音效：15 种基础民俗音效 + 22 种武器开火专属音色（含开光泛音增强）+ 瞬闪/擦弹/合契/街巷机关/爆炸/尸潮/神龛/羁绊/命签；
+// 背景乐：多轨民俗编曲（古琴/琵琶拨弦 + 洞箫 + 唢呐主旋律 + 堂鼓 + 梆子），随更房、巡夜、夜主降临动态切换。
+// API：createAudio() → { unlock, play, onEvents, setWatch, setBossMusic, setEndlessMusic, setEnabled, suspend, resume, setMusicMode, scoreKey, state }
+
+import {
+  renderSuona,
+  renderXiao,
+  renderTanggu,
+  renderBangzi,
+  FOLK_SCORES,
+  selectFolkScoreKey,
+  PENTA_COMBO_SEMITONES,
+} from './folk-score.js';
 
 const PENTA = [0, 2, 4, 7, 9];          // 宫商角徵羽
 const ROOT_HZ = 146.83;                 // D3
@@ -16,7 +26,7 @@ const SFX = {
   paper:     { gap: 0.07, vol: 0.28 },
   hit:       { gap: 0.035, vol: 0.32 },
   crit:      { gap: 0.06, vol: 0.42 },
-  pickup:    { gap: 0.045, vol: 0.18 },
+  pickup:    { gap: 0.045, vol: 0.22 },
   coin:      { gap: 0.06, vol: 0.3 },
   levelup:   { gap: 0.3, vol: 0.5 },
   boss:      { gap: 1.0, vol: 0.85 },
@@ -26,7 +36,7 @@ const SFX = {
   click:     { gap: 0.04, vol: 0.4 },
   watch:     { gap: 1.0, vol: 0.6 },
 
-  // 12 把武器独立开火音色（独立冷却键，防止多武器齐射互相吞音）
+  // 22 把武器独立开火音色（独立冷却键，防止多武器齐射互相吞音）
   fire_gong:          { gap: 0.055, vol: 0.36 },
   fire_lantern:       { gap: 0.055, vol: 0.28 },
   fire_talisman:      { gap: 0.04,  vol: 0.28 },
@@ -50,7 +60,13 @@ const SFX = {
   fire_bamboo_pole:    { gap: 0.048, vol: 0.34 },
   fire_gold_abacus:    { gap: 0.040, vol: 0.32 },
 
-  // 局内战斗、奇遇与多人协同扩展事件音色
+  // 局内战斗、身法、合契、街巷机关、奇遇与多人协同扩展事件音色
+  dash:           { gap: 0.08,  vol: 0.44 },
+  graze:          { gap: 0.06,  vol: 0.48 },
+  fusion:         { gap: 0.40,  vol: 0.86 },
+  hazardBell:     { gap: 0.12,  vol: 0.58 },
+  hazardBarrel:   { gap: 0.08,  vol: 0.64 },
+  hazardSeal:     { gap: 0.10,  vol: 0.56 },
   explosion:      { gap: 0.045, vol: 0.48 },
   wave:           { gap: 0.12,  vol: 0.50 },
   shrineActivate: { gap: 0.10,  vol: 0.54 },
@@ -106,10 +122,16 @@ export function createAudio() {
   const lastPlay = new Map();
   const suspendReasons = new Set();
   const pluckCache = new Map();
+  const suonaCache = new Map();
+  const xiaoCache = new Map();
+  const tangguCache = new Map();
+  const bangziCache = new Map();
   let schedTimer = null;
   let nextNoteT = 0;
   let step = 0;
-  let melodyIdx = 5;
+  let lastScoreKey = '';
+  let xpComboStep = 0;
+  let lastXpPickupAt = -Infinity;
 
   function ensureCtx() {
     if (ctx || !AC) return ctx;
@@ -230,9 +252,17 @@ export function createAudio() {
       return 0.15;
     },
     crit(t, v, out) { return voices.hit(t, v, out, true); },
-    pickup(t, v, out) {
-      const f = 1500 + Math.random() * 400;
-      osc('sine', f, t, 0.045, v, out, { a: 0.001, bend: 1.25 });
+    pickup(t, v, out, comboArg) {
+      if (typeof comboArg === 'number' && Number.isFinite(comboArg)) {
+        const idx = Math.max(0, Math.min(PENTA_COMBO_SEMITONES.length - 1, Math.floor(comboArg)));
+        const semi = PENTA_COMBO_SEMITONES[idx];
+        const f0 = 587.33 * Math.pow(2, semi / 12);
+        osc('sine', f0, t, 0.065, v * 0.9, out, { a: 0.001, bend: 1.04 });
+        if (idx >= 3) osc('triangle', f0 * 1.5, t + 0.008, 0.055, v * 0.42, out, { a: 0.001 });
+        return 0.075;
+      }
+      const f = 1318.5 + Math.random() * 220;
+      osc('sine', f, t, 0.05, v, out, { a: 0.001, bend: 1.18 });
       return 0.06;
     },
     coin(t, v, out) {
@@ -491,6 +521,52 @@ export function createAudio() {
       [440, 587.33, 880].forEach((f, i) => bell(t + i * 0.045, f, v * 0.5, out, 0.24));
       return 0.34;
     },
+    dash(t, v, out) {
+      // 踏罡步瞬闪：急促裂帛风声 + 罡风上升滑音
+      noise(t, 0.085, v * 0.62, out, { type: 'bandpass', freq: 1450, q: 1.5, sweepTo: 3200 });
+      osc('triangle', 320, t, 0.09, v * 0.45, out, { a: 0.002, bend: 1.65 });
+      return 0.11;
+    },
+    graze(t, v, out) {
+      // 擦弹破煞：金石脆鸣 + 高频破空星火
+      bell(t, 1567.98, v * 0.65, out, 0.16);
+      osc('sine', 2349.32, t + 0.012, 0.08, v * 0.45, out, { a: 0.001, bend: 1.18 });
+      return 0.17;
+    },
+    fusion(t, v, out) {
+      // 阴阳合契·宗师超武降世：高亢唢呐破阵三连音 + 镇魂大锣 + 五音玉磬齐鸣
+      playCachedBuf(suonaBuffer(19, 0.24), t, v * 0.55, out);
+      playCachedBuf(suonaBuffer(24, 0.24), t + 0.11, v * 0.6, out);
+      playCachedBuf(suonaBuffer(31, 0.52), t + 0.22, v * 0.72, out);
+      voices.gong(t + 0.18, v * 0.72, out, 110);
+      [0, 4, 7, 12, 16].forEach((s, i) => {
+        bell(t + 0.04 + i * 0.055, ROOT_HZ * 4 * Math.pow(2, s / 12), v * 0.42, out, 0.85);
+      });
+      return 2.6;
+    },
+    hazardBell(t, v, out) {
+      // 招魂铜铃：双层青铜清铃回荡
+      bell(t, 880, v * 0.7, out, 0.55);
+      bell(t + 0.065, 1318.51, v * 0.55, out, 0.48);
+      bell(t + 0.13, 1760, v * 0.42, out, 0.42);
+      return 0.6;
+    },
+    hazardBarrel(t, v, out) {
+      // 爆竹火桶：浑厚火药轰鸣 + 连珠爆竹脆裂
+      osc('sine', 124, t, 0.22, v * 0.9, out, { a: 0.002, bend: 0.32 });
+      noise(t, 0.19, v * 0.8, out, { type: 'lowpass', freq: 1450, q: 0.9, sweepTo: 190 });
+      [0.02, 0.055, 0.09].forEach((dt, idx) => {
+        noise(t + dt, 0.045, v * (0.55 - idx * 0.08), out, { type: 'highpass', freq: 3100, q: 1.3 });
+      });
+      return 0.24;
+    },
+    hazardSeal(t, v, out) {
+      // 定魂敕符桩：雷符叱咤 + 镇煞低鸣
+      noise(t, 0.08, v * 0.58, out, { type: 'bandpass', freq: 2400, q: 1.8, sweepTo: 920 });
+      osc('sawtooth', 220, t, 0.14, v * 0.45, out, { a: 0.002, bend: 0.55 });
+      bell(t + 0.02, 1174.66, v * 0.52, out, 0.28);
+      return 0.3;
+    },
   };
 
   function canPlay() {
@@ -508,26 +584,33 @@ export function createAudio() {
     const now = ctx.currentTime;
     const last = lastPlay.get(name) ?? -Infinity;
     if (now - last < spec.gap) return false;
-    if (activeVoices >= MAX_VOICES && name !== 'boss' && name !== 'dawn' && name !== 'gong') return false;
+    if (activeVoices >= MAX_VOICES && name !== 'boss' && name !== 'dawn' && name !== 'gong' && name !== 'fusion') return false;
     lastPlay.set(name, now);
     const v = Math.min(4, spec.vol * volMul);
-    const rawDur = fn(now + 0.005, v, sfxBus, opts?.arg);
+    const voiceArg = opts?.comboStep !== undefined ? opts.comboStep : opts?.arg;
+    const rawDur = fn(now + 0.005, v, sfxBus, voiceArg);
     const dur = typeof rawDur === 'number' && Number.isFinite(rawDur) && rawDur > 0 ? rawDur : 0.2;
     voiceStart(dur);
     return true;
   }
 
-  // ───────── 局内事件 → 音效与 Boss 配乐切换 ─────────
+  let bossActive = false;
+  let endlessActive = false;
+
+  // ───────── 局内事件 → 音效与多轨配乐切换 ─────────
   function onEvents(events) {
     if (!events || !events.length) return;
     for (const e of events) {
       if (!e || typeof e !== 'object') continue;
       if (e.type === 'bossSpawn') bossActive = true;
-      else if (e.type === 'bossKill' || e.type === 'bossDefeated' || e.type === 'dawn') bossActive = false;
+      else if (e.type === 'bossKill' || e.type === 'bossDefeated') bossActive = false;
+      else if (e.type === 'dawn') { bossActive = false; endlessActive = false; }
+      else if (e.type === 'endlessStart') endlessActive = true;
       else if ((e.type === 'watch' || e.type === 'watchChange') && Number.isFinite(e.watch)) setWatch(e.watch);
     }
     if (!enabled.sfx || !canPlay()) return;
     let hits = 0, crits = 0, kills = 0, xp = 0;
+    let bestComboStep = -1;
     for (const e of events) {
       if (!e || typeof e !== 'object') continue;
       switch (e.type) {
@@ -535,8 +618,10 @@ export function createAudio() {
         case 'kill': kills++; if (e.elite || e.boss) play('woodblock'); break;
         case 'pickup':
           if (e.kind === 'coin') play('coin');
-          else if (e.kind === 'xp') xp++;
-          else play('levelup', { volume: 0.5 });
+          else if (e.kind === 'xp') {
+            xp++;
+            if (Number.isFinite(e.comboStep)) bestComboStep = Math.max(bestComboStep, e.comboStep);
+          } else play('levelup', { volume: 0.5 });
           break;
         case 'fire': {
           const wid = typeof e.weaponId === 'string' && e.weaponId ? e.weaponId : 'gong';
@@ -545,8 +630,27 @@ export function createAudio() {
           else play('gongSmall');
           break;
         }
+        case 'dash':
+          play('dash');
+          break;
+        case 'graze':
+          play('graze');
+          break;
+        case 'fusion':
+          play('fusion');
+          break;
+        case 'hazardBell':
+          play('hazardBell');
+          break;
+        case 'hazardBarrel':
+          play('hazardBarrel');
+          break;
+        case 'hazardSeal':
+          play('hazardSeal');
+          break;
         case 'explosion':
-          play('explosion', { arg: !!e.evolved });
+          if (e.explosionKind === 'hazardBarrel') play('hazardBarrel');
+          else play('explosion', { arg: !!e.evolved });
           break;
         case 'wave':
           play('wave', { arg: e.pattern });
@@ -607,73 +711,113 @@ export function createAudio() {
     if (crits) play('crit');
     else if (hits) play('hit', { volume: Math.min(1, 0.6 + hits * 0.1) });
     if (kills) play('paper', { volume: Math.min(1.2, 0.7 + kills * 0.1) });
-    if (xp) play('pickup');
+    if (xp) {
+      const now = ctx ? ctx.currentTime : 0;
+      if (bestComboStep >= 0) {
+        xpComboStep = Math.min(PENTA_COMBO_SEMITONES.length - 1, bestComboStep);
+      } else {
+        xpComboStep = (now - lastXpPickupAt <= 0.85)
+          ? Math.min(PENTA_COMBO_SEMITONES.length - 1, xpComboStep + 1)
+          : 0;
+      }
+      lastXpPickupAt = now;
+      play('pickup', { comboStep: xpComboStep });
+    }
   }
 
-  // ───────── 背景乐：五声音阶拨弦 ─────────
+  // ───────── 背景乐：多轨民俗配器缓存与五态编曲调度 ─────────
+  function makeAudioBuf(data) {
+    const b = ctx.createBuffer(1, data.length, ctx.sampleRate);
+    if (b.copyToChannel) b.copyToChannel(data, 0);
+    else b.getChannelData(0).set(data);
+    return b;
+  }
+
   function pluckBuffer(semi) {
     const key = semi;
     let b = pluckCache.get(key);
     if (b) return b;
     const f = ROOT_HZ * Math.pow(2, semi / 12);
-    const data = renderPluck(ctx.sampleRate, f, semi < 0 ? 3 : 2.2, semi > 12 ? 0.7 : 0.45);
-    b = ctx.createBuffer(1, data.length, ctx.sampleRate);
-    b.copyToChannel ? b.copyToChannel(data, 0) : b.getChannelData(0).set(data);
+    const data = renderPluck(ctx.sampleRate, f, semi < 0 ? 2.6 : 1.9, semi > 12 ? 0.68 : 0.46);
+    b = makeAudioBuf(data);
     pluckCache.set(key, b);
     return b;
   }
-  function scaleSemi(i) {
-    const oct = Math.floor(i / 5);
-    return PENTA[((i % 5) + 5) % 5] + 12 * oct;
+
+  function suonaBuffer(semi, durSec = 0.36) {
+    const bucket = durSec > 0.4 ? 'L' : 'S';
+    const key = `${semi}_${bucket}`;
+    let b = suonaCache.get(key);
+    if (b) return b;
+    const f = ROOT_HZ * Math.pow(2, semi / 12);
+    const data = renderSuona(ctx.sampleRate, f, bucket === 'L' ? 0.52 : 0.28);
+    b = makeAudioBuf(data);
+    suonaCache.set(key, b);
+    return b;
   }
+
+  function xiaoBuffer(semi) {
+    let b = xiaoCache.get(semi);
+    if (b) return b;
+    const f = ROOT_HZ * Math.pow(2, semi / 12);
+    const data = renderXiao(ctx.sampleRate, f, 0.82);
+    b = makeAudioBuf(data);
+    xiaoCache.set(semi, b);
+    return b;
+  }
+
+  function tangguBuffer(accent = false) {
+    const key = accent ? 2 : 1;
+    let b = tangguCache.get(key);
+    if (b) return b;
+    b = makeAudioBuf(renderTanggu(ctx.sampleRate, accent));
+    tangguCache.set(key, b);
+    return b;
+  }
+
+  function bangziBuffer(high = false) {
+    const key = high ? 2 : 1;
+    let b = bangziCache.get(key);
+    if (b) return b;
+    b = makeAudioBuf(renderBangzi(ctx.sampleRate, high));
+    bangziCache.set(key, b);
+    return b;
+  }
+
+  function playCachedBuf(buf, t, vol, dest = musicBus, rate = 1) {
+    if (!buf || !Number.isFinite(vol) || vol <= 0) return;
+    const startT = Math.max(0, Number.isFinite(t) ? t : 0);
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    s.playbackRate.value = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    s.connect(g);
+    g.connect(dest);
+    s.start(startT);
+  }
+
   function pluck(t, semi, vol) {
+    const startT = Math.max(0, Number.isFinite(t) ? t : 0);
     const s = ctx.createBufferSource();
     s.buffer = pluckBuffer(semi);
-    s.playbackRate.value = 1 + (Math.random() - 0.5) * 0.004;
+    s.playbackRate.value = 1 + (Math.random() - 0.5) * 0.003;
     const g = ctx.createGain();
     g.gain.value = vol;
     const f = ctx.createBiquadFilter();
     f.type = 'lowpass';
-    f.frequency.value = 2600;
+    f.frequency.value = semi < 0 ? 1800 : 2800;
     s.connect(f); f.connect(g); g.connect(musicBus);
-    s.start(t);
-    if (Math.random() < 0.18) s.playbackRate.setTargetAtTime(1.012, t + 0.25, 0.3);
+    s.start(startT);
   }
 
-  function bossDrum(t, accent = false) {
-    const startHz = accent ? 104 : 84;
-    const endHz = accent ? 42 : 46;
-    const dur = accent ? 0.24 : 0.16;
-    const vol = accent ? 0.58 : 0.36;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(startHz, t);
-    o.frequency.exponentialRampToValueAtTime(endHz, t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(musicBus);
-    o.start(t); o.stop(t + dur + 0.02);
-    noise(t, accent ? 0.055 : 0.035, accent ? 0.18 : 0.10, musicBus, { type: 'lowpass', freq: accent ? 420 : 320 });
-  }
-
-  let bossActive = false;
-
-  function musicParams() {
-    if (musicMode === 'menu') return { beat: 0.62, density: 0.32, drone: false, bright: false, boss: false };
-    const w = Math.max(1, Math.min(6, watch || 1));
-    if (w === 6) return { beat: 0.3, density: 0.75, drone: false, bright: true, boss: false };
-    if (bossActive) {
-      return { beat: 0.26, density: 0.72, drone: true, bright: false, boss: true };
-    }
-    return {
-      beat: [0, 0.6, 0.52, 0.45, 0.38, 0.32][w],
-      density: [0, 0.3, 0.42, 0.55, 0.66, 0.78][w],
-      drone: w >= 3,
-      bright: false,
-      boss: false,
-    };
+  function currentScoreKey() {
+    return selectFolkScoreKey({
+      musicMode,
+      watch,
+      bossActive,
+      endless: endlessActive,
+    });
   }
 
   function schedule() {
@@ -681,23 +825,69 @@ export function createAudio() {
     const ahead = 0.4;
     if (nextNoteT < ctx.currentTime) nextNoteT = ctx.currentTime + 0.05;
     while (nextNoteT < ctx.currentTime + ahead) {
-      const p = musicParams();
-      const t = nextNoteT;
-      const bar = step % 8;
-      if (p.boss && (bar === 0 || bar === 3 || bar === 6)) {
-        bossDrum(t, bar === 0);
+      const key = currentScoreKey();
+      if (key !== lastScoreKey) {
+        lastScoreKey = key;
+        step = 0;
       }
-      if (bar === 0) pluck(t, p.bright ? 7 - 12 : -12, 0.55);
-      if (p.drone && bar === 4) pluck(t, -5, 0.35);
-      if (Math.random() < p.density) {
-        const pull = melodyIdx > 9 ? -1 : melodyIdx < 3 ? 1 : 0;
-        melodyIdx += pull || [-2, -1, -1, 1, 1, 2][Math.floor(Math.random() * 6)];
-        melodyIdx = Math.max(0, Math.min(12, melodyIdx));
-        const semi = scaleSemi(melodyIdx) + (p.bright ? 12 : 0);
-        pluck(t + (Math.random() - 0.5) * 0.015, semi, 0.42);
-        if (Math.random() < 0.12) pluck(t + 0.02, semi + 12, 0.22);
+      const score = FOLK_SCORES[key] || FOLK_SCORES.menu;
+      const idx = step % 32;
+      const nextIdx = (step + 1) % 32;
+      const t = Math.max(0, nextNoteT);
+
+      // 1. 低音古琴沉弦
+      const bassNote = score.bass?.[idx];
+      if (bassNote != null) pluck(t, bassNote, key === 'boss' ? 0.48 : 0.44);
+
+      // 2. 琵琶 / 古琴主织体拨弦
+      const pluckNote = score.pluck?.[idx];
+      if (pluckNote != null) pluck(t + 0.004, pluckNote, key === 'boss' ? 0.34 : 0.38);
+
+      // 3. 洞箫气韵长音（更房 / 夜巡 / 破晓）
+      const xiaoNote = score.xiao?.[idx];
+      if (xiaoNote != null) {
+        playCachedBuf(xiaoBuffer(xiaoNote), t + 0.008, key === 'menu' ? 0.36 : 0.32, musicBus);
       }
-      nextNoteT += p.beat * (step % 2 === 0 ? 1.06 : 0.94);
+
+      // 4. 唢呐高燃主旋律（夜主战歌 / 无尽血战 / 四五更惊鸣）
+      const suonaNote = score.suona?.[idx];
+      if (suonaNote != null) {
+        const held = score.suona?.[nextIdx] == null;
+        playCachedBuf(
+          suonaBuffer(suonaNote, held ? 0.48 : 0.26),
+          t + 0.003,
+          key === 'boss' ? 0.56 : 0.34,
+          musicBus,
+        );
+      }
+
+      // 5. 堂鼓战阵与打更梆子
+      const drumHit = score.drum?.[idx] || 0;
+      if (drumHit > 0) {
+        playCachedBuf(
+          tangguBuffer(drumHit >= 2),
+          t,
+          drumHit >= 2 ? (key === 'boss' ? 0.62 : 0.46) : 0.30,
+          musicBus,
+        );
+      }
+      const bangziHit = score.bangzi?.[idx] || 0;
+      if (bangziHit > 0) {
+        playCachedBuf(
+          bangziBuffer(bangziHit >= 2),
+          t + 0.002,
+          key === 'menu' ? 0.20 : 0.28,
+          musicBus,
+        );
+      }
+
+      // 针对五更催紧微调拍速（三更比一更略紧，五更比四更更急）
+      let stepMul = 1;
+      if (key === 'watch_early' && watch === 3) stepMul = 0.90;
+      else if (key === 'watch_late' && watch === 5) stepMul = 0.90;
+      const swing = score.swing || 0;
+      const swingFactor = step % 2 === 0 ? 1 + swing : 1 - swing;
+      nextNoteT += score.stepSec * stepMul * swingFactor;
       step++;
     }
   }
@@ -726,7 +916,7 @@ export function createAudio() {
     if (!ctx) return;
     const t = ctx.currentTime;
     sfxBus.gain.setTargetAtTime(enabled.sfx ? 1 : 0, t, 0.03);
-    musicBus.gain.setTargetAtTime(enabled.music ? 0.22 : 0, t, 0.2);
+    musicBus.gain.setTargetAtTime(enabled.music ? 0.24 : 0, t, 0.2);
   }
 
   function setEnabled(next = {}) {
@@ -739,11 +929,13 @@ export function createAudio() {
     if (watch <= 1 || watch >= 6) bossActive = false;
   }
   function setBossMusic(active) { bossActive = Boolean(active); }
+  function setEndlessMusic(active) { endlessActive = Boolean(active); }
   function setMusicMode(mode) {
     musicMode = mode;
     if (mode === 'run' && !watch) watch = 1;
     if (mode !== 'run') {
       bossActive = false;
+      endlessActive = false;
       if (mode === 'menu') watch = 0;
     }
   }
@@ -773,8 +965,10 @@ export function createAudio() {
   }
 
   return {
-    unlock, play, onEvents, setWatch, setBossMusic, setEnabled, suspend, resume, setMusicMode,
+    unlock, play, onEvents, setWatch, setBossMusic, setEndlessMusic, setEnabled, suspend, resume, setMusicMode,
     get bossMusic() { return bossActive; },
+    get endlessMusic() { return endlessActive; },
+    get scoreKey() { return currentScoreKey(); },
     get state() { return ctx ? ctx.state : 'none'; },
   };
 }

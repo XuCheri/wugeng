@@ -6,8 +6,11 @@ const GLOBAL_MIN_GAP_MS = 45;
 
 const PATTERNS = {
   hurt: { tap: 'short', type: 'light', ms: 16 },
+  dash: { tap: 'short', type: 'light', ms: 10 },
+  graze: { tap: 'short', type: 'light', ms: 12 },
   ult: { tap: 'short', type: 'heavy', ms: 38 },
   evolve: { tap: 'short', type: 'medium', ms: 28 },
+  fusion: { tap: 'short', type: 'heavy', ms: [26, 28, 42] },
   bossSpawn: { tap: 'long', type: 'heavy', ms: [32, 42, 46] },
   bossDefeat: { tap: 'short', type: 'heavy', ms: [40, 35, 55] },
   warder: { tap: 'short', type: 'medium', ms: 22 },
@@ -15,7 +18,7 @@ const PATTERNS = {
   revive: { tap: 'short', type: 'medium', ms: [22, 30, 32] },
 };
 
-const PRIORITY = ['bossSpawn', 'bossDefeat', 'ult', 'evolve', 'revive', 'down', 'warder', 'hurt'];
+const PRIORITY = ['bossSpawn', 'bossDefeat', 'fusion', 'ult', 'evolve', 'revive', 'down', 'warder', 'hurt', 'graze', 'dash'];
 
 export function createHaptics({
   win = typeof window !== 'undefined' ? window : null,
@@ -83,6 +86,7 @@ export function createHaptics({
         case 'bossSpawn': k = 'bossSpawn'; break;
         case 'bossKill':
         case 'bossDefeated': k = 'bossDefeat'; break;
+        case 'fusion': k = 'fusion'; break;
         case 'ult': k = 'ult'; break;
         case 'evolve': k = 'evolve'; break;
         case 'revive':
@@ -92,6 +96,8 @@ export function createHaptics({
         case 'allyDowned': k = 'down'; break;
         case 'warderSpawn': k = 'warder'; break;
         case 'playerHurt': k = 'hurt'; break;
+        case 'graze': k = 'graze'; break;
+        case 'dash': k = 'dash'; break;
         default: break;
       }
       if (k) {

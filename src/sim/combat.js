@@ -10,7 +10,7 @@ import { dropXp, dropPickup } from './pickups.js';
 import { queueSpawn, currentHpScale } from './enemies.js';
 import { onBossKilled } from './bosses.js';
 import { hitPropsCircle } from './props.js';
-import { healPlayer } from './player.js';
+import { healPlayer, recomputeMods } from './player.js';
 import { BLESSING_TUNING } from './blessings.js';
 import { SYNERGY_TUNING } from './synergies.js';
 import { coopPartySize } from './coop.js';
@@ -153,6 +153,7 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
   }
 
   const m = run.mods;
+  const caps = m.capstones || {};
   const wTags = typeof weaponId === 'string' && Object.hasOwn(WEAPONS, weaponId) ? WEAPONS[weaponId].tags || null : null;
   const isSummon = weaponId === 'paperman' || weaponId === 'paperhorse' || weaponId === 'zhinian_kite' || !!(opts && opts.isSummon);
   let summonAdd = isSummon ? m.summonDmgPct : 0;
@@ -168,11 +169,34 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
       Math.floor(Math.max(0, run.stats.coins) / GC.perCoins) * GC.dmgPerStep * m.ghostCoinStacks,
     );
   }
+  if (caps.ledger_book) {
+    condDmgPct += Math.min(0.16, Math.floor(Math.max(0, run.stats.coins || 0) / 50) * 0.02);
+  }
+  if (caps.leijimu && !isSummon) {
+    condDmgPct += 0.08;
+  }
   if (m.morningDewStacks > 0 && run.player.hp >= run.player.maxHp - 0.5) {
     condDmgPct += BLESSING_TUNING.morning_dew.fullHpDmgPct * m.morningDewStacks;
   }
 
   let dmg = raw * (1 + m.dmgPct + summonAdd + condDmgPct) * m.overflowMult;
+
+  // 道法脉叁阶（开光/合契神兵增伤）与阳炎脉叁阶/马面铜铃（头目与夜主增伤）
+  if ((m.evolvedDmgPct || 0) > 0 && typeof weaponId === 'string') {
+    const ownedW = run.weapons.find((x) => x.id === weaponId);
+    if (ownedW && (ownedW.evolved || ownedW.fusionId)) dmg *= 1 + m.evolvedDmgPct;
+  }
+  if ((m.bossDmgPct || 0) > 0 && (e.boss || e.warder || e.elite)) {
+    dmg *= 1 + m.bossDmgPct;
+  }
+
+  // 法器五阶觉醒条件易伤（香炉光圈、砚台凝墨、勾魂阴牌控场）
+  if (caps.censer) {
+    const lr = m.lightRadius || 118;
+    if ((e.x - run.player.x) ** 2 + (e.y - run.player.y) ** 2 <= lr * lr) dmg *= 1.10;
+  }
+  if (caps.inkstone && e.slowT > 0) dmg *= 1.10;
+  if (caps.yinpai && (e.stunT > 0 || e.slowT > 0)) dmg *= 1.14;
 
   // 目标状态乘算易伤
   if (e.vulnT > 0) {
@@ -194,7 +218,10 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
     else if (e.hp <= e.maxHp * EB.lowHpRatio) dmg *= 1 + EB.executeBonus * m.executionerStacks;
   }
 
-  const crit = !(opts && opts.noCrit) && run.rng.next() < m.critChance;
+  const firstFullHpCrit = Boolean(caps.cinnabar_pen && !e._hitOnce && e.hp >= e.maxHp);
+  e._hitOnce = true;
+  const effCritChance = m.critChance + (caps.scissors && (isSummon || (wTags && wTags.includes('zhizha'))) ? 0.12 : 0);
+  const crit = !(opts && opts.noCrit) && (firstFullHpCrit || run.rng.next() < effCritChance);
   if (crit) dmg *= m.critMult ?? PLAYER_BASE.critMult;
 
   // 无面伞女撑伞减伤、河神夜婚万灯护盾、沉水鬼潜行减伤 & 精英纸甲（破甲攻击可贯穿）
@@ -261,6 +288,13 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
       });
     }
 
+    if (!(opts && opts.noProc) && crit && caps.cinnabar) {
+      e.bleedT = Math.max(e.bleedT || 0, 2.5);
+      e.bleedDps = Math.max(e.bleedDps || 0, raw * 0.32);
+      e.bleedSlot = run._activeSlot || 0;
+      if (!(e._bleedTick > 0)) e._bleedTick = 0.5;
+    }
+
     if (!(opts && opts.noProc) && wTags) {
       if (m.zhizha6 && wTags.includes('zhizha')) {
         e.bleedT = SYNERGY_TUNING.zhizha6.bleedSec;
@@ -280,10 +314,10 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
 
   pushHitEvent(run, e.x, e.y, dmg, crit, e.id, weaponId);
 
-  // 暴击衍生：道法 4 件掌心雷 & 朱砂饮墨溅射
+  // 暴击衍生：道法 4 件掌心雷（雷击枣木五阶减半冷却）、红绳五阶牵煞弹射 & 朱砂饮墨溅射
   if (crit && !(opts && opts.noProc)) {
     if (m.daofa4 && !(run._daofaThunderCd > 0)) {
-      run._daofaThunderCd = SYNERGY_TUNING.daofa4.cdSec;
+      run._daofaThunderCd = caps.leijimu ? SYNERGY_TUNING.daofa4.cdSec * 0.5 : SYNERGY_TUNING.daofa4.cdSec;
       const tr = 52 * m.areaMul;
       damageCircle(run, e.x, e.y, tr, Math.max(8, raw * 0.45), 'talisman', { noCrit: true, noProc: true, knock: 40 });
       run.projectiles.push({
@@ -299,6 +333,31 @@ export function damageEnemy(run, e, raw, weaponId, opts) {
         t: 0,
         life: 0.24,
       });
+    }
+    if (caps.redstring) {
+      let bounceTarget = null;
+      let bestD2 = 95 * 95;
+      for (let k = 0; k < run.enemies.length; k++) {
+        const other = run.enemies[k];
+        if (other === e || other.dead) continue;
+        const d2 = (other.x - e.x) ** 2 + (other.y - e.y) ** 2;
+        if (d2 <= bestD2) {
+          bestD2 = d2;
+          bounceTarget = other;
+        }
+      }
+      if (bounceTarget) {
+        damageEnemy(run, bounceTarget, Math.max(4, raw * 0.35), 'bell', { noCrit: true, noProc: true });
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'bellChain',
+          weaponId: 'bell',
+          ownerSlot: run._activeSlot || 0,
+          t: 0,
+          life: 0.20,
+          points: [{ x: e.x, y: e.y }, { x: bounceTarget.x, y: bounceTarget.y }],
+        });
+      }
     }
     if (m.cinnabarInkStacks > 0) {
       const CI = BLESSING_TUNING.cinnabar_ink;
@@ -328,9 +387,27 @@ export function killEnemy(run, e, opts) {
   run.events.push({ type: 'kill', x: e.x, y: e.y, enemyType: e.type, elite: e.elite, boss: e.boss });
 
   const p = run.player;
+  const caps = run.mods?.capstones || {};
   if (!(opts && opts.direct) && p?.stats) {
     p.stats.kills = (p.stats.kills || 0) + 1;
   }
+
+  // 阳炎脉肆阶秘传【赤阳焚夜】：每击败 1 名精英或夜主叠层 +2% 全伤（上限 10 层）
+  if ((e.elite || e.boss) && (run.meta?.eliteSlayerStack || 0) > 0 && (run._eliteSlayerStacks || 0) < 10) {
+    run._eliteSlayerStacks = (run._eliteSlayerStacks || 0) + 1;
+    recomputeMods(run);
+  }
+
+  // 硫磺火药囊五阶觉醒【连环火药】：25% 确定性二次硫磺爆燃（不消耗 run.rng）
+  if (caps.huoyao_pouch && !(opts && opts.noProc) && (((e.id * 2654435761) >>> 0) & 3) === 0) {
+    damageCircle(run, e.x, e.y, 52 * (run.mods?.areaMul || 1), 16 + (p.level || 1) * 3, 'firecracker', {
+      noCrit: true,
+      noProc: true,
+      knock: 65,
+    });
+    run.events.push({ type: 'explosion', x: e.x, y: e.y, radius: 52, evolved: false, kind: 'firecracker', weaponId: 'firecracker' });
+  }
+
   // 大招攒气：普通击杀随时间衰减，精英 / Boss 固定；联机下存活队友共享 35% 灵气
   let charge;
   if (e.boss) charge = ULT.bossCharge;
@@ -348,15 +425,20 @@ export function killEnemy(run, e, opts) {
     }
   }
 
-  // 糯米法器：累积击杀点数回复气血（不计入吃包子数）
+  // 糯米法器：累积击杀点数回复气血（五阶满级间隔缩至 35 杀，满血时凝结 1 层护体魂障）
   if (run.mods?.killHeal > 0) {
     const credits = e.boss ? 10 : e.elite ? 3 : 1;
     run._glutinousKills = (run._glutinousKills || 0) + credits;
-    const interval = RELICS.glutinous.killInterval || 25;
+    const interval = caps.glutinous ? 35 : (RELICS.glutinous.killInterval || 50);
     while (run._glutinousKills >= interval) {
       run._glutinousKills -= interval;
       const healed = healPlayer(run, run.mods.killHeal);
-      if (healed > 0) run.events.push({ type: 'heal', amount: healed, source: 'glutinous', x: p.x, y: p.y });
+      if (healed > 0) {
+        run.events.push({ type: 'heal', amount: healed, source: 'glutinous', x: p.x, y: p.y });
+      } else if (caps.glutinous && p.soulBarrier < Math.max(1, p.soulBarrierMax)) {
+        p.soulBarrier++;
+        run.events.push({ type: 'shieldGain', x: p.x, y: p.y, stacks: p.soulBarrier });
+      }
     }
   }
 

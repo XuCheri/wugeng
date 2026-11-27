@@ -1,11 +1,11 @@
 // 弹体更新：移动、碰撞、持续场域、视觉寿命；以及延迟动作（连环莲花爆、阴火自爆、摄魂回响、天雷轰击等）。
 
 import { clearBulletsNear, weaponClearBullets } from './bullet-clear.js';
-import { WEAPONS, FX, ULT } from './balance.js';
+import { WEAPONS, FX, ULT, GRAZE } from './balance.js';
 import { turnToward, fsin, fcos, fatan2 } from '../core/math.js';
-import { damageEnemy, damageCircle, knockback, applySlow, applyStun } from './combat.js';
-import { hurtPlayer } from './player.js';
-import { hitPropsCircle } from './props.js';
+import { damageEnemy, damageCircle, knockback, applySlow, applyStun, applyVuln } from './combat.js';
+import { hurtPlayer, triggerBaguaCounterIfReady } from './player.js';
+import { hitPropsCircle, hitStreetHazardsCircle } from './props.js';
 import { dropPickup } from './pickups.js';
 import { papermanDmg, getWeapon, sweepSoulbanner, emitFire, weaponAreaMul } from './weapons.js';
 import { withPlayerContext, hurtTargetPlayer, coopPartySize } from './coop.js';
@@ -277,6 +277,94 @@ export function processScheduled(run, dt) {
           evolved: (s.stacks || 1) >= 4,
         });
         break;
+
+      case 'dashThunderSeal':
+        hitPropsCircle(run, s.x, s.y, s.radius);
+        damageCircle(run, s.x, s.y, s.radius, s.dmg, 'talisman', { knock: 125, stun: s.stun || 0.8, noProc: true });
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'thunderBolt',
+          weaponId: 'talisman',
+          ownerSlot,
+          evolved: true,
+          x: s.x,
+          y: s.y,
+          r: 10,
+          radius: s.radius,
+          angle: 0,
+          t: 0,
+          life: 0.26,
+        });
+        break;
+
+      case 'baguaCounter':
+      case 'tinderRing':
+      case 'clapperPulse': {
+        const wId = s.type === 'tinderRing' ? 'lantern' : 'gong';
+        damageCircle(run, s.x, s.y, s.radius, s.dmg, wId, { knock: 155, noProc: true });
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'gongPulse',
+          weaponId: wId,
+          subKind: s.type,
+          ownerSlot,
+          fixedPos: true,
+          x: s.x,
+          y: s.y,
+          r: Math.max(0, s.radius),
+          radius: 0,
+          maxRadius: s.radius,
+          angle: 0,
+          t: 0,
+          life: 0.28,
+          evolved: s.type !== 'clapperPulse',
+        });
+        break;
+      }
+
+      case 'hazardBarrelBlast':
+        // 连环波及邻近爆竹火桶并重创群祟
+        hitPropsCircle(run, s.x, s.y, s.radius);
+        explode(run, s.x, s.y, s.radius, s.dmg, 'firecracker', {
+          evolved: true,
+          knock: 210,
+          stun: 0.45,
+          explosionKind: 'hazardBarrel',
+        });
+        break;
+
+      case 'hazardSealWave': {
+        for (let k = 0; k < run.enemies.length; k++) {
+          const e = run.enemies[k];
+          if (e.dead) continue;
+          const dx = e.x - s.x;
+          const dy = e.y - s.y;
+          const rr = s.radius + (e.r || 0);
+          if (dx * dx + dy * dy <= rr * rr) {
+            if (!e.boss) applyStun(run, e, s.stun || 2.2);
+            else e.slowT = Math.max(e.slowT || 0, 1.5);
+            applyVuln(e, s.vulnDur || 4.0, s.vulnPct || 0.25);
+          }
+        }
+        run.projectiles.push({
+          id: run._nextId++,
+          kind: 'gongPulse',
+          weaponId: 'talisman',
+          subKind: 'hazardSeal',
+          ownerSlot,
+          fixedPos: true,
+          x: s.x,
+          y: s.y,
+          r: Math.max(0, s.radius),
+          radius: 0,
+          maxRadius: s.radius,
+          angle: 0,
+          t: 0,
+          life: 0.42,
+          evolved: true,
+        });
+        break;
+      }
     }
   };
 
@@ -501,17 +589,56 @@ export function updateProjectiles(run, dt) {
             const pl = run.players[k];
             if (pl.downed || pl.hp <= 0) continue;
             const rr = pr.r + pl.r;
-            if ((pr.x - pl.x) ** 2 + (pr.y - pl.y) ** 2 <= rr * rr) {
-              hurtTargetPlayer(run, pl, pr.dmg);
-              pr.dead = true;
+            const d2 = (pr.x - pl.x) ** 2 + (pr.y - pl.y) ** 2;
+            if (d2 <= rr * rr) {
+              if (!(pl.dashT > 0)) {
+                hurtTargetPlayer(run, pl, pr.dmg);
+                pr.dead = true;
+              } else if (!pr._grazed && !(pl._grazeCd > 0)) {
+                pr._grazed = true;
+                pl._grazeCd = GRAZE.cd;
+                const gain = Math.round(GRAZE.ultGain * (1 + (run.mods?.grazeUltPct || 0)) * (run.mods?.ultChargeMul || 1));
+                pl.ult = Math.min(pl.ultMax ?? ULT.cost, pl.ult + gain);
+                run.events.push({ type: 'graze', x: pl.x, y: pl.y, gain });
+              }
               break;
+            }
+            if (!pr._grazed && !(pl._grazeCd > 0)) {
+              const gr = rr + GRAZE.margin * (1 + (run.mods?.grazeRadiusPct || 0));
+              if (d2 <= gr * gr) {
+                pr._grazed = true;
+                pl._grazeCd = GRAZE.cd;
+                const gain = Math.round(GRAZE.ultGain * (1 + (run.mods?.grazeUltPct || 0)) * (run.mods?.ultChargeMul || 1));
+                pl.ult = Math.min(pl.ultMax ?? ULT.cost, pl.ult + gain);
+                run.events.push({ type: 'graze', x: pl.x, y: pl.y, gain });
+              }
             }
           }
         } else {
           const rr = pr.r + p.r;
-          if ((pr.x - p.x) ** 2 + (pr.y - p.y) ** 2 <= rr * rr) {
-            hurtPlayer(run, pr.dmg);
-            pr.dead = true;
+          const d2 = (pr.x - p.x) ** 2 + (pr.y - p.y) ** 2;
+          if (d2 <= rr * rr) {
+            if (!(p.dashT > 0)) {
+              hurtPlayer(run, pr.dmg, { isBullet: true });
+              pr.dead = true;
+            } else if (!pr._grazed && !(p._grazeCd > 0) && p.hp > 0) {
+              pr._grazed = true;
+              p._grazeCd = GRAZE.cd;
+              const gain = Math.round(GRAZE.ultGain * (1 + (run.mods?.grazeUltPct || 0)) * (run.mods?.ultChargeMul || 1));
+              p.ult = Math.min(p.ultMax ?? ULT.cost, p.ult + gain);
+              triggerBaguaCounterIfReady(run, p);
+              run.events.push({ type: 'graze', x: p.x, y: p.y, gain });
+            }
+          } else if (!pr._grazed && !(p._grazeCd > 0) && p.hp > 0 && !p.downed) {
+            const gr = rr + GRAZE.margin * (1 + (run.mods?.grazeRadiusPct || 0));
+            if (d2 <= gr * gr) {
+              pr._grazed = true;
+              p._grazeCd = GRAZE.cd;
+              const gain = Math.round(GRAZE.ultGain * (1 + (run.mods?.grazeUltPct || 0)) * (run.mods?.ultChargeMul || 1));
+              p.ult = Math.min(p.ultMax ?? ULT.cost, p.ult + gain);
+              triggerBaguaCounterIfReady(run, p);
+              run.events.push({ type: 'graze', x: p.x, y: p.y, gain });
+            }
           }
         }
         break;
@@ -614,6 +741,7 @@ function updateTalismanProj(run, pr, dt, hash, near) {
   }
   pr.x += pr.vx * dt;
   pr.y += pr.vy * dt;
+  hitStreetHazardsCircle(run, pr.x, pr.y, pr.r);
   const list = hash.queryCircle(pr.x, pr.y, pr.r, near);
   for (const e of list) {
     if (e.dead || pr._hit.includes(e.id)) continue;
@@ -773,6 +901,7 @@ function updateCoinswordProj(run, pr, dt, hash, near) {
     }
   }
 
+  hitStreetHazardsCircle(run, pr.x, pr.y, pr.r);
   const list = hash.queryCircle(pr.x, pr.y, pr.r, near);
   for (let i = 0; i < list.length; i++) {
     const e = list[i];

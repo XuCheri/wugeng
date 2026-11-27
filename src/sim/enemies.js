@@ -849,10 +849,10 @@ export function updateEnemies(run, dt) {
       }
     }
 
-    // 与玩家的连续软分离：阻止非冲锋单位钻进玩家圆心粘死，同时保留接触判定半径
+    // 与玩家的连续软分离：踏罡步瞬闪期间（p.dashT > 0）允许玩家无视体积直接穿怪突围
     const isCharging = e.state === 'charge' || e.state === 'dash' || e.state === 'lunge';
     const minDist = e.r + p.r * ai.playerSoftSepRatio;
-    if (d < minDist && !isCharging) {
+    if (d < minDist && !isCharging && !(p.dashT > 0)) {
       const vIn = vx * tx + vy * ty;
       if (vIn > 0) {
         vx -= tx * vIn;
@@ -885,12 +885,12 @@ export function updateEnemies(run, dt) {
       e.telegraphY = e.y + e.dy * e.telegraphLen;
     }
 
-    // 接触伤害 + 攻击者微回弹
+    // 接触伤害 + 攻击者微回弹（踏罡步穿行期间无视接触）
     const cr = e.r + p.r;
     const cdx = p.x - e.x;
     const cdy = p.y - e.y;
     const cd2 = cdx * cdx + cdy * cdy;
-    if (cd2 <= cr * cr && e.atkT <= 0 && (!isCoop || (!p.downed && p.hp > 0))) {
+    if (cd2 <= cr * cr && e.atkT <= 0 && !(p.dashT > 0) && (!isCoop || (!p.downed && p.hp > 0))) {
       const rawContact = (e.boss ? e.dmg * (e.dmgMul || 1) : e.dmg) * (e.buffedT > 0 ? ai.suona.dmgBuff : 1);
       const dealt = isCoop ? hurtTargetPlayer(run, p, rawContact) : hurtPlayer(run, rawContact);
       e.atkT = dealt > 0 ? ai.contactCd : 0.20;

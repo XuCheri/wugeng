@@ -67,13 +67,16 @@ export const SYNERGIES = {
   },
 };
 
-/** 统计四门流派件数（含百神同契命签的全流派 +1） */
+/** 统计四门流派件数（含百神同契命签的全流派 +1 与阴阳合契继承标签） */
 export function countSchoolItems(run) {
   const counts = { zhenhun: 0, daofa: 0, zhizha: 0, yangyan: 0 };
   if (!run) return counts;
   for (const w of run.weapons) {
     const tags = WEAPONS[w.id]?.tags;
     if (tags) for (const t of tags) if (counts[t] !== undefined) counts[t]++;
+    if (Array.isArray(w.bonusSynergyTags)) {
+      for (const t of w.bonusSynergyTags) if (counts[t] !== undefined) counts[t]++;
+    }
   }
   for (const r of run.relics) {
     const tags = RELICS[r.id]?.tags;

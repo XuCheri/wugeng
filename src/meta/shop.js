@@ -5,6 +5,8 @@ import * as balance from '../sim/balance.js';
 import {
   SHOP_IDS, SHOP_MAX_LEVEL, isPlainObj, toFiniteNumber, canMutateObj, canWriteProp,
 } from './save.js';
+import { computeAstrolabeBonuses } from './astrolabe.js';
+import { computeCurioBonuses } from './curios.js';
 
 /** PLAN §4.6 价目表（与 balance.js 的 META_COSTS 一致），ℓ 为要升到的等级（1..5）。 */
 const FALLBACK_COSTS = [60, 181, 347, 553, 794];
@@ -88,6 +90,16 @@ export function getMetaBonuses(save) {
   for (const id of SHOP_IDS) levels[id] = getLevel(save, id);
   const fn = typeof balance.metaBonusesFromLevels === 'function' ? balance.metaBonusesFromLevels : fallbackBonuses;
   const out = { ...fallbackBonuses({}), ...fn(levels) };
+  const ast = computeAstrolabeBonuses(save);
+  const cur = computeCurioBonuses(save);
+  const r4 = (x) => Math.round(x * 10000) / 10000;
+  for (const src of [ast, cur]) {
+    for (const [k, v] of Object.entries(src)) {
+      if (!v) continue;
+      if (Number.isInteger(v) && Number.isInteger(out[k] || 0)) out[k] = (out[k] || 0) + v;
+      else out[k] = r4((out[k] || 0) + v);
+    }
+  }
   return out;
 }
 

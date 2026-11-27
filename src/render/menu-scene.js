@@ -9,6 +9,7 @@ import {
 } from './palette.js';
 import { drawHeroShowcase } from './hero-showcase.js';
 import { onHeroImageReady, preloadHeroSkinImage } from './hero-images.js';
+import { getTitleBackdropImage } from './entity-images.js';
 import {
   getVfxPalette,
   vfxArraySprite,
@@ -264,19 +265,59 @@ export function createMenuScene(canvas, { isBlocked = () => false } = {}) {
     return { w, h, dpr };
   }
 
+  let cachedTitleCanvas = { w: 0, h: 0, canvas: null };
+  function getBakedTitleBackdrop(titleImg, w, h) {
+    if (cachedTitleCanvas.canvas && cachedTitleCanvas.w === w && cachedTitleCanvas.h === h) {
+      return cachedTitleCanvas.canvas;
+    }
+    const c = cachedTitleCanvas.canvas || document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    const iw = titleImg.naturalWidth || 720;
+    const ih = titleImg.naturalHeight || 1280;
+    const sc = Math.max(w / iw, h / ih);
+    const dw = iw * sc;
+    const dh = ih * sc;
+    g.fillStyle = INK;
+    g.fillRect(0, 0, w, h);
+    g.globalAlpha = 0.88;
+    g.drawImage(titleImg, (w - dw) * 0.5, (h - dh) * 0.5, dw, dh);
+    g.globalAlpha = 1;
+    const topVig = g.createLinearGradient(0, 0, 0, h * 0.34);
+    topVig.addColorStop(0, inkA(0.55));
+    topVig.addColorStop(1, inkA(0));
+    g.fillStyle = topVig;
+    g.fillRect(0, 0, w, h * 0.34);
+    const botVig = g.createLinearGradient(0, h * 0.62, 0, h);
+    botVig.addColorStop(0, inkA(0));
+    botVig.addColorStop(1, inkA(0.76));
+    g.fillStyle = botVig;
+    g.fillRect(0, h * 0.62, w, h * 0.38);
+    cachedTitleCanvas = { w, h, canvas: c };
+    return c;
+  }
+
   function drawScene(tSec) {
     if (!ctx) return;
     const { w, h, dpr } = syncSize();
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // 1. 预烘焙青石街巷飞檐花窗古月底图
-    const bg = getStaticStreetBackdrop(w, h);
-    if (bg) {
-      ctx.drawImage(bg, 0, 0, w, h);
+    // 1. 标题首屏优先渲染预烘焙《五更巡街夜行图》木刻主视觉（零每帧重采样与渐变分配）
+    const titleImg = getTitleBackdropImage();
+    const bakedTitle = titleImg ? getBakedTitleBackdrop(titleImg, w, h) : null;
+    if (bakedTitle) {
+      ctx.drawImage(bakedTitle, 0, 0, w, h);
     } else {
-      ctx.fillStyle = INK;
-      ctx.fillRect(0, 0, w, h);
+      const bg = getStaticStreetBackdrop(w, h);
+      if (bg) {
+        ctx.drawImage(bg, 0, 0, w, h);
+      } else {
+        ctx.fillStyle = INK;
+        ctx.fillRect(0, 0, w, h);
+      }
     }
 
     // 2. 随夜风轻晃的六盏朱砂守夜灯笼

@@ -306,6 +306,45 @@ export function createFx(opts = {}) {
           }
           this.addShake(0.14);
           break;
+        case 'dash':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y) && !low) {
+            scraps(e.x, e.y - 6, 3, 'paper');
+            drops(e.x, e.y - 8, 4, 90, 'lantern');
+          }
+          break;
+        case 'graze':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
+            drops(e.x, e.y - 12, low ? 3 : 7, 145, 'lantern');
+            slashSpark(e.x, e.y - 4, true, 'default');
+          }
+          this.addHitstop(0.025);
+          break;
+        case 'fusion':
+          this.setSlowMo(0.65, 0.35);
+          this.addShake(0.55);
+          screen.push({ k: 'bloom', t: 0, life: 0.9, color: 'verm', strength: 0.42 });
+          if (e.fusionName) banner(e.fusionName, '阴阳合契 · 腾槽降世', VERM, 1.9);
+          break;
+        case 'hazardBell':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y) && !low) {
+            drops(e.x, e.y - 16, 10, 120, 'lantern');
+          }
+          screen.push({ k: 'bloom', t: 0, life: 0.5, color: 'lantern', strength: 0.22 });
+          break;
+        case 'hazardBarrel':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y) && !low) {
+            scraps(e.x, e.y - 12, 8, 'verm');
+            drops(e.x, e.y - 14, 10, 165, 'lantern');
+          }
+          this.addShake(0.32);
+          break;
+        case 'hazardSeal':
+          if (Number.isFinite(e.x) && Number.isFinite(e.y) && !low) {
+            scraps(e.x, e.y - 14, 6, 'verm');
+            drops(e.x, e.y - 14, 8, 130, 'lantern');
+          }
+          this.addShake(0.24);
+          break;
         case 'ult': {
           this.addShake(0.75);
           const bloomCol =

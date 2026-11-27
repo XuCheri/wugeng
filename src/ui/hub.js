@@ -31,6 +31,22 @@ import { getUnclaimedDailyCount } from '../meta/daily.js';
 import { getDailyChallengeState } from '../meta/daily-challenge.js';
 import { getSeasonState } from '../meta/season.js';
 import { getHubFeatureLock } from './coach.js';
+import {
+  ASTROLABE_IDS,
+  ASTROLABE_BRANCHES,
+  ASTROLABE_MAX_LEVEL,
+  getAstrolabeLevel,
+  nextAstrolabeCost,
+  buyAstrolabeLevel,
+} from '../meta/astrolabe.js';
+import {
+  CURIO_IDS,
+  CURIOS,
+  MAX_EQUIPPED_CURIOS,
+  reconcileCurios,
+  buyCurio,
+  toggleEquipCurio,
+} from '../meta/curios.js';
 
 const HERO_GLYPH = { zhou: '周', mian: '绵', daotong: '童', yinyang: '星', tiejiang: '石', nuoxi: '傩', weier: '芦', qiansuanzi: '算' };
 const ACH_WEAPON_SET = new Set(['taomujian', 'zhinian_kite']);
@@ -523,7 +539,25 @@ export function renderHub(root, ctx) {
       h('span', { class: 'charm-pick__val' }, charmPick ? `${relicName(charmPick)}×${counts[charmPick]}` : '不带'));
     }
 
-    clear(runBarEl).append(...[nightEl, charmBtn].filter(Boolean));
+    const ownedCurios = Array.isArray(save.curios?.owned) ? save.curios.owned : [];
+    const eqCurios = Array.isArray(save.curios?.equipped) ? save.curios.equipped : [];
+    const lkShopForBar = getHubFeatureLock(save, 'shop');
+    let curioBtn = null;
+    if (ownedCurios.length > 0 || !lkShopForBar.locked) {
+      const eqLabel = eqCurios.length
+        ? eqCurios.map((cid) => CURIOS[cid]?.name?.slice(0, 4) || cid).join('·')
+        : (ownedCurios.length ? `可佩(${ownedCurios.length})` : '未佩');
+      curioBtn = h('button', {
+        type: 'button',
+        dataset: { action: 'open-curios' },
+        class: `curio-pick${eqCurios.length ? ' is-on' : ''}`,
+        onClick: () => guardFeature('shop', () => openShop('curios')),
+      },
+      h('span', { class: 'charm-pick__label' }, `镇物 ${eqCurios.length}/${MAX_EQUIPPED_CURIOS}`),
+      h('span', { class: 'charm-pick__val' }, eqLabel));
+    }
+
+    clear(runBarEl).append(...[nightEl, curioBtn, charmBtn].filter(Boolean));
     ensureStage();
   }
 
@@ -550,6 +584,7 @@ export function renderHub(root, ctx) {
 
   function refresh() {
     reconcileAchievements(save);
+    reconcileCurios(save);
     refreshHeaderAndRibbon();
     renderStart(false);
     renderNav();
@@ -715,26 +750,16 @@ export function renderHub(root, ctx) {
     }), { onBackdrop: () => v.close() });
   }
 
-  // ───────── 加点（更房 8 项 + 鬼市商铺互通入口）─────────
-  function openShop() {
+  // ───────── 加点与司天命盘（基础修行 8 项 + 三脉秘传星盘 + 永久镇物法宝）─────────
+  function openShop(initialTab = 'base') {
     let v;
-    const list = h('div', { class: 'shop-list' });
+    let activeTab = ['base', 'astrolabe', 'curios'].includes(initialTab) ? initialTab : 'base';
+    reconcileCurios(save);
     const head = h('div', { class: 'shop-coins shop-coins--bar' });
-    const render = (stagger = false) => {
-      clear(head).append(
-        coinTag(save.coins, true),
-        h('button', {
-          type: 'button',
-          class: 'link-btn shop-market-link',
-          dataset: { action: 'open-market' },
-          onClick: () => {
-            v?.close({ instant: true });
-            ctx.onCloudFlush?.();
-            openMarket(getActiveHero());
-          },
-        }, '前往鬼市衣冠 ›'),
-      );
-      clear(list);
+    const tabBar = h('div', { class: 'seg shop-tabs', role: 'tablist', 'aria-label': '修行分类' });
+    const list = h('div', { class: 'shop-list' });
+
+    const renderBaseTab = () => {
       for (const it of getShopItems()) {
         const lv = getLevel(save, it.id);
         const cost = nextCost(save, it.id);
@@ -762,7 +787,142 @@ export function renderHub(root, ctx) {
             }, { kind: 'small', disabled: save.coins < cost, label: `${it.name} 升级，${cost} 铜钱` }));
         list.appendChild(row);
       }
-      if (stagger) applyStagger(list, '.shop-row', 8);
+    };
+
+    const renderAstrolabeTab = () => {
+      list.appendChild(h('p', { class: 'astrolabe-intro muted' },
+        '点亮三脉星宿永久强化身法、百器与街巷杀伐；修至肆阶即得本脉独门秘传。'));
+      for (const bid of ASTROLABE_IDS) {
+        const br = ASTROLABE_BRANCHES[bid];
+        const lv = getAstrolabeLevel(save, bid);
+        const cost = nextAstrolabeCost(save, bid);
+        const pips = h('span', { class: 'pips', 'aria-label': `${lv}/${ASTROLABE_MAX_LEVEL} 阶` },
+          Array.from({ length: ASTROLABE_MAX_LEVEL }, (_, i) => h('i', { class: i < lv ? 'is-on' : '' })));
+        const tiersEl = h('div', { class: 'astrolabe-tiers' },
+          br.tiers.map((t) => h('div', {
+            class: `astrolabe-tier${lv >= t.level ? ' is-lit' : ''}${t.keystone ? ' is-keystone' : ''}`,
+          },
+          h('span', { class: 'astrolabe-tier__badge' }, t.keystone ? '肆阶秘传' : `${cnNum(t.level)}阶`),
+          h('b', { class: 'astrolabe-tier__name' }, t.name),
+          h('span', { class: 'astrolabe-tier__desc' }, t.desc))));
+
+        const card = h('div', { class: 'astrolabe-card', dataset: { astrolabeBranch: bid } },
+          h('div', { class: 'astrolabe-card__head' },
+            h('div', {},
+              h('p', { class: 'shop-row__name' }, br.name, h('small', { class: 'astrolabe-sub' }, br.subtitle), pips)),
+            cost === null
+              ? h('span', { class: 'stamp stamp--sm' }, '圆满')
+              : sealButton(h('span', { class: 'buy' }, h('b', {}, '点星'), h('small', {}, String(cost))), () => {
+                const r = buyAstrolabeLevel(save, bid);
+                if (!r.ok) { toast(r.reason === 'coins' ? `铜钱不够，还差 ${cost - save.coins}` : '此脉已圆满'); return; }
+                ctx.persist(true);
+                const tierInfo = br.tiers[r.level - 1];
+                toast(`${br.name}点亮「${tierInfo?.name || r.level}」`);
+                render(false);
+                refresh();
+              }, { kind: 'small', disabled: save.coins < cost, dataset: { buyAstrolabe: bid } })),
+          tiersEl);
+        list.appendChild(card);
+      }
+    };
+
+    const renderCuriosTab = () => {
+      const owned = new Set(Array.isArray(save.curios?.owned) ? save.curios.owned : []);
+      const equipped = Array.isArray(save.curios?.equipped) ? save.curios.equipped : [];
+      list.appendChild(h('div', { class: 'curio-head-banner' },
+        h('b', {}, `当前佩挂 ${equipped.length}/${MAX_EQUIPPED_CURIOS}`),
+        h('span', {}, '永久镇物随身入局，绝不消耗；击败夜主或铜钱铸造皆可收入囊中')));
+
+      for (const cid of CURIO_IDS) {
+        const def = CURIOS[cid];
+        const isOwned = owned.has(cid);
+        const isEq = equipped.includes(cid);
+        let actionEl;
+        if (isOwned) {
+          actionEl = sealButton(isEq ? '已佩挂' : '佩挂', () => {
+            const res = toggleEquipCurio(save, cid);
+            if (res.ok) {
+              ctx.persist(true);
+              toast(res.equipped ? `已佩挂「${def.name}」` : `已卸下「${def.name}」`);
+              render(false);
+              refresh();
+            }
+          }, {
+            kind: 'small',
+            cls: isEq ? 'is-equipped-curio' : '',
+            dataset: { equipCurio: cid },
+          });
+        } else {
+          actionEl = sealButton(h('span', { class: 'buy' }, h('b', {}, '铸造'), h('small', {}, String(def.cost))), () => {
+            const res = buyCurio(save, cid);
+            if (!res.ok) {
+              toast(res.reason === 'coins' ? `铜钱不够，还差 ${def.cost - save.coins}` : '已拥有该镇物');
+              return;
+            }
+            ctx.persist(true);
+            toast(`铸成永久镇物「${def.name}」${res.equipped ? '并已佩挂' : ''}`);
+            render(false);
+            refresh();
+          }, { kind: 'small', disabled: save.coins < def.cost, dataset: { buyCurio: cid } });
+        }
+
+        list.appendChild(h('div', {
+          class: `curio-row${isOwned ? ' is-owned' : ''}${isEq ? ' is-equipped' : ''}`,
+          dataset: { curioId: cid },
+        },
+        h('div', { class: 'shop-row__main' },
+          h('p', { class: 'shop-row__name' },
+            def.name,
+            isEq ? h('span', { class: 'stamp stamp--sm' }, '佩') : (isOwned ? h('span', { class: 'codex-tag is-on' }, '已藏') : null)),
+          h('p', { class: 'shop-row__eff' }, def.desc),
+          !isOwned ? h('p', { class: 'shop-row__flavor' }, def.unlockHint) : null),
+        actionEl));
+      }
+    };
+
+    const render = (stagger = false) => {
+      clear(head).append(
+        coinTag(save.coins, true),
+        h('button', {
+          type: 'button',
+          class: 'link-btn shop-market-link',
+          dataset: { action: 'open-market' },
+          onClick: () => {
+            v?.close({ instant: true });
+            ctx.onCloudFlush?.();
+            openMarket(getActiveHero());
+          },
+        }, '前往鬼市衣冠 ›'),
+      );
+      clear(tabBar);
+      const eqCount = Array.isArray(save.curios?.equipped) ? save.curios.equipped.length : 0;
+      const astSum = ASTROLABE_IDS.reduce((s, id) => s + getAstrolabeLevel(save, id), 0);
+      for (const [tid, tLabel] of [
+        ['base', '基础修行'],
+        ['astrolabe', `三脉星盘 ${astSum}/12`],
+        ['curios', `镇物法宝 ${eqCount}/${MAX_EQUIPPED_CURIOS}`],
+      ]) {
+        tabBar.appendChild(h('button', {
+          type: 'button',
+          role: 'tab',
+          dataset: { shopTab: tid },
+          'aria-selected': activeTab === tid ? 'true' : 'false',
+          class: `seg__opt${activeTab === tid ? ' is-on' : ''}`,
+          onClick: () => {
+            if (activeTab === tid) return;
+            activeTab = tid;
+            render(true);
+            list.scrollTop = 0;
+          },
+        }, tLabel));
+      }
+
+      clear(list);
+      if (activeTab === 'base') renderBaseTab();
+      else if (activeTab === 'astrolabe') renderAstrolabeTab();
+      else renderCuriosTab();
+
+      if (stagger) applyStagger(list, '.shop-row, .astrolabe-card, .curio-row', 8);
     };
     const closeShop = () => {
       v?.close();
@@ -770,10 +930,10 @@ export function renderHub(root, ctx) {
     };
     render(true);
     v = veil(root, scroll({
-      title: '加点',
-      sub: '花铜钱，长本事，一辈子都在',
-      cls: 'scroll--dialog scroll--tall',
-      body: [head, list],
+      title: '修行与命盘',
+      sub: '修筋骨、点星宿、佩镇物，万古常存',
+      cls: 'scroll--dialog scroll--tall shop-astrolabe-modal',
+      body: [head, tabBar, list],
       footer: [sealButton('回去', closeShop, { kind: 'ghost', dataset: { action: 'close-modal' } })],
     }), { onBackdrop: closeShop });
   }

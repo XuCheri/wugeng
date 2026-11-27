@@ -9,6 +9,8 @@ import {
 } from './cosmetics.js';
 import { SEASONS, SEASONS_BY_ID, SEASON_TITLE_IDS } from './season-config.js';
 import { MAP_IDS } from '../sim/maps.js';
+import { ASTROLABE_IDS, defaultAstrolabe, sanitizeAstrolabe, astrolabeSpent } from './astrolabe.js';
+import { CURIO_IDS, MAX_EQUIPPED_CURIOS, defaultCurios, sanitizeCurios, curiosSpent } from './curios.js';
 
 export { MAP_IDS };
 export const SAVE_KEY = 'wugeng.save';
@@ -178,6 +180,8 @@ export function defaultSave() {
     daoName: DEFAULT_DAO_NAME,
     coins: 0,
     shop,
+    astrolabe: defaultAstrolabe(),
+    curios: defaultCurios(),
     unlockedHeroes: ['zhou'],
     selectedHero: 'zhou',
     unlockedWeapons,
@@ -361,6 +365,8 @@ export function migrateSave(raw) {
   if (isObj(src.shop)) {
     for (const id of SHOP_IDS) out.shop[id] = int(src.shop[id], 0, 0, SHOP_MAX_LEVEL);
   }
+  out.astrolabe = sanitizeAstrolabe(src.astrolabe);
+  out.curios = sanitizeCurios(src.curios);
 
   if (Array.isArray(src.unlockedHeroes)) {
     const set = new Set(['zhou']);
@@ -728,6 +734,8 @@ export function isFreshSave(s) {
   return int(s.stats?.runs, 0, 0, 1e9) === 0
     && int(s.coins, 0, 0, 1e12) === 0
     && shopSpent(s.shop) === 0
+    && astrolabeSpent(s.astrolabe) === 0
+    && (Array.isArray(s.curios?.owned) ? s.curios.owned.length : 0) === 0
     && int(s.checkin?.totalClaims, 0, 0, 1e9) === 0
     && int(s.daily?.totalTaskClaims, 0, 0, 1e9) === 0
     && int(s.daily?.totalWeeklyClaims, 0, 0, 1e9) === 0
@@ -758,6 +766,9 @@ export function saveProgressScore(s) {
   const ownedCos = s?.cosmetics?.owned;
   return (s?.coins || 0)
     + shopSpent(s?.shop)
+    + astrolabeSpent(s?.astrolabe)
+    + curiosSpent(s?.curios)
+    + (Array.isArray(s?.curios?.owned) ? s.curios.owned.length * 40 : 0)
     + cosmeticShopSpent(ownedCos)
     + cosmeticShopCount(ownedCos) * 2
     + (s?.stats?.clears || 0) * 500
@@ -869,6 +880,23 @@ export function mergeSaves(localRaw, remoteRaw) {
     }
   }
   merged.cosmetics.equipped.heroSkins = hs;
+
+  // 永久镇物法宝并集与佩挂保留
+  const curioOwnedSet = new Set([...(a.curios?.owned || []), ...(b.curios?.owned || [])]);
+  const curioForgedSet = new Set([...(a.curios?.forged || []), ...(b.curios?.forged || [])]);
+  for (const fid of curioForgedSet) curioOwnedSet.add(fid);
+  const curioEq = [];
+  for (const eid of [...(primary.curios?.equipped || []), ...(secondary.curios?.equipped || [])]) {
+    if (curioOwnedSet.has(eid) && !curioEq.includes(eid)) {
+      curioEq.push(eid);
+      if (curioEq.length >= MAX_EQUIPPED_CURIOS) break;
+    }
+  }
+  merged.curios = {
+    owned: CURIO_IDS.filter((id) => curioOwnedSet.has(id)),
+    forged: CURIO_IDS.filter((id) => curioForgedSet.has(id)),
+    equipped: curioEq,
+  };
 
   // 图鉴并集
   const eSet = new Set([...a.codex.evolutions, ...b.codex.evolutions]);

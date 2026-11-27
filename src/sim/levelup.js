@@ -83,9 +83,11 @@ export function candidateChoices(run) {
     if (r.level < MAX_RELIC_LEVEL) add('relic', r.id, r.level + 1, false, LEVELUP.wOwnedRelic);
   }
   const allowedWeapons = Array.isArray(run.unlockedWeapons) ? new Set(run.unlockedWeapons) : null;
+  const fusedOut = Array.isArray(run._fusedOutWeapons) ? run._fusedOutWeapons : [];
   if (run.weapons.length < MAX_WEAPONS) {
     for (const id of WEAPON_IDS) {
       if (allowedWeapons && !allowedWeapons.has(id)) continue;
+      if (fusedOut.includes(id)) continue;
       if (getWeapon(run, id)) continue;
       const sharesTag = WEAPONS[id].tags?.some((t) => countOwnedTag(run, t) > 0);
       add('weapon', id, 1, true, LEVELUP.wNewWeapon * (sharesTag ? LEVELUP.synergyBonus : 1));
@@ -112,12 +114,14 @@ export function candidateChoices(run) {
 }
 
 export function allMaxed(run) {
+  const fusedOut = Array.isArray(run._fusedOutWeapons) ? run._fusedOutWeapons : [];
+  const availIds = WEAPON_IDS.filter((id) => !fusedOut.includes(id));
   const maxW = Array.isArray(run.unlockedWeapons)
     ? Math.min(
         MAX_WEAPONS,
-        new Set([...run.unlockedWeapons.filter((id) => WEAPON_IDS.includes(id)), ...run.weapons.map((w) => w.id)]).size,
+        new Set([...run.unlockedWeapons.filter((id) => availIds.includes(id)), ...run.weapons.map((w) => w.id)]).size,
       )
-    : MAX_WEAPONS;
+    : Math.min(MAX_WEAPONS, availIds.length);
   return (
     run.weapons.length >= maxW &&
     run.relics.length >= MAX_RELICS &&
@@ -129,6 +133,7 @@ export function allMaxed(run) {
 function strip(c, lockedChoice = null) {
   const tags = c.kind === 'weapon' ? WEAPONS[c.id]?.tags : c.kind === 'relic' ? RELICS[c.id]?.tags : [];
   const locked = !!(lockedChoice && lockedChoice.kind === c.kind && lockedChoice.id === c.id);
+  const capstone = c.kind === 'relic' && c.level === MAX_RELIC_LEVEL;
   return {
     kind: c.kind,
     id: c.id,
@@ -136,6 +141,7 @@ function strip(c, lockedChoice = null) {
     isNew: c.isNew,
     evolvable: c.evolvable,
     evolveTargetId: c.evolveTargetId || null,
+    capstone,
     tags: tags ? [...tags] : [],
     locked,
   };

@@ -53,6 +53,45 @@ export const PLAYER_BASE = {
   hurtPushForce: 160, // 受击护体震退速度脉冲
 };
 
+// 竖屏纯触控微操：甩指「踏罡步」瞬闪与「擦弹破煞」
+export const DASH = {
+  cd: 3.4,
+  duration: 0.18,
+  speedMul: 2.85,
+  invuln: 0.24,
+  sealRadius: 72,
+  sealDmgBase: 28,
+  sealDmgPerLv: 4,
+  sealStun: 0.8,
+  strawshoesSpeedBonus: 0.18,
+  strawshoesSpeedDur: 1.5,
+  strawshoesCdReduce: 0.6,
+};
+
+export const GRAZE = {
+  margin: 20,
+  cd: 0.32,
+  ultGain: 12,
+};
+
+export const HAZARDS = {
+  chance: 0.55,
+  safeRadius: 225, // 避开出生点与开局奇遇神龛圈
+  barrelR: 15,
+  barrelHp: 26,
+  barrelBlastR: 96,
+  barrelDmgBase: 85,
+  barrelDmgPerWatch: 32,
+  bellR: 15,
+  bellTouchR: 28,
+  sealR: 15,
+  sealHp: 22,
+  sealWaveR: 120,
+  sealStun: 2.2,
+  sealVulnDur: 4.0,
+  sealVulnPct: 0.25,
+};
+
 export const REVIVE = {
   invuln: 3, // 复活无敌秒数
   mainMax: 1,
@@ -681,6 +720,32 @@ export const RELIC_NAMES = Object.fromEntries(RELIC_IDS.map((k) => [k, RELICS[k]
 export const MAX_RELIC_LEVEL = 5;
 export const MAX_RELICS = 6;
 
+// 22 件法器五阶满级觉醒特效（Lv1..Lv5 基础属性保持不变，Lv5 额外解锁质变机制）
+export const RELIC_CAPSTONES = {
+  clapper: { name: '五更定拍', desc: '每施放 5 次兵刃震出一道镇更音波，震退近身群祟并造成伤害' },
+  censer: { name: '燎原香雾', desc: '灯笼照亮光圈内的邪祟承受灼魂香雾，受到伤害额外 +10%' },
+  cinnabar: { name: '敕血朱批', desc: '暴击命中撕开 2.5 秒朱砂灼血，持续流血伤敌' },
+  inkstone: { name: '玄潭凝墨', desc: '受减速影响的邪祟额外承受 +10% 凝墨易伤' },
+  bagua: { name: '乾坤返照', desc: '受击或触发擦弹破煞时震开八卦反伤金波（冷却 2.5 秒）' },
+  scissors: { name: '裁纸点兵', desc: '纸扎系与召唤物暴击率额外 +12%' },
+  tinder: { name: '引火燎原', desc: '每拾取 12 颗魂火在周身迸发一圈阳炎火环焚烧近敌' },
+  redstring: { name: '千里牵煞', desc: '暴击时红线牵引雷火，向邻近另一只邪祟弹射 35% 伤害' },
+  strawshoes: { name: '神行踏罡', desc: '踏罡步冷却缩短 0.6 秒，瞬闪后 1.5 秒内移速 +18%' },
+  glutinous: { name: '百邪辟易', desc: '糯米回血间隔缩减至 35 杀，满血触发时凝成临时护体魂障' },
+  fivecoins: { name: '财神借势', desc: '拾取铜钱后 3 秒内暴击伤害额外 +25%' },
+  soulwick: { name: '回光引魂', desc: '施放大招立即重置踏罡步冷却并返还 15 点大招攒气' },
+  leijimu: { name: '九霄引雷', desc: '暴击引落雷弧的内置冷却减半，飞射物伤害 +8%' },
+  yinpai: { name: '索命阴敕', desc: '对处于定身或减速的邪祟最终伤害额外 +14%' },
+  huoyao_pouch: { name: '连环火药', desc: '击败邪祟时有 25% 概率引发硫磺二次爆燃波及四周' },
+  wuse_mask: { name: '百相显圣', desc: '大招释放后 5 秒内全兵刃攻击范围 +15%、伤害 +12%' },
+  altar_mirror: { name: '护坛宝光', desc: '每 18 秒自动凝结 1 层护体魂障抵挡一次伤害' },
+  lamp_oil: { name: '长明不熄', desc: '每次换更回复 25% 已损生命并震退周身邪祟' },
+  folk_rice: { name: '万家香火', desc: '每次吃包子永久提升本局 +4 最大生命（上限 +24）' },
+  cinnabar_pen: { name: '点额开眼', desc: '对满血邪祟的首击必定暴击' },
+  straw_cape: { name: '听风御雨', desc: '涉水或受减速光环影响时反而获得 +2 护甲与 +12% 移速' },
+  ledger_book: { name: '利滚千金', desc: '本局每持有 50 铜钱提升 +2% 全伤害（上限 +16%）' },
+};
+
 // ───────────────────────── 英雄（8 名守夜人 + 本命初始武器亲和）─────────────────────────
 export const HEROES = {
   zhou: {
@@ -1050,6 +1115,33 @@ export const META_IDS = META_SHOP.map((it) => it.id);
 
 export function emptyMetaBonuses() {
   return { maxHpPct: 0, dmgPct: 0, speedPct: 0, pickupPct: 0, xpPct: 0, coinPct: 0, freeRerolls: 0, armor: 0 };
+}
+
+export function emptyExtendedMetaBonuses() {
+  return {
+    ...emptyMetaBonuses(),
+    knockbackPct: 0,
+    dashCdReduce: 0,
+    dashInvulnBonus: 0,
+    grazeUltPct: 0,
+    grazeRadiusPct: 0,
+    bulletDmgReduct: 0,
+    dashThunderSeal: 0,
+    durPct: 0,
+    bonusBanishes: 0,
+    evolvedDmgPct: 0,
+    firstChestBonusRelic: 0,
+    critChance: 0,
+    critDmg: 0,
+    bonusPierce: 0,
+    hazardPowerPct: 0,
+    bossDmgPct: 0,
+    eliteSlayerStack: 0,
+    startUlt: 0,
+    waterWalk: 0,
+    flatMaxHp: 0,
+    cheatDeathJade: 0,
+  };
 }
 
 /** levels: { tizhi: 0..5, ... } → 局外加成（ARCHITECTURE §5 的 getMetaBonuses 形状） */

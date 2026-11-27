@@ -14,6 +14,7 @@ import {
   getAchievementStates,
   reconcileAchievements,
 } from './meta/achievements.js';
+import { CURIOS, reconcileCurios } from './meta/curios.js';
 import {
   claimDailyTask,
   claimWeeklyChest,
@@ -64,6 +65,7 @@ export async function startApp(bootOpts = {}) {
 
   const save = loadSave();
   reconcileAchievements(save);
+  reconcileCurios(save);
   const cloud = createCloudSave();
   const persist = (syncCloud = false) => {
     saveSave(save);
@@ -278,6 +280,7 @@ export async function startApp(bootOpts = {}) {
     if (r.hasRemote && r.merged) {
       Object.assign(save, r.merged);
       reconcileAchievements(save);
+      reconcileCurios(save);
       tapAchievements.syncUnlocked(save, { silent: true });
       saveSave(save);
       applySettings(save.settings);
@@ -337,7 +340,10 @@ export async function startApp(bootOpts = {}) {
       resolveShrine: (r, idx) => Run.resolveShrine(r, idx),
       dismissShrine: (r) => Run.dismissShrine(r),
       revive: (r) => Run.revive(r),
-      enterEndless: (r) => Run.enterEndless(r),
+      enterEndless: (r) => {
+        audio.setEndlessMusic?.(true);
+        return Run.enterEndless(r);
+      },
       getEvolutionRecipe: (r, w) => Run.getEvolutionRecipe(r, w),
       canEvolve: (r, w) => Run.canEvolve(r, w),
     },
@@ -525,6 +531,11 @@ export async function startApp(bootOpts = {}) {
     if (newlyUnlocked.length > 0) {
       haptics.medium?.();
       tapAchievements.unlockMany(newlyUnlocked, { silent: false });
+    }
+    const newCurios = reconcileCurios(save);
+    if (newCurios.length > 0) {
+      const names = newCurios.map((cid) => CURIOS[cid]?.name || cid).join('、');
+      toast(`新获永久镇物：${names}`, 2600);
     }
     tapAchievements.syncUnlocked(save, { silent: true });
     persist(true);

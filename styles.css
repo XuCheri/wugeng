@@ -3989,3 +3989,217 @@ p { margin: 0; }
   .nav-seal b { font-size: 12px; }
   .hub-daily-pill__ico { width: 20px; height: 20px; }
 }
+
+/* ───────── 旗舰版 v7：备战镇物签、修行与三脉命盘、阴阳合契超武卡 ───────── */
+.curio-pick {
+  flex: 0 0 auto;
+  max-width: 108px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1px;
+  min-height: 38px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  text-align: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  background: rgba(239, 230, 210, .06);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--lantern-28);
+  transition: transform 130ms cubic-bezier(.22, 1.3, .36, 1), background-color 120ms;
+}
+.curio-pick:active { transform: scale(.95); }
+.curio-pick.is-on {
+  background: rgba(240, 190, 98, .16);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--lantern), 0 0 10px rgba(240, 190, 98, .26);
+}
+.curio-pick.is-on .charm-pick__label { color: var(--lantern); }
+
+.shop-astrolabe-modal .scroll__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.shop-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  margin: 0 0 10px;
+  flex-shrink: 0;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.shop-tabs .seg__opt {
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 4px;
+  font-size: 13.5px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.shop-astrolabe-modal .shop-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+}
+
+.astrolabe-intro {
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  background: var(--paper-shade);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+}
+.astrolabe-card {
+  padding: 10px 10px 8px;
+  margin-bottom: 10px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1.5px var(--ink-35), 0 2px 0 var(--ink-15);
+}
+.astrolabe-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--ink-35);
+}
+.astrolabe-card__head .shop-row__name {
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 17px;
+}
+.astrolabe-sub {
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  color: var(--verm-dark);
+}
+.astrolabe-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 7px;
+}
+.astrolabe-tier {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 5px 7px;
+  background: rgba(239, 230, 210, .55);
+  box-shadow: inset 0 0 0 1px var(--ink-15);
+  opacity: .68;
+}
+.astrolabe-tier.is-lit {
+  opacity: 1;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1.2px var(--verm);
+}
+.astrolabe-tier.is-keystone {
+  background: var(--lantern-14);
+  box-shadow: inset 0 0 0 1.2px var(--ink-35);
+}
+.astrolabe-tier.is-keystone.is-lit {
+  background: var(--lantern-28);
+  box-shadow: inset 0 0 0 1.6px var(--verm-dark);
+}
+.astrolabe-tier__badge {
+  display: inline-block;
+  padding: 0 5px;
+  font-size: 11px;
+  color: var(--paper);
+  background: var(--ink);
+  letter-spacing: .04em;
+}
+.astrolabe-tier.is-lit .astrolabe-tier__badge { background: var(--verm); }
+.astrolabe-tier.is-keystone .astrolabe-tier__badge { background: var(--verm-dark); color: var(--lantern); }
+.astrolabe-tier__name {
+  font-weight: 400;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.astrolabe-tier__desc {
+  font-size: 12px;
+  color: var(--ink-80);
+  line-height: 1.35;
+}
+
+.curio-head-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--lantern-28);
+}
+.curio-head-banner b {
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: .08em;
+  color: var(--lantern);
+}
+.curio-head-banner span {
+  font-size: 11.5px;
+  color: var(--paper-shade);
+  line-height: 1.35;
+}
+.curio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  margin-bottom: 6px;
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+}
+.curio-row.is-owned {
+  background-color: var(--paper);
+}
+.curio-row.is-equipped {
+  background-color: var(--lantern-14);
+  box-shadow: inset 0 0 0 1.8px var(--verm);
+}
+.btn.is-equipped-curio {
+  background: var(--ink);
+  color: var(--lantern);
+  box-shadow: inset 0 0 0 1.5px var(--lantern);
+}
+
+.codex-fusion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  margin-bottom: 7px;
+  background: var(--lantern-14) var(--grain);
+  box-shadow: inset 0 0 0 1.5px var(--verm), inset 0 0 0 3.5px var(--paper);
+}
+.codex-fusion-card.is-locked {
+  background: var(--paper-shade) var(--grain);
+  box-shadow: inset 0 0 0 1px var(--ink-35);
+}
+.codex-fusion-card.is-locked .codex-row__ico .icon {
+  filter: brightness(0);
+  opacity: .28;
+}
+.codex-fusion-card.is-locked .codex-row__name { color: var(--ink-60); }
+
+.chest-choice.is-fusion-choice {
+  background-color: var(--lantern-14);
+  box-shadow: inset 0 0 0 2px var(--verm-dark), inset 0 0 0 4px var(--paper);
+}
+.chest-choice.is-fusion-choice.is-selected {
+  background-color: var(--lantern-28);
+  box-shadow: inset 0 0 0 2.5px var(--verm), inset 0 0 0 5px var(--paper);
+}

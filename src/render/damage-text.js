@@ -1,6 +1,6 @@
 // damage-text.js —— 伤害数字：同一敌人 0.25 秒内合并；普通 = 小号墨字，暴击 = 朱红印章「盖」上去
 // formatCN / mergeHit / pruneTexts 为纯函数（Node 可测）。
-import { INK } from './palette.js';
+import { INK, LANTERN } from './palette.js';
 import { drawSeal, drawStamp } from './glyphs.js';
 
 export const MERGE_WINDOW = 0.25;
@@ -98,6 +98,22 @@ export function createDamageTexts() {
       if (!hit || !(hit.amount > 0) || !Number.isFinite(hit.amount)) return;
       mergeHit(list, hit, now);
     },
+    addCallout(label, x, y, now) {
+      if (!label || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      list.push({
+        enemyId: null,
+        x,
+        y,
+        amount: 1,
+        label: String(label),
+        crit: true,
+        born: now,
+        last: now,
+        hits: 1,
+        seed: Math.floor((Number.isFinite(now) ? now : 0) * 997) % 991,
+      });
+      if (list.length > MAX_TEXTS) list.splice(0, list.length - MAX_TEXTS);
+    },
     clear() {
       list.length = 0;
     },
@@ -115,7 +131,7 @@ export function createDamageTexts() {
       for (let i = startIdx; i < list.length; i++) {
         const e = list[i];
         if (!visibleFor(e, mode)) continue;
-        if (hasPlayer) {
+        if (hasPlayer && !e.label) {
           const dx = e.x - px;
           const dy = e.y - py;
           const d2 = dx * dx + dy * dy;
@@ -126,8 +142,8 @@ export function createDamageTexts() {
         const since = now - e.last;
         const life = e.crit ? LIFE_CRIT : LIFE_NORMAL;
         let fade = since > life - 0.25 ? Math.max(0, (life - since) / 0.25) : 1;
-        if (crowded) fade *= e.crit ? 0.86 : 0.72;
-        if (hasPlayer && e.crit) {
+        if (crowded && !e.label) fade *= e.crit ? 0.86 : 0.72;
+        if (hasPlayer && e.crit && !e.label) {
           const d2 = (e.x - px) ** 2 + (e.y - py) ** 2;
           if (d2 < 48 * 48) fade *= 0.38;
         }
@@ -135,11 +151,13 @@ export function createDamageTexts() {
         const rise = Math.min(1, age / 0.5);
         const ox = ((e.seed % 13) - 6) * 0.9;
         const y = e.y - 18 - (1 - (1 - rise) * (1 - rise)) * 16;
-        const str = formatCN(e.amount);
-        const crowdScale = crowded ? 0.85 : 1;
+        const str = e.label || formatCN(e.amount);
+        const crowdScale = crowded && !e.label ? 0.85 : 1;
         ctx.save();
         ctx.globalAlpha *= fade;
-        if (e.crit) {
+        if (e.label) {
+          drawSeal(ctx, str, e.x + ox, y - 6, 13, LANTERN, 'center', 'outlined', 0.96);
+        } else if (e.crit) {
           // 印章盖下：先放大后压实，略带旋转
           const k = Math.min(1, since / 0.09);
           const scale = (since < 0.09 ? 1.7 - 0.8 * k : 0.9 + Math.min(0.1, (since - 0.09) * 1.2)) * crowdScale;

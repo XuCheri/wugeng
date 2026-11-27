@@ -40,11 +40,22 @@ export function castUlt(run, force = false) {
     }
   }
 
-  // 五雷号令命签：大招后极速与暴伤增益
+  // 五雷号令命签与五色傩面五阶觉醒：大招后增益
+  const caps = run.mods?.capstones || {};
+  if (caps.soulwick && !force) {
+    p.dashCd = 0;
+    p.ult = Math.min(p.ultMax ?? ULT.cost, p.ult + 15);
+  }
+  let needRecompute = false;
   if ((run.mods?.thunderDecreeStacks || 0) > 0) {
     run._ultFrenzyT = BLESSING_TUNING.thunder_decree.frenzySec;
-    recomputeMods(run);
+    needRecompute = true;
   }
+  if (caps.wuse_mask) {
+    run._wuseMaskT = 5.0;
+    needRecompute = true;
+  }
+  if (needRecompute) recomputeMods(run);
 
   const areaMul = run.mods?.areaMul || 1;
   const dmg = ULT.baseDmg + ULT.perLevelDmg * p.level;

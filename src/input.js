@@ -5,6 +5,17 @@
 const DEAD_ZONE = 6;          // 像素：小于此位移视为未移动
 const FULL_SPEED_RADIUS = 14; // 像素：轻推即满速，手指滑远或回拉转向都不会掉移速
 const VISUAL_RADIUS = 42;     // 像素：屏幕摇杆圆环的视觉半径
+const FLICK_DIST = 30;        // 像素：甩指瞬闪最小位移
+const FLICK_MAX_MS = 185;     // 毫秒：按下→快速甩指抬起的最大时长
+const WHIP_DIST = 38;         // 像素：按住行步途中猛甩瞬闪的窗口位移
+const WHIP_WINDOW_MS = 95;    // 毫秒：行步途中猛甩检测时间窗
+
+function eventTimeMs(e) {
+  if (e && typeof e.timeStamp === 'number' && Number.isFinite(e.timeStamp) && e.timeStamp >= 0) {
+    return e.timeStamp;
+  }
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+}
 
 export function createInput(target, { getUltRect = () => null } = {}) {
   const state = {
@@ -13,11 +24,26 @@ export function createInput(target, { getUltRect = () => null } = {}) {
     stick: { active: false, ox: 0, oy: 0, x: 0, y: 0, kx: 0, ky: 0 },
   };
   let stickPointer = null;
+  let downAtMs = 0;
+  let lastDashGestureMs = -1000;
+  let trail = [];
   let ultQueued = false;
   let interactQueued = false;
+  let dashQueued = false;
+  let dashVecX = 0;
+  let dashVecY = 0;
   const keys = new Set();
 
   const inRect = (r, x, y) => r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+  function queueDashVector(dx, dy, nowMs) {
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-3) return;
+    dashQueued = true;
+    dashVecX = dx / len;
+    dashVecY = dy / len;
+    lastDashGestureMs = nowMs;
+  }
 
   function updateStick(x, y) {
     const s = state.stick;
@@ -41,24 +67,52 @@ export function createInput(target, { getUltRect = () => null } = {}) {
   function onDown(e) {
     if (inRect(getUltRect(), e.clientX, e.clientY)) {
       ultQueued = true;
-      e.preventDefault();
+      e.preventDefault?.();
       return;
     }
     if (stickPointer !== null) return;
     stickPointer = e.pointerId;
+    downAtMs = eventTimeMs(e);
+    trail = [{ x: e.clientX, y: e.clientY, t: downAtMs }];
     target.setPointerCapture?.(e.pointerId);
     Object.assign(state.stick, { active: true, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, kx: 0, ky: 0 });
     state.moveX = 0; state.moveY = 0;
-    e.preventDefault();
+    e.preventDefault?.();
   }
   function onMove(e) {
     if (e.pointerId !== stickPointer) return;
+    const nowMs = eventTimeMs(e);
     updateStick(e.clientX, e.clientY);
-    e.preventDefault();
+    trail.push({ x: e.clientX, y: e.clientY, t: nowMs });
+    while (trail.length > 8 && nowMs - trail[0].t > WHIP_WINDOW_MS) trail.shift();
+    // 行步中拇指突然大幅猛甩（无需抬指也能瞬闪）：需已按住 >= 120ms 且窗口位移 >= WHIP_DIST
+    if (nowMs - downAtMs >= 120 && nowMs - lastDashGestureMs >= 300 && trail.length >= 2) {
+      const anchor = trail[0];
+      const dtMs = nowMs - anchor.t;
+      const wdx = e.clientX - anchor.x;
+      const wdy = e.clientY - anchor.y;
+      const wLen = Math.hypot(wdx, wdy);
+      const fromOrigin = Math.hypot(e.clientX - state.stick.ox, e.clientY - state.stick.oy);
+      if (dtMs >= 8 && dtMs <= WHIP_WINDOW_MS && wLen >= WHIP_DIST && fromOrigin >= VISUAL_RADIUS + 6) {
+        queueDashVector(wdx, wdy, nowMs);
+        trail = [{ x: e.clientX, y: e.clientY, t: nowMs }];
+      }
+    }
+    e.preventDefault?.();
   }
   function onUp(e) {
     if (e.pointerId !== stickPointer) return;
+    const nowMs = eventTimeMs(e);
+    const upX = typeof e.clientX === 'number' ? e.clientX : state.stick.x;
+    const upY = typeof e.clientY === 'number' ? e.clientY : state.stick.y;
+    const dtMs = nowMs - downAtMs;
+    const fdx = upX - state.stick.ox;
+    const fdy = upY - state.stick.oy;
+    if (dtMs >= 8 && dtMs <= FLICK_MAX_MS && Math.hypot(fdx, fdy) >= FLICK_DIST && nowMs - lastDashGestureMs >= 220) {
+      queueDashVector(fdx, fdy, nowMs);
+    }
     stickPointer = null;
+    trail.length = 0;
     state.stick.active = false;
     state.moveX = 0; state.moveY = 0;
   }
@@ -67,14 +121,19 @@ export function createInput(target, { getUltRect = () => null } = {}) {
     if (e.type === 'keydown') {
       if (k === ' ') ultQueued = true;
       if (!e.repeat && (k === 'e' || k === 'f')) interactQueued = true;
+      if (!e.repeat && k === 'shift') dashQueued = true;
       keys.add(k);
     } else keys.delete(k);
   }
   function onBlur() {
     keys.clear();
     stickPointer = null;
+    trail.length = 0;
     ultQueued = false;
     interactQueued = false;
+    dashQueued = false;
+    dashVecX = 0;
+    dashVecY = 0;
     state.stick.active = false;
     state.moveX = 0; state.moveY = 0;
   }
@@ -89,7 +148,7 @@ export function createInput(target, { getUltRect = () => null } = {}) {
 
   return {
     state,
-    /** 每个逻辑步读取一次；大招点击与奇遇交互是一次性的。 */
+    /** 每个逻辑步读取一次；大招点击、奇遇交互与甩指瞬闪是一次性的。 */
     sample() {
       let mx = state.moveX, my = state.moveY;
       if (stickPointer === null && keys.size) {
@@ -100,9 +159,17 @@ export function createInput(target, { getUltRect = () => null } = {}) {
       }
       const ultimate = ultQueued;
       const interact = interactQueued;
+      const dash = dashQueued;
+      if (dash && mx === 0 && my === 0 && (dashVecX !== 0 || dashVecY !== 0)) {
+        mx = dashVecX;
+        my = dashVecY;
+      }
       ultQueued = false;
       interactQueued = false;
-      return { moveX: mx, moveY: my, ultimate, interact };
+      dashQueued = false;
+      dashVecX = 0;
+      dashVecY = 0;
+      return { moveX: mx, moveY: my, ultimate, interact, dash };
     },
     reset: onBlur,
     destroy() {

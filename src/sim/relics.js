@@ -64,6 +64,18 @@ export function relicTotals(relics) {
   return t;
 }
 
+/** 汇总已升至五阶满级觉醒的法器表：{ [relicId]: true } */
+export function relicCapstones(relics) {
+  const out = {};
+  if (!Array.isArray(relics)) return out;
+  for (const r of relics) {
+    if (r && typeof r.id === 'string' && r.level >= MAX_RELIC_LEVEL && Object.hasOwn(RELICS, r.id)) {
+      out[r.id] = true;
+    }
+  }
+  return out;
+}
+
 export function hasRelic(run, id) {
   return run.relics.some((r) => r.id === id);
 }

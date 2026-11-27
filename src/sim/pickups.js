@@ -3,7 +3,7 @@
 import { PICKUPS, HEROES } from './balance.js';
 import { fsin, fcos } from '../core/math.js';
 import { gainXp } from './xp.js';
-import { healPlayer, earnCoins } from './player.js';
+import { healPlayer, earnCoins, recomputeMods } from './player.js';
 import { BLESSING_TUNING } from './blessings.js';
 import { coopPartySize, nearestLivingPlayer, withPlayerContext } from './coop.js';
 
@@ -168,10 +168,36 @@ function triggerSoulGourdIfOwned(run, actor) {
 }
 
 export function collectPickup(run, o, collector = run.player) {
+  const caps = run.mods?.capstones || {};
+  let comboStep = 0;
   switch (o.kind) {
-    case 'xp':
+    case 'xp': {
       run._xpCount--;
       run.stats.xpOrbsCollected = (run.stats.xpOrbsCollected || 0) + 1;
+      if (run.time - (run._lastXpPickupT ?? -99) <= 0.65) {
+        run._xpComboCount = Math.min(9, (run._xpComboCount || 0) + 1);
+      } else {
+        run._xpComboCount = 0;
+      }
+      run._lastXpPickupT = run.time;
+      comboStep = run._xpComboCount;
+
+      if (caps.tinder && Array.isArray(run._scheduled)) {
+        run._tinderOrbs = (run._tinderOrbs || 0) + 1;
+        if (run._tinderOrbs >= 12) {
+          run._tinderOrbs -= 12;
+          const actor = collector || run.player;
+          run._scheduled.push({
+            delay: 0,
+            type: 'tinderRing',
+            x: actor.x,
+            y: actor.y,
+            radius: 82 * (run.mods?.areaMul || 1),
+            dmg: 22 + (actor.level || 1) * 4,
+            ownerSlot: actor.slot || 0,
+          });
+        }
+      }
       gainXp(run, o.value * (o.batchMult || 1));
       if (coopPartySize(run) > 1) {
         for (let i = 1; i < run.players.length; i++) {
@@ -182,10 +208,23 @@ export function collectPickup(run, o, collector = run.player) {
         }
       }
       break;
+    }
     case 'coin':
       o.value = earnCoins(run, o.value, true);
+      if (caps.fivecoins && collector) {
+        collector._fivecoinsBuffT = 3.0;
+        recomputeMods(run);
+      }
+      if (caps.ledger_book) {
+        recomputeMods(run);
+      }
       break;
     case 'bun': {
+      const targetPl = collector || run.player;
+      if (caps.folk_rice && targetPl && (targetPl._folkRiceBonusHp || 0) < 24) {
+        targetPl._folkRiceBonusHp = Math.min(24, (targetPl._folkRiceBonusHp || 0) + 4);
+        recomputeMods(run);
+      }
       const heal = PICKUPS.bunHeal * run.night.bunHealMul * (run.mods?.bunHealMul || 1);
       if (collector && collector !== run.player) {
         withPlayerContext(run, collector, () => healPlayer(run, heal));
@@ -211,5 +250,5 @@ export function collectPickup(run, o, collector = run.player) {
       triggerSoulGourdIfOwned(run, collector);
       break;
   }
-  run.events.push({ type: 'pickup', kind: o.kind, value: o.value });
+  run.events.push({ type: 'pickup', kind: o.kind, value: o.value, comboStep });
 }

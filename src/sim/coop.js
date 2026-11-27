@@ -273,7 +273,7 @@ export function nearestLivingPlayer(run, x, y) {
 
 function cleanSingleInput(inp) {
   if (!inp || typeof inp !== 'object') {
-    return { moveX: 0, moveY: 0, ultimate: false, interact: false };
+    return { moveX: 0, moveY: 0, ultimate: false, interact: false, dash: false };
   }
   const rawMx = typeof inp.moveX !== 'boolean' ? +inp.moveX : 0;
   const rawMy = typeof inp.moveY !== 'boolean' ? +inp.moveY : 0;
@@ -282,6 +282,7 @@ function cleanSingleInput(inp) {
     moveY: Number.isFinite(rawMy) ? rawMy : 0,
     ultimate: Boolean(inp.ultimate || inp.ult),
     interact: Boolean(inp.interact),
+    dash: Boolean(inp.dash),
   };
 }
 
@@ -292,7 +293,8 @@ function hasExplicitInput(inp) {
     Object.hasOwn(inp, 'moveY') ||
     Object.hasOwn(inp, 'ultimate') ||
     Object.hasOwn(inp, 'ult') ||
-    Object.hasOwn(inp, 'interact')
+    Object.hasOwn(inp, 'interact') ||
+    Object.hasOwn(inp, 'dash')
   );
 }
 
